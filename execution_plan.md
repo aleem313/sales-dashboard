@@ -3,7 +3,7 @@
 **Version:** 1.0
 **Created:** 2026-02-26
 **Source of Truth:** `DASHBOARD_DEV.md`
-**Current State:** E-commerce scaffold on Next.js 16 + Vercel. ~5% aligned with spec.
+**Current State:** All phases (0–8) complete. Full-featured analytics dashboard with auth, alerts, advanced analytics, and agent portal.
 
 ---
 
@@ -601,85 +601,95 @@
 
 ---
 
-## PHASE 7 — AUTHENTICATION (Post-MVP)
+## PHASE 7 — AUTHENTICATION ✅
 
-> **Goal:** Add user authentication so the dashboard isn't publicly accessible, and agents can see their own stats.
+> **Goal:** Add user authentication so the dashboard isn't publicly accessible.
+
+**Implementation:** NextAuth.js v5 (Auth.js) + GitHub OAuth, JWT sessions, email allowlist via `ALLOWED_EMAILS` env var.
 
 ### 7.1 — Auth Setup
 
-- [ ] Choose auth provider: Supabase Auth vs NextAuth.js vs Clerk
-  - _Spec recommends Supabase Auth (email+password). If staying on Neon Postgres, consider NextAuth or Clerk._
-- [ ] Install auth dependencies
-- [ ] Create auth middleware (`middleware.ts`)
-  - Protect all `/dashboard`, `/agents`, `/profiles`, `/jobs`, `/settings` routes
-  - Redirect unauthenticated users to `/login`
-  - Protect API routes (webhook routes exempt — they have their own auth)
+- [x] Chose NextAuth.js v5 with GitHub OAuth (no DB adapter needed, JWT sessions)
+- [x] Installed `next-auth@beta`
+- [x] Created `src/lib/auth.ts` — NextAuth config, GitHub provider, signIn/session callbacks, `requireAuth()` helper
+- [x] Created `src/app/api/auth/[...nextauth]/route.ts` — auth route handler
+- [x] Created `src/middleware.ts` — protects dashboard pages + API routes, redirects to `/login`
+- [x] Created `src/components/session-provider.tsx` — client-side SessionProvider wrapper
+- [x] Wrapped root layout with `AuthSessionProvider`
 
 ### 7.2 — Login Page
 
-- [ ] Create `src/app/login/page.tsx`
-  - Email + password form
-  - Error handling (wrong credentials)
-  - Redirect to `/dashboard` on success
+- [x] Created `src/app/login/page.tsx` — GitHub OAuth sign-in
+- [x] Error handling for `AccessDenied` (email not in allowlist)
+- [x] Redirect to `/dashboard` on success (or callbackUrl)
+- [x] Already-authenticated users redirected to dashboard
 
-### 7.3 — Role-Based Access
+### 7.3 — Protected Routes
 
-- [ ] Admin role: full access to everything
-- [ ] Agent role: can only see their own stats, jobs, and assigned profiles
-  - Filter all queries by `agent_id` matching logged-in user
-  - Hide Settings page
-  - _Edge case: Agent tries to access another agent's page via URL → 403._
+- [x] Dashboard pages protected via middleware (`/dashboard`, `/agents`, `/profiles`, `/jobs`, `/settings`)
+- [x] API routes protected via `requireAuth()` guard (stats, sync, jobs/export)
+- [x] ClickUp sync accepts either cron secret OR valid session
+- [x] Webhook routes remain public (`/api/webhook/*`)
+- [x] Header shows user avatar, name, and sign-out button
 
-### 7.4 — Deployment Protection
+### 7.4 — Configuration
 
-- [ ] Remove Vercel's automatic deployment protection (currently causing auth wall)
-  - OR configure bypass for webhook endpoints
-- [ ] Use application-level auth instead
+- [x] Updated `next.config.ts` — GitHub avatar remote pattern
+- [x] Updated `.env.example` — `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `ALLOWED_EMAILS`
+- [x] Root page redirects to `/login` or `/dashboard` based on session
+
+_Note: Role-based access (agent-specific views) deferred to Phase 8._
 
 ---
 
-## PHASE 8 — ADVANCED FEATURES (Phase 2 from Spec)
+## PHASE 8 — ADVANCED FEATURES ✅
 
 > **Goal:** Build the features listed in DASHBOARD_DEV.md Section 12 — these are post-launch enhancements.
 
+**Implementation:** Alerts with Slack integration, proposal intelligence analytics, advanced analytics page (country stats, time heatmap, budget intelligence), and agent portal with role-based auth.
+
 ### 8.1 — Notifications & Alerts
 
-- [ ] Slack integration: send alerts when thresholds are breached
-  - Win rate drops below configured threshold
-  - GPT failure rate spikes
-  - No new jobs in 24h
-- [ ] Email alerts (weekly digest to admin)
-  - Summary: jobs received, proposals sent, win rate, revenue
-  - Comparison vs previous week
+- [x] `alerts` table with dedup indexes
+- [x] `src/lib/alerts.ts` — `checkAlerts()` evaluates thresholds vs metrics, `dispatchAlerts()` persists + sends Slack
+- [x] `POST/GET /api/settings/thresholds` — persist thresholds via `stats_cache` (1-year TTL)
+- [x] `alert-thresholds.tsx` — rewired to fetch/save from API
+- [x] `alerts-banner.tsx` — client component on dashboard showing active alerts with dismiss
+- [x] `alert-history.tsx` — table of past alerts on settings page
+- [x] ClickUp sync cron runs alert checks after every sync
+- [x] `.env.example` updated with `SLACK_WEBHOOK_URL`
+- [—] Email digest — deferred (not needed for now)
 
 ### 8.2 — Proposal Intelligence
 
-- [ ] A/B testing: track which GPT instructions lead to better win rates
-  - Store `gpt_model` and instruction version per job
-  - Compare win rates across instruction versions
-- [ ] Proposal quality scoring (future: AI-based)
+- [x] `getProposalAnalytics()` — win rate grouped by GPT model
+- [x] `model-comparison.tsx` — grouped bar chart comparing models (win rate + volume)
+- [x] `jobs.instruction_version` column added for future A/B testing
+- [—] Proposal quality scoring — deferred (future AI-based feature)
 
 ### 8.3 — Advanced Analytics
 
-- [ ] Budget intelligence: which budget ranges yield best win rates per profile
-  - Histogram: budget range vs win rate
-  - Recommendation: "Profile X wins most often in $500-$1000 range"
-- [ ] Client country heatmap
-  - World map visualization
-  - Color intensity = job volume or win rate
-  - _Dependency: need a map library (react-simple-maps or similar)._
-- [ ] Best time to apply analysis
-  - Jobs posted at X hour/day of week → Y win rate
-  - Heatmap: day × hour with win rate color
-- [ ] Auto-update `won_value` from ClickUp custom field
-  - When agent enters contract value in ClickUp, sync to DB
+- [x] `/analytics` page with 4 chart sections
+- [x] `getCountryStats()` — jobs by country with win rates (min 2 jobs)
+- [x] `country-heatmap.tsx` — horizontal bar chart of top 15 countries
+- [x] `getBestTimeToApply()` — day-of-week × hour win rate analysis
+- [x] `time-heatmap.tsx` — 7×24 CSS grid heatmap colored by win rate
+- [x] `getBudgetWinRate()` — budget buckets with win rates
+- [x] `budget-intelligence.tsx` — dual-axis composed chart (bar for volume, line for win rate)
+- [x] "Analytics" nav item added to sidebar
 
 ### 8.4 — Agent Portal
 
-- [ ] Agent-specific login and dashboard view
-- [ ] Personal task queue (their assigned jobs, ordered by priority)
-- [ ] Ability to mark proposals as sent (updates ClickUp via API)
-- [ ] Personal performance trends
+- [x] Role-based auth — `auth.ts` extended with JWT callbacks; matches `agents.github_email` → sets `role`/`agentId` on session
+- [x] `agents.role` and `agents.github_email` columns added
+- [x] `(agent)` route group — `/my-dashboard`, `/my-jobs`, `/my-performance` with loading skeletons
+- [x] `/my-dashboard` — personal KPIs, win rate trend, recent jobs
+- [x] `/my-jobs` — task queue with status filters, "Mark as Sent" button
+- [x] `/my-performance` — win rate trend + response time distribution
+- [x] `markProposalSentAction()` — updates job + syncs ClickUp status via API
+- [x] Sidebar auto-switches between admin and agent navigation
+- [x] Root redirect: agents → `/my-dashboard`, admins → `/dashboard`
+- [x] Middleware protects all new routes
 
 ---
 
