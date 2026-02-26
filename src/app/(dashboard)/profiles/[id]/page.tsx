@@ -20,9 +20,7 @@ import {
   getSkillsAnalysis,
 } from "@/lib/data";
 import { formatCurrency, formatPercent, formatDate, formatNumber } from "@/lib/utils";
-import { VolumeChart } from "@/components/region-chart";
-import { BudgetDistribution } from "@/components/charts/budget-distribution";
-import { SkillsChart } from "@/components/charts/skills-chart";
+import { VolumeChart, BudgetDistribution, SkillsChart } from "@/components/charts";
 
 export const revalidate = 60;
 

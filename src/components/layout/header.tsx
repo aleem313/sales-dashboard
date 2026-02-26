@@ -1,4 +1,5 @@
 import { MobileSidebar } from "./sidebar";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function Header({ children }: { children?: React.ReactNode }) {
   return (
@@ -6,6 +7,7 @@ export function Header({ children }: { children?: React.ReactNode }) {
       <MobileSidebar />
       <div className="flex flex-1 items-center justify-between gap-4">
         {children}
+        <ThemeToggle />
       </div>
     </header>
   );

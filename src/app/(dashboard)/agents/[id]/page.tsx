@@ -19,8 +19,7 @@ import {
   getResponseTimeDistribution,
 } from "@/lib/data";
 import { formatCurrency, formatPercent, formatHours, formatDate, formatNumber } from "@/lib/utils";
-import { WinRateTrend } from "@/components/charts/win-rate-trend";
-import { ResponseTimeChart } from "@/components/charts/response-time-chart";
+import { WinRateTrend, ResponseTimeChart } from "@/components/charts";
 
 export const revalidate = 60;
 

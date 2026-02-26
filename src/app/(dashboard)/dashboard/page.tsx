@@ -1,9 +1,17 @@
 import { Suspense } from "react";
+import Link from "next/link";
+import { Briefcase } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { KPICards } from "@/components/kpi-cards";
-import { RevenueChart } from "@/components/revenue-chart";
-import { StatusFunnelChart } from "@/components/category-chart";
-import { VolumeChart } from "@/components/region-chart";
+import {
+  RevenueChart,
+  StatusFunnelChart,
+  VolumeChart,
+  RevenueByEntityChart,
+  BudgetTypeSplit,
+} from "@/components/charts";
 import { RecentActivityTable } from "@/components/recent-sales-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { TopAgents } from "@/components/top-agents";
@@ -21,8 +29,6 @@ import {
   getRevenueByAgent,
   getRevenueByBudgetType,
 } from "@/lib/data";
-import { RevenueByEntityChart } from "@/components/charts/revenue-by-entity";
-import { BudgetTypeSplit } from "@/components/charts/budget-type-split";
 import type { DateRange } from "@/lib/types";
 
 export const revalidate = 300;
@@ -84,6 +90,23 @@ export default async function DashboardPage({
 
       <Separator />
 
+      {kpiMetrics.totalJobs === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center space-y-4">
+            <Briefcase className="h-12 w-12 text-muted-foreground" />
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold">Welcome to Vollna Analytics</h2>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                No job data yet. Connect your Google Sheet or sync from ClickUp to get started.
+              </p>
+            </div>
+            <Button asChild>
+              <Link href="/settings">Go to Settings</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+      <>
       <KPICards metrics={kpiMetrics} />
 
       <RevenueChart data={revenueOverTime} />
@@ -105,6 +128,8 @@ export default async function DashboardPage({
       </div>
 
       <RecentActivityTable events={recentActivity} />
+      </>
+      )}
     </div>
   );
 }
