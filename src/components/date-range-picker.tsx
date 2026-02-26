@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 const presets = [
@@ -13,12 +13,13 @@ const presets = [
 export function DateRangePicker() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const currentRange = searchParams.get("range") || "30";
 
   function handleSelect(days: number) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("range", String(days));
-    router.push(`/?${params.toString()}`);
+    router.push(`${pathname}?${params.toString()}`);
   }
 
   return (
