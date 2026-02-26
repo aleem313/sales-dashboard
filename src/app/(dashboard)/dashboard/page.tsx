@@ -17,6 +17,7 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { TopAgents } from "@/components/top-agents";
 import { TopProfiles } from "@/components/top-profiles";
 import { SystemHealthCard } from "@/components/system-health";
+import { AlertsBanner } from "@/components/alerts-banner";
 import {
   getKPIMetrics,
   getRevenueOverTime,
@@ -28,6 +29,7 @@ import {
   getSystemHealth,
   getRevenueByAgent,
   getRevenueByBudgetType,
+  getActiveAlerts,
 } from "@/lib/data";
 import type { DateRange } from "@/lib/types";
 
@@ -61,6 +63,7 @@ export default async function DashboardPage({
     systemHealth,
     revenueByAgent,
     revenueByBudgetType,
+    activeAlerts,
   ] = await Promise.all([
     getKPIMetrics(range),
     getRevenueOverTime(range),
@@ -72,6 +75,7 @@ export default async function DashboardPage({
     getSystemHealth(),
     getRevenueByAgent(range),
     getRevenueByBudgetType(range),
+    getActiveAlerts(),
   ]);
 
   return (
@@ -89,6 +93,8 @@ export default async function DashboardPage({
       </div>
 
       <Separator />
+
+      <AlertsBanner alerts={activeAlerts} />
 
       {kpiMetrics.totalJobs === 0 ? (
         <Card>

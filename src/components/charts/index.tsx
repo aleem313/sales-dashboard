@@ -56,3 +56,24 @@ export const VolumeChart = dynamic(
   () => import("../region-chart").then((mod) => mod.VolumeChart),
   { ssr: false, loading: ChartSkeleton }
 );
+
+// Phase 8 charts
+export const ModelComparison = dynamic(
+  () => import("./model-comparison").then((mod) => mod.ModelComparison),
+  { ssr: false, loading: ChartSkeleton }
+);
+
+export const CountryHeatmap = dynamic(
+  () => import("./country-heatmap").then((mod) => mod.CountryHeatmap),
+  { ssr: false, loading: ChartSkeleton }
+);
+
+export const TimeHeatmap = dynamic(
+  () => import("./time-heatmap").then((mod) => mod.TimeHeatmap),
+  { ssr: false, loading: ChartSkeleton }
+);
+
+export const BudgetIntelligence = dynamic(
+  () => import("./budget-intelligence").then((mod) => mod.BudgetIntelligence),
+  { ssr: false, loading: ChartSkeleton }
+);

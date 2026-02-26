@@ -17,6 +17,8 @@ export interface Agent {
   email: string | null;
   avatar_url: string | null;
   active: boolean;
+  role: string;
+  github_email: string | null;
   created_at: string;
 }
 
@@ -203,4 +205,55 @@ export interface RevenueByBudgetType {
   budget_type: string;
   revenue: number;
   count: number;
+}
+
+// ============================================================
+// PHASE 8: ADVANCED FEATURE TYPES
+// ============================================================
+
+export interface Alert {
+  id: string;
+  alert_type: string;
+  message: string;
+  current_value: number | null;
+  threshold_value: number | null;
+  dismissed: boolean;
+  created_at: string;
+}
+
+export interface AlertThresholds {
+  winRateMin: number;
+  responseTimeMaxHours: number;
+  dailyJobsMin: number;
+}
+
+export interface ProposalAnalytics {
+  model: string;
+  total: number;
+  won: number;
+  lost: number;
+  win_rate_pct: number | null;
+  avg_tokens: number | null;
+}
+
+export interface CountryStats {
+  country: string;
+  total: number;
+  won: number;
+  win_rate_pct: number | null;
+}
+
+export interface TimeSlotStats {
+  day: number;     // 0=Sun..6=Sat
+  hour: number;    // 0..23
+  total: number;
+  won: number;
+  win_rate_pct: number | null;
+}
+
+export interface BudgetWinRate {
+  bucket: string;
+  total: number;
+  won: number;
+  win_rate_pct: number | null;
 }

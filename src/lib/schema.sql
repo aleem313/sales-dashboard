@@ -27,6 +27,8 @@ CREATE TABLE agents (
   email             TEXT,
   avatar_url        TEXT,
   active            BOOLEAN DEFAULT true,
+  role              TEXT DEFAULT 'agent',      -- 'admin' | 'agent'
+  github_email      TEXT,                      -- links GitHub login to agent record
   created_at        TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -74,6 +76,7 @@ CREATE TABLE jobs (
   proposal_text     TEXT,
   gpt_model         TEXT,
   gpt_tokens_used   INTEGER,
+  instruction_version TEXT,                      -- prompt instructions version used
   outcome           TEXT,                        -- 'won' | 'lost' | 'pending' | 'skipped'
   won_value         DECIMAL(10,2),
   proposal_sent_at  TIMESTAMPTZ,
@@ -144,6 +147,35 @@ SELECT
 FROM agents a
 LEFT JOIN jobs j ON j.agent_id = a.id
 GROUP BY a.id, a.name, a.clickup_user_id;
+
+-- Profile performance summary
+-- ============================================================
+-- ALERTS — triggered notifications for threshold breaches
+-- ============================================================
+CREATE TABLE alerts (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  alert_type      TEXT NOT NULL,        -- 'win_rate_low' | 'response_time_high' | 'low_job_volume' | 'gpt_failure_high'
+  message         TEXT NOT NULL,
+  current_value   DECIMAL,
+  threshold_value DECIMAL,
+  dismissed       BOOLEAN DEFAULT false,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_alerts_created_at ON alerts(created_at DESC);
+CREATE INDEX idx_alerts_dismissed ON alerts(dismissed);
+
+-- ============================================================
+-- PHASE 8 COLUMN ADDITIONS
+-- ============================================================
+-- ALTER TABLE agents ADD COLUMN role TEXT DEFAULT 'agent';
+-- ALTER TABLE agents ADD COLUMN github_email TEXT;
+-- ALTER TABLE jobs ADD COLUMN instruction_version TEXT;
+-- (Run as ALTER TABLE on existing databases; included in CREATE TABLE for fresh installs)
+
+-- ============================================================
+-- VIEWS
+-- ============================================================
 
 -- Profile performance summary
 CREATE VIEW profile_stats AS

@@ -43,6 +43,26 @@ export async function fetchTasks(
   return res.json();
 }
 
+export async function updateTaskStatus(
+  taskId: string,
+  status: string
+): Promise<void> {
+  if (!CLICKUP_API_KEY) return;
+
+  const res = await fetch(`${CLICKUP_BASE_URL}/task/${taskId}`, {
+    method: "PUT",
+    headers: {
+      Authorization: CLICKUP_API_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ status }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`ClickUp API error updating task status: ${res.status}`);
+  }
+}
+
 export function mapStatusToOutcome(
   status: string
 ): "won" | "lost" | null {

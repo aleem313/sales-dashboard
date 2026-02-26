@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,26 +13,39 @@ interface Thresholds {
   dailyJobsMin: number;
 }
 
-export function AlertThresholds({
-  defaults,
-}: {
-  defaults?: Partial<Thresholds>;
-}) {
-  const [values, setValues] = useState<Thresholds>({
-    winRateMin: defaults?.winRateMin ?? 20,
-    responseTimeMaxHours: defaults?.responseTimeMaxHours ?? 4,
-    dailyJobsMin: defaults?.dailyJobsMin ?? 5,
-  });
+const DEFAULTS: Thresholds = {
+  winRateMin: 20,
+  responseTimeMaxHours: 4,
+  dailyJobsMin: 5,
+};
+
+export function AlertThresholds() {
+  const [values, setValues] = useState<Thresholds>(DEFAULTS);
   const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/settings/thresholds")
+      .then((res) => res.json())
+      .then((data: Thresholds) => {
+        setValues(data);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
 
   async function handleSave() {
     setSaving(true);
     try {
-      // Store thresholds in stats_cache via API
-      const res = await fetch("/api/stats/overview", { method: "GET" });
+      const res = await fetch("/api/settings/thresholds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
       if (res.ok) {
-        // For now, thresholds are client-side only
         toast.success("Thresholds saved");
+      } else {
+        toast.error("Failed to save thresholds");
       }
     } catch {
       toast.error("Failed to save thresholds");
@@ -56,6 +69,7 @@ export function AlertThresholds({
               min={0}
               max={100}
               value={values.winRateMin}
+              disabled={!loaded}
               onChange={(e) =>
                 setValues({ ...values, winRateMin: Number(e.target.value) })
               }
@@ -68,6 +82,7 @@ export function AlertThresholds({
               type="number"
               min={0}
               value={values.responseTimeMaxHours}
+              disabled={!loaded}
               onChange={(e) =>
                 setValues({
                   ...values,
@@ -83,13 +98,14 @@ export function AlertThresholds({
               type="number"
               min={0}
               value={values.dailyJobsMin}
+              disabled={!loaded}
               onChange={(e) =>
                 setValues({ ...values, dailyJobsMin: Number(e.target.value) })
               }
             />
           </div>
         </div>
-        <Button onClick={handleSave} disabled={saving} variant="outline">
+        <Button onClick={handleSave} disabled={saving || !loaded} variant="outline">
           {saving ? "Saving..." : "Save Thresholds"}
         </Button>
       </CardContent>

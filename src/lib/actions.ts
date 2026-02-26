@@ -7,7 +7,10 @@ import {
   toggleProfileActive,
   updateProfileAgent,
   createProfile,
+  dismissAlert,
+  markJobAsSent,
 } from "./data";
+import { updateTaskStatus } from "./clickup";
 
 export async function toggleAgentActiveAction(id: string, active: boolean) {
   await toggleAgentActive(id, active);
@@ -71,6 +74,27 @@ export async function triggerClickUpSync() {
   revalidatePath("/settings");
   revalidatePath("/dashboard");
   return result;
+}
+
+export async function dismissAlertAction(id: string) {
+  await dismissAlert(id);
+  revalidatePath("/dashboard");
+  revalidatePath("/settings");
+}
+
+export async function markProposalSentAction(jobId: string, clickupTaskId?: string | null) {
+  await markJobAsSent(jobId);
+  if (clickupTaskId) {
+    try {
+      await updateTaskStatus(clickupTaskId, "Sent");
+    } catch (err) {
+      console.error("Failed to update ClickUp status:", err);
+    }
+  }
+  revalidatePath("/my-jobs");
+  revalidatePath("/my-dashboard");
+  revalidatePath("/jobs");
+  revalidatePath("/dashboard");
 }
 
 export async function triggerSheetsSync() {

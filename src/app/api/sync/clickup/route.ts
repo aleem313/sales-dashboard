@@ -2,13 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { isClickUpConfigured, fetchTask, mapStatusToOutcome } from "@/lib/clickup";
 import { createSyncLog, completeSyncLog } from "@/lib/data";
+import { auth as getSession } from "@/lib/auth";
+import { checkAlerts, dispatchAlerts } from "@/lib/alerts";
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret
+  // Accept either a valid cron secret or a valid user session
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${cronSecret}`) {
+  const cronAuth = request.headers.get("authorization");
+  const hasCronAuth = cronSecret && cronAuth === `Bearer ${cronSecret}`;
+
+  if (!hasCronAuth) {
+    const session = await getSession();
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   }
@@ -79,6 +84,16 @@ export async function GET(request: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
       status: errors.length > 0 ? "failed" : "success",
     });
+
+    // Run alert checks after sync
+    try {
+      const triggered = await checkAlerts();
+      if (triggered.length > 0) {
+        await dispatchAlerts(triggered);
+      }
+    } catch (alertErr) {
+      console.error("Alert check failed:", alertErr);
+    }
 
     return NextResponse.json({ ok: true, synced, updated, errors });
   } catch (error) {

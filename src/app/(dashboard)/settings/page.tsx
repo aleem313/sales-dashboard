@@ -1,20 +1,22 @@
 import { Separator } from "@/components/ui/separator";
-import { getSyncLogs, getSystemHealth, getAllAgents, getAllProfiles } from "@/lib/data";
+import { getSyncLogs, getSystemHealth, getAllAgents, getAllProfiles, getAlertHistory } from "@/lib/data";
 import { SyncControls } from "@/components/settings/sync-controls";
 import { SyncLogTable } from "@/components/settings/sync-log-table";
 import { AgentManagement } from "@/components/settings/agent-management";
 import { ProfileManagement } from "@/components/settings/profile-management";
 import { AlertThresholds } from "@/components/settings/alert-thresholds";
+import { AlertHistory } from "@/components/settings/alert-history";
 import type { SyncLog } from "@/lib/types";
 
 export const revalidate = 0;
 
 export default async function SettingsPage() {
-  const [syncLogs, systemHealth, agents, profiles] = await Promise.all([
+  const [syncLogs, systemHealth, agents, profiles, alertHistory] = await Promise.all([
     getSyncLogs(20),
     getSystemHealth(),
     getAllAgents(),
     getAllProfiles(),
+    getAlertHistory(50),
   ]);
 
   return (
@@ -40,6 +42,8 @@ export default async function SettingsPage() {
       <ProfileManagement profiles={profiles} agents={agents} />
 
       <AlertThresholds />
+
+      <AlertHistory alerts={alertHistory} />
     </div>
   );
 }

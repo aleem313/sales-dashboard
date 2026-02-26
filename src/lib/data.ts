@@ -19,6 +19,11 @@ import type {
   SkillAnalysis,
   RevenueByEntity,
   RevenueByBudgetType,
+  Alert,
+  ProposalAnalytics,
+  CountryStats,
+  TimeSlotStats,
+  BudgetWinRate,
 } from "./types";
 
 // ============================================================
@@ -219,6 +224,8 @@ export async function getAgentById(
     email: row.email,
     avatar_url: row.avatar_url,
     active: row.active,
+    role: row.role ?? "agent",
+    github_email: row.github_email ?? null,
     created_at: row.created_at,
     profiles: profilesResult.rows as Profile[],
   };
@@ -888,4 +895,250 @@ export async function getRevenueByBudgetType(
     revenue: parseFloat(row.revenue) || 0,
     count: parseInt(row.count) || 0,
   }));
+}
+
+// ============================================================
+// ALERTS (Phase 8.1)
+// ============================================================
+
+export async function getActiveAlerts(): Promise<Alert[]> {
+  const result = await sql`
+    SELECT * FROM alerts
+    WHERE dismissed = false
+    ORDER BY created_at DESC
+    LIMIT 10
+  `;
+  return result.rows as Alert[];
+}
+
+export async function getAlertHistory(limit: number = 50): Promise<Alert[]> {
+  const result = await sql`
+    SELECT * FROM alerts
+    ORDER BY created_at DESC
+    LIMIT ${limit}
+  `;
+  return result.rows as Alert[];
+}
+
+export async function dismissAlert(id: string): Promise<void> {
+  await sql`UPDATE alerts SET dismissed = true WHERE id = ${id}`;
+}
+
+export async function insertAlert(alert: {
+  alert_type: string;
+  message: string;
+  current_value: number | null;
+  threshold_value: number | null;
+}): Promise<void> {
+  // Dedup: don't re-alert same type within 24h
+  const existing = await sql`
+    SELECT id FROM alerts
+    WHERE alert_type = ${alert.alert_type}
+      AND created_at > NOW() - INTERVAL '24 hours'
+    LIMIT 1
+  `;
+  if (existing.rows.length > 0) return;
+
+  await sql`
+    INSERT INTO alerts (alert_type, message, current_value, threshold_value)
+    VALUES (${alert.alert_type}, ${alert.message}, ${alert.current_value}, ${alert.threshold_value})
+  `;
+}
+
+// ============================================================
+// PROPOSAL INTELLIGENCE (Phase 8.2)
+// ============================================================
+
+export async function getProposalAnalytics(
+  range?: DateRange
+): Promise<ProposalAnalytics[]> {
+  const { startDate, endDate } = range ?? {};
+  const result = await sql`
+    SELECT
+      COALESCE(gpt_model, 'Unknown') AS model,
+      COUNT(*) AS total,
+      COUNT(CASE WHEN outcome = 'won' THEN 1 END) AS won,
+      COUNT(CASE WHEN outcome = 'lost' THEN 1 END) AS lost,
+      ROUND(
+        COUNT(CASE WHEN outcome = 'won' THEN 1 END)::DECIMAL /
+        NULLIF(COUNT(CASE WHEN outcome IN ('won','lost') THEN 1 END), 0) * 100, 1
+      ) AS win_rate_pct,
+      ROUND(AVG(gpt_tokens_used)) AS avg_tokens
+    FROM jobs
+    WHERE gpt_model IS NOT NULL
+      AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+    GROUP BY gpt_model
+    ORDER BY total DESC
+  `;
+  return result.rows.map((row) => ({
+    model: row.model,
+    total: parseInt(row.total) || 0,
+    won: parseInt(row.won) || 0,
+    lost: parseInt(row.lost) || 0,
+    win_rate_pct: row.win_rate_pct ? parseFloat(row.win_rate_pct) : null,
+    avg_tokens: row.avg_tokens ? parseInt(row.avg_tokens) : null,
+  }));
+}
+
+// ============================================================
+// ADVANCED ANALYTICS (Phase 8.3)
+// ============================================================
+
+export async function getCountryStats(
+  range?: DateRange
+): Promise<CountryStats[]> {
+  const { startDate, endDate } = range ?? {};
+  const result = await sql`
+    SELECT
+      client_country AS country,
+      COUNT(*) AS total,
+      COUNT(CASE WHEN outcome = 'won' THEN 1 END) AS won,
+      ROUND(
+        COUNT(CASE WHEN outcome = 'won' THEN 1 END)::DECIMAL /
+        NULLIF(COUNT(CASE WHEN outcome IN ('won','lost') THEN 1 END), 0) * 100, 1
+      ) AS win_rate_pct
+    FROM jobs
+    WHERE client_country IS NOT NULL
+      AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+    GROUP BY client_country
+    HAVING COUNT(*) >= 2
+    ORDER BY total DESC
+  `;
+  return result.rows.map((row) => ({
+    country: row.country,
+    total: parseInt(row.total) || 0,
+    won: parseInt(row.won) || 0,
+    win_rate_pct: row.win_rate_pct ? parseFloat(row.win_rate_pct) : null,
+  }));
+}
+
+export async function getBestTimeToApply(
+  range?: DateRange
+): Promise<TimeSlotStats[]> {
+  const { startDate, endDate } = range ?? {};
+  const result = await sql`
+    SELECT
+      EXTRACT(DOW FROM received_at)::int AS day,
+      EXTRACT(HOUR FROM received_at)::int AS hour,
+      COUNT(*) AS total,
+      COUNT(CASE WHEN outcome = 'won' THEN 1 END) AS won,
+      ROUND(
+        COUNT(CASE WHEN outcome = 'won' THEN 1 END)::DECIMAL /
+        NULLIF(COUNT(CASE WHEN outcome IN ('won','lost') THEN 1 END), 0) * 100, 1
+      ) AS win_rate_pct
+    FROM jobs
+    WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+    GROUP BY EXTRACT(DOW FROM received_at), EXTRACT(HOUR FROM received_at)
+    ORDER BY day, hour
+  `;
+  return result.rows.map((row) => ({
+    day: parseInt(row.day),
+    hour: parseInt(row.hour),
+    total: parseInt(row.total) || 0,
+    won: parseInt(row.won) || 0,
+    win_rate_pct: row.win_rate_pct ? parseFloat(row.win_rate_pct) : null,
+  }));
+}
+
+export async function getBudgetWinRate(
+  profileId?: string
+): Promise<BudgetWinRate[]> {
+  const result = await sql`
+    SELECT
+      CASE
+        WHEN budget_max < 100 THEN '< $100'
+        WHEN budget_max < 500 THEN '$100-500'
+        WHEN budget_max < 1000 THEN '$500-1K'
+        WHEN budget_max < 5000 THEN '$1K-5K'
+        WHEN budget_max < 10000 THEN '$5K-10K'
+        ELSE '$10K+'
+      END AS bucket,
+      COUNT(*) AS total,
+      COUNT(CASE WHEN outcome = 'won' THEN 1 END) AS won,
+      ROUND(
+        COUNT(CASE WHEN outcome = 'won' THEN 1 END)::DECIMAL /
+        NULLIF(COUNT(CASE WHEN outcome IN ('won','lost') THEN 1 END), 0) * 100, 1
+      ) AS win_rate_pct
+    FROM jobs
+    WHERE budget_max IS NOT NULL
+      AND outcome IN ('won', 'lost')
+      AND (${profileId}::text IS NULL OR profile_id = ${profileId}::text)
+    GROUP BY
+      CASE
+        WHEN budget_max < 100 THEN '< $100'
+        WHEN budget_max < 500 THEN '$100-500'
+        WHEN budget_max < 1000 THEN '$500-1K'
+        WHEN budget_max < 5000 THEN '$1K-5K'
+        WHEN budget_max < 10000 THEN '$5K-10K'
+        ELSE '$10K+'
+      END
+    ORDER BY MIN(budget_max)
+  `;
+  return result.rows.map((row) => ({
+    bucket: row.bucket,
+    total: parseInt(row.total) || 0,
+    won: parseInt(row.won) || 0,
+    win_rate_pct: row.win_rate_pct ? parseFloat(row.win_rate_pct) : null,
+  }));
+}
+
+// ============================================================
+// AGENT PORTAL (Phase 8.4)
+// ============================================================
+
+export async function getAgentByGithubEmail(
+  email: string
+): Promise<{ id: string; role: string } | null> {
+  const result = await sql`
+    SELECT id, role FROM agents
+    WHERE github_email = ${email} AND active = true
+    LIMIT 1
+  `;
+  if (result.rows.length === 0) return null;
+  return { id: result.rows[0].id, role: result.rows[0].role };
+}
+
+export async function markJobAsSent(jobId: string): Promise<void> {
+  await sql`
+    UPDATE jobs SET
+      proposal_sent_at = NOW(),
+      clickup_status = 'Sent',
+      updated_at = NOW()
+    WHERE id = ${jobId}
+  `;
+}
+
+export async function getAgentKPIMetrics(
+  agentId: string,
+  range?: DateRange
+): Promise<KPIMetrics> {
+  const { startDate, endDate } = range ?? {};
+  const result = await sql`
+    SELECT
+      COUNT(*) AS total_jobs,
+      COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN outcome = 'won' THEN 1 END) AS won,
+      COUNT(CASE WHEN outcome = 'lost' THEN 1 END) AS lost,
+      ROUND(
+        COUNT(CASE WHEN outcome = 'won' THEN 1 END)::DECIMAL /
+        NULLIF(COUNT(CASE WHEN outcome IN ('won','lost') THEN 1 END), 0) * 100, 1
+      ) AS win_rate,
+      COALESCE(SUM(CASE WHEN outcome = 'won' THEN won_value END), 0) AS total_revenue
+    FROM jobs
+    WHERE agent_id = ${agentId}
+      AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+  `;
+  const row = result.rows[0];
+  return {
+    totalJobs: parseInt(row.total_jobs) || 0,
+    proposalsSent: parseInt(row.proposals_sent) || 0,
+    won: parseInt(row.won) || 0,
+    lost: parseInt(row.lost) || 0,
+    winRate: parseFloat(row.win_rate) || 0,
+    totalRevenue: parseFloat(row.total_revenue) || 0,
+  };
 }
