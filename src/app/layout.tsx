@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sales Analytics Dashboard",
-  description: "Real-time sales analytics with revenue tracking, category breakdowns, and regional insights",
+  title: "Vollna Analytics Dashboard",
+  description: "Real-time analytics for Upwork job automation — track proposals, win rates, agent performance, and revenue",
 };
 
 export default function RootLayout({

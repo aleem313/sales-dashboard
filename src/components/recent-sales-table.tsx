@@ -8,59 +8,61 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import type { RecentSale } from "@/lib/types";
+import { formatRelativeTime } from "@/lib/utils";
+import type { ActivityEvent } from "@/lib/types";
 
-function statusVariant(status: string) {
-  switch (status) {
-    case "completed":
-      return "default" as const;
-    case "pending":
-      return "secondary" as const;
-    case "cancelled":
-      return "destructive" as const;
-    default:
-      return "outline" as const;
-  }
+function statusVariant(status: string, outcome: string | null) {
+  if (outcome === "won") return "default" as const;
+  if (outcome === "lost") return "destructive" as const;
+  if (status === "Sent" || status === "Following Up") return "secondary" as const;
+  return "outline" as const;
 }
 
-export function RecentSalesTable({ sales }: { sales: RecentSale[] }) {
+function displayStatus(status: string, outcome: string | null) {
+  if (outcome === "won") return "Won";
+  if (outcome === "lost") return "Lost";
+  if (outcome === "skipped") return "Skipped";
+  return status;
+}
+
+export function RecentActivityTable({ events }: { events: ActivityEvent[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Recent Sales</CardTitle>
+        <CardTitle>Recent Activity</CardTitle>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Customer</TableHead>
-              <TableHead className="hidden sm:table-cell">Product</TableHead>
-              <TableHead>Amount</TableHead>
-              <TableHead className="hidden md:table-cell">Status</TableHead>
-              <TableHead className="hidden lg:table-cell">Date</TableHead>
+              <TableHead>Job</TableHead>
+              <TableHead className="hidden sm:table-cell">Agent</TableHead>
+              <TableHead className="hidden md:table-cell">Profile</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="hidden lg:table-cell">Time</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sales.map((sale) => (
-              <TableRow key={sale.id}>
+            {events.map((event) => (
+              <TableRow key={event.id}>
                 <TableCell>
-                  <div className="font-medium">{sale.customerName}</div>
-                  <div className="text-sm text-muted-foreground hidden sm:block">
-                    {sale.customerEmail}
+                  <div className="font-medium max-w-[200px] truncate">
+                    {event.job_title}
                   </div>
                 </TableCell>
-                <TableCell className="hidden sm:table-cell">{sale.product}</TableCell>
-                <TableCell className="font-medium">
-                  {formatCurrency(sale.amount)}
+                <TableCell className="hidden sm:table-cell">
+                  {event.agent_name ?? "—"}
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
-                  <Badge variant={statusVariant(sale.status)}>
-                    {sale.status}
+                  {event.profile_name ?? "—"}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={statusVariant(event.clickup_status, event.outcome)}>
+                    {displayStatus(event.clickup_status, event.outcome)}
                   </Badge>
                 </TableCell>
                 <TableCell className="hidden lg:table-cell text-muted-foreground">
-                  {formatDate(sale.date)}
+                  {formatRelativeTime(event.updated_at)}
                 </TableCell>
               </TableRow>
             ))}

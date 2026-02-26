@@ -11,13 +11,13 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CHART_COLORS } from "@/lib/chart-colors";
-import type { SalesByCategory } from "@/lib/types";
+import type { StatusFunnelStep } from "@/lib/types";
 
-export function CategoryChart({ data }: { data: SalesByCategory[] }) {
+export function StatusFunnelChart({ data }: { data: StatusFunnelStep[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sales by Category</CardTitle>
+        <CardTitle>Job Pipeline</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="h-[350px]">
@@ -33,30 +33,24 @@ export function CategoryChart({ data }: { data: SalesByCategory[] }) {
                 tick={{ fontSize: 12 }}
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(value) =>
-                  value >= 1000 ? `$${(value / 1000).toFixed(0)}k` : `$${value}`
-                }
               />
               <YAxis
                 type="category"
-                dataKey="category"
+                dataKey="status"
                 tick={{ fontSize: 12 }}
                 tickLine={false}
                 axisLine={false}
-                width={100}
+                width={110}
               />
               <Tooltip
-                formatter={(value: number | undefined) => [
-                  `$${(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
-                  "Revenue",
-                ]}
+                formatter={(value: number | undefined) => [value ?? 0, "Jobs"]}
                 contentStyle={{
                   borderRadius: "8px",
                   border: "1px solid hsl(var(--border))",
                   backgroundColor: "hsl(var(--card))",
                 }}
               />
-              <Bar dataKey="revenue" fill={CHART_COLORS[1]} radius={[0, 4, 4, 0]} />
+              <Bar dataKey="count" fill={CHART_COLORS[1]} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

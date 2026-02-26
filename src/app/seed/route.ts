@@ -1,12 +1,28 @@
-import { seed } from "@/lib/seed";
+import { migrateSchema, seedTestData } from "@/lib/seed";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const action = searchParams.get("action") || "all";
+
   try {
-    const result = await seed();
+    if (action === "migrate" || action === "all") {
+      await migrateSchema();
+    }
+
+    let seedResult = null;
+    if (action === "seed" || action === "all") {
+      seedResult = await seedTestData();
+    }
+
     return NextResponse.json({
-      message: "Database seeded successfully",
-      ...result,
+      message:
+        action === "migrate"
+          ? "Schema migrated successfully"
+          : action === "seed"
+            ? "Test data seeded successfully"
+            : "Schema migrated and test data seeded",
+      ...(seedResult ?? {}),
     });
   } catch (error) {
     return NextResponse.json(

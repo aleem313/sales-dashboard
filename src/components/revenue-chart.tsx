@@ -11,10 +11,10 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CHART_COLORS } from "@/lib/chart-colors";
-import type { RevenueOverTime } from "@/lib/types";
 
-function formatTooltipValue(value: number) {
-  return `$${value.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+interface RevenuePoint {
+  date: string;
+  revenue: number;
 }
 
 function formatYAxis(value: number) {
@@ -22,7 +22,7 @@ function formatYAxis(value: number) {
   return `$${value}`;
 }
 
-export function RevenueChart({ data }: { data: RevenueOverTime[] }) {
+export function RevenueChart({ data }: { data: RevenuePoint[] }) {
   return (
     <Card className="col-span-full">
       <CardHeader>
@@ -55,7 +55,10 @@ export function RevenueChart({ data }: { data: RevenueOverTime[] }) {
                 tickFormatter={formatYAxis}
               />
               <Tooltip
-                formatter={(value: number | undefined) => [formatTooltipValue(value ?? 0), "Revenue"]}
+                formatter={(value: number | undefined) => [
+                  `$${(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+                  "Revenue",
+                ]}
                 labelFormatter={(label) =>
                   new Date(label).toLocaleDateString("en-US", {
                     month: "long",

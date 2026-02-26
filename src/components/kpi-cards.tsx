@@ -1,34 +1,39 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, ShoppingCart, TrendingUp, Target } from "lucide-react";
+import { Briefcase, Send, Trophy, TrendingUp, DollarSign } from "lucide-react";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
 import type { KPIMetrics } from "@/lib/types";
 
 export function KPICards({ metrics }: { metrics: KPIMetrics }) {
   const cards = [
     {
-      title: "Total Revenue",
-      value: formatCurrency(metrics.totalRevenue),
-      icon: DollarSign,
+      title: "Total Jobs",
+      value: formatNumber(metrics.totalJobs),
+      icon: Briefcase,
     },
     {
-      title: "Total Orders",
-      value: formatNumber(metrics.totalOrders),
-      icon: ShoppingCart,
+      title: "Proposals Sent",
+      value: formatNumber(metrics.proposalsSent),
+      icon: Send,
     },
     {
-      title: "Avg Order Value",
-      value: formatCurrency(metrics.avgOrderValue),
+      title: "Won",
+      value: formatNumber(metrics.won),
+      icon: Trophy,
+    },
+    {
+      title: "Win Rate",
+      value: formatPercent(metrics.winRate),
       icon: TrendingUp,
     },
     {
-      title: "Completion Rate",
-      value: formatPercent(metrics.conversionRate),
-      icon: Target,
+      title: "Revenue",
+      value: formatCurrency(metrics.totalRevenue),
+      icon: DollarSign,
     },
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
       {cards.map((card) => (
         <Card key={card.title}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
