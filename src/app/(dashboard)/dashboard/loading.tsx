@@ -45,6 +45,16 @@ export default function DashboardLoading() {
         ))}
       </div>
 
+      {/* Revenue by agent + budget type charts skeleton */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {[1, 2].map((i) => (
+          <div key={i} className="rounded-xl border bg-card p-6 space-y-4">
+            <div className="h-5 w-36 bg-muted animate-pulse rounded" />
+            <div className="h-[350px] bg-muted animate-pulse rounded" />
+          </div>
+        ))}
+      </div>
+
       {/* Three cards skeleton */}
       <div className="grid gap-4 md:grid-cols-3">
         {[1, 2, 3].map((i) => (
