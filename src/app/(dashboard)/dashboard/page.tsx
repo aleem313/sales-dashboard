@@ -18,7 +18,11 @@ import {
   getTopAgentsByWinRate,
   getTopProfilesByVolume,
   getSystemHealth,
+  getRevenueByAgent,
+  getRevenueByBudgetType,
 } from "@/lib/data";
+import { RevenueByEntityChart } from "@/components/charts/revenue-by-entity";
+import { BudgetTypeSplit } from "@/components/charts/budget-type-split";
 import type { DateRange } from "@/lib/types";
 
 export const revalidate = 300;
@@ -49,6 +53,8 @@ export default async function DashboardPage({
     topAgents,
     topProfiles,
     systemHealth,
+    revenueByAgent,
+    revenueByBudgetType,
   ] = await Promise.all([
     getKPIMetrics(range),
     getRevenueOverTime(range),
@@ -58,6 +64,8 @@ export default async function DashboardPage({
     getTopAgentsByWinRate(3, range),
     getTopProfilesByVolume(3, range),
     getSystemHealth(),
+    getRevenueByAgent(range),
+    getRevenueByBudgetType(range),
   ]);
 
   return (
@@ -83,6 +91,11 @@ export default async function DashboardPage({
       <div className="grid gap-4 md:grid-cols-2">
         <VolumeChart data={jobVolume} />
         <StatusFunnelChart data={statusFunnel} />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <RevenueByEntityChart data={revenueByAgent} title="Revenue by Agent" />
+        <BudgetTypeSplit data={revenueByBudgetType} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

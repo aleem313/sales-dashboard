@@ -172,3 +172,35 @@ export interface PaginatedResult<T> {
   limit: number;
   totalPages: number;
 }
+
+// ============================================================
+// CHART DATA TYPES (Phase 5)
+// ============================================================
+
+export interface WinRateTrendPoint {
+  week: string;
+  won: number;
+  decided: number;
+  win_rate: number;
+}
+
+export interface DistributionBucket {
+  bucket: string;
+  count: number;
+}
+
+export interface SkillAnalysis {
+  skill: string;
+  count: number;
+}
+
+export interface RevenueByEntity {
+  name: string;
+  revenue: number;
+}
+
+export interface RevenueByBudgetType {
+  budget_type: string;
+  revenue: number;
+  count: number;
+}

@@ -11,8 +11,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getProfileById, getProfileStats, getJobs } from "@/lib/data";
+import {
+  getProfileById,
+  getProfileStats,
+  getJobs,
+  getJobVolumeOverTime,
+  getBudgetDistribution,
+  getSkillsAnalysis,
+} from "@/lib/data";
 import { formatCurrency, formatPercent, formatDate, formatNumber } from "@/lib/utils";
+import { VolumeChart } from "@/components/region-chart";
+import { BudgetDistribution } from "@/components/charts/budget-distribution";
+import { SkillsChart } from "@/components/charts/skills-chart";
 
 export const revalidate = 60;
 
@@ -29,10 +39,14 @@ export default async function ProfileDetailPage({
 
   if (!profile) notFound();
 
-  const [profileJobs, stats] = await Promise.all([
-    getJobs({ profile_id: profile.profile_id, limit: 15 }),
-    Promise.resolve(allStats.find((p) => p.id === id)),
-  ]);
+  const [profileJobs, stats, jobVolume, budgetDist, skillsData] =
+    await Promise.all([
+      getJobs({ profile_id: profile.profile_id, limit: 15 }),
+      Promise.resolve(allStats.find((p) => p.id === id)),
+      getJobVolumeOverTime(),
+      getBudgetDistribution(profile.profile_id),
+      getSkillsAnalysis(profile.profile_id),
+    ]);
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
@@ -92,6 +106,13 @@ export default async function ProfileDetailPage({
           ))}
         </div>
       )}
+
+      {/* Charts */}
+      <VolumeChart data={jobVolume} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <BudgetDistribution data={budgetDist} />
+        <SkillsChart data={skillsData} />
+      </div>
 
       {/* Recent Jobs */}
       <Card>

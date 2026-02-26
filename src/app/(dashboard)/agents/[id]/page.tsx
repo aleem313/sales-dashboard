@@ -11,8 +11,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getAgentById, getJobs, getAgentStats } from "@/lib/data";
+import {
+  getAgentById,
+  getJobs,
+  getAgentStats,
+  getAgentWinRateTrend,
+  getResponseTimeDistribution,
+} from "@/lib/data";
 import { formatCurrency, formatPercent, formatHours, formatDate, formatNumber } from "@/lib/utils";
+import { WinRateTrend } from "@/components/charts/win-rate-trend";
+import { ResponseTimeChart } from "@/components/charts/response-time-chart";
 
 export const revalidate = 60;
 
@@ -22,11 +30,14 @@ export default async function AgentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [agent, agentStatsAll, recentJobs] = await Promise.all([
-    getAgentById(id),
-    getAgentStats(),
-    getJobs({ agent_id: id, limit: 15 }),
-  ]);
+  const [agent, agentStatsAll, recentJobs, winRateTrend, responseTimeDist] =
+    await Promise.all([
+      getAgentById(id),
+      getAgentStats(),
+      getJobs({ agent_id: id, limit: 15 }),
+      getAgentWinRateTrend(id),
+      getResponseTimeDistribution(id),
+    ]);
 
   if (!agent) notFound();
 
@@ -79,6 +90,12 @@ export default async function AgentDetailPage({
           ))}
         </div>
       )}
+
+      {/* Charts */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <WinRateTrend data={winRateTrend} />
+        <ResponseTimeChart data={responseTimeDist} />
+      </div>
 
       {/* Assigned Profiles */}
       {agent.profiles.length > 0 && (
