@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Users, Briefcase, Calendar, LogOut } from "lucide-react";
+import { DateRangePicker } from "@/components/date-range-picker";
+import { Users, Briefcase, LogOut } from "lucide-react";
 import type { Agent, Profile } from "@/lib/types";
 
 interface HeaderControlsProps {
@@ -12,23 +13,15 @@ interface HeaderControlsProps {
   profiles: Profile[];
 }
 
-const dateRanges = [
-  { label: "This Week", value: "7" },
-  { label: "This Month", value: "30" },
-  { label: "All Time", value: "all" },
-];
-
 export function HeaderControls({ agents, profiles }: HeaderControlsProps) {
   const { data: session } = useSession();
   const [agentValue, setAgentValue] = useState("");
   const [profileValue, setProfileValue] = useState("");
-  const [rangeValue, setRangeValue] = useState("7");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setAgentValue(params.get("agent") || "");
     setProfileValue(params.get("profile") || "");
-    setRangeValue(params.get("range") || "7");
   }, []);
 
   function handleSelectChange(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -36,7 +29,7 @@ export function HeaderControls({ agents, profiles }: HeaderControlsProps) {
     const value = e.target.value;
     const url = new URL(window.location.href);
 
-    if (!value || (key === "range" && value === "7")) {
+    if (!value) {
       url.searchParams.delete(key);
     } else {
       url.searchParams.set(key, value);
@@ -92,25 +85,8 @@ export function HeaderControls({ agents, profiles }: HeaderControlsProps) {
 
       <Separator orientation="vertical" className="h-5" />
 
-      {/* Date range */}
-      <div className="relative inline-flex items-center">
-        <Calendar className="pointer-events-none absolute left-2.5 z-10 h-3.5 w-3.5 text-muted-foreground" />
-        <select
-          name="range"
-          value={rangeValue}
-          onChange={handleSelectChange}
-          className="appearance-none cursor-pointer rounded-[7px] border border-border bg-transparent py-1.5 pr-7 pl-8 text-[13.5px] font-semibold text-muted-foreground transition-all hover:border-[var(--primary)] hover:text-foreground focus:border-[var(--primary)] focus:text-foreground focus:outline-none min-w-[120px]"
-        >
-          {dateRanges.map((r) => (
-            <option key={r.value} value={r.value}>
-              {r.label}
-            </option>
-          ))}
-        </select>
-        <span className="pointer-events-none absolute right-2 text-[12px] text-muted-foreground">
-          ▾
-        </span>
-      </div>
+      {/* Date range picker */}
+      <DateRangePicker />
 
       <Separator orientation="vertical" className="h-5" />
 

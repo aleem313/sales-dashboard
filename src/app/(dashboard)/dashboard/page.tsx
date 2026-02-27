@@ -17,28 +17,20 @@ import {
   getJobs,
 } from "@/lib/data";
 
-export const revalidate = 300;
+import { parseDateRange, rangeToDays } from "@/lib/date-utils";
 
-function parseDays(range?: string): number {
-  if (range === "all") return 365 * 5;
-  if (range === "30") return 30;
-  return 7;
-}
+export const revalidate = 300;
 
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string; agent?: string; profile?: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string; agent?: string; profile?: string }>;
 }) {
   const params = await searchParams;
-  const days = parseDays(params.range);
+  const days = rangeToDays(params);
   const agentId = typeof params.agent === "string" ? params.agent : undefined;
   const profileId = typeof params.profile === "string" ? params.profile : undefined;
-
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(endDate.getDate() - days);
-  const range = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+  const range = parseDateRange(params);
 
   const [kpi, funnel, pipeline, agents, profiles, allAgents, allProfiles, recentJobs] = await Promise.all([
     getKPIMetricsWithDeltas(days, agentId, profileId),
@@ -117,7 +109,7 @@ export default async function DashboardPage({
             <div>
               <h3 className="text-sm font-bold">Live Job Feed</h3>
               <p className="text-[13.5px] text-muted-foreground">
-                Latest incoming jobs from Upwork via Vollna
+                Latest incoming jobs from Upwork
               </p>
             </div>
             <div className="flex items-center gap-3">
