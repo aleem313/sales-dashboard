@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { X } from "lucide-react";
 import type { Agent, Profile } from "@/lib/types";
@@ -15,7 +16,7 @@ const rangeLabels: Record<string, string> = {
   all: "All Time",
 };
 
-export function ActiveFilterBar({ agents, profiles }: ActiveFilterBarProps) {
+function ActiveFilterBarInner({ agents, profiles }: ActiveFilterBarProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -38,7 +39,8 @@ export function ActiveFilterBar({ agents, profiles }: ActiveFilterBarProps) {
   function removeParam(key: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.delete(key);
-    router.push(`${pathname}?${params.toString()}`);
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
   }
 
   function clearAll() {
@@ -72,5 +74,13 @@ export function ActiveFilterBar({ agents, profiles }: ActiveFilterBarProps) {
         </button>
       )}
     </div>
+  );
+}
+
+export function ActiveFilterBar(props: ActiveFilterBarProps) {
+  return (
+    <Suspense fallback={null}>
+      <ActiveFilterBarInner {...props} />
+    </Suspense>
   );
 }

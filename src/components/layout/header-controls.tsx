@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -19,7 +20,7 @@ const dateRanges = [
   { label: "All Time", value: "all" },
 ];
 
-export function HeaderControls({
+function FilterControls({
   agents,
   profiles,
   user,
@@ -40,13 +41,9 @@ export function HeaderControls({
     } else {
       params.set(key, value);
     }
-    router.push(`${pathname}?${params.toString()}`);
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
   }
-
-  const filterSelectBase =
-    "appearance-none cursor-pointer rounded-[7px] border border-border bg-transparent py-1.5 pr-7 pl-8 text-[12.5px] font-semibold text-muted-foreground transition-all hover:border-[var(--primary)] hover:text-foreground focus:border-[var(--primary)] focus:text-foreground focus:outline-none";
-  const filterSelectActive =
-    "!bg-[var(--accent-light)] !text-[var(--primary)] !border-[var(--primary)]/30";
 
   return (
     <div className="hidden items-center gap-2 md:flex">
@@ -56,7 +53,11 @@ export function HeaderControls({
         <select
           value={currentAgent}
           onChange={(e) => setParam("agent", e.target.value)}
-          className={`${filterSelectBase} min-w-[130px] ${currentAgent ? filterSelectActive : ""}`}
+          className={
+            currentAgent
+              ? "appearance-none cursor-pointer rounded-[7px] border border-border bg-[var(--accent-light)] py-1.5 pr-7 pl-8 text-[12.5px] font-semibold text-[var(--primary)] transition-all hover:border-[var(--primary)] focus:border-[var(--primary)] focus:outline-none min-w-[130px]"
+              : "appearance-none cursor-pointer rounded-[7px] border border-border bg-transparent py-1.5 pr-7 pl-8 text-[12.5px] font-semibold text-muted-foreground transition-all hover:border-[var(--primary)] hover:text-foreground focus:border-[var(--primary)] focus:text-foreground focus:outline-none min-w-[130px]"
+          }
         >
           <option value="">All Agents</option>
           {agents.map((a) => (
@@ -76,7 +77,11 @@ export function HeaderControls({
         <select
           value={currentProfile}
           onChange={(e) => setParam("profile", e.target.value)}
-          className={`${filterSelectBase} min-w-[130px] ${currentProfile ? filterSelectActive : ""}`}
+          className={
+            currentProfile
+              ? "appearance-none cursor-pointer rounded-[7px] border border-border bg-[var(--accent-light)] py-1.5 pr-7 pl-8 text-[12.5px] font-semibold text-[var(--primary)] transition-all hover:border-[var(--primary)] focus:border-[var(--primary)] focus:outline-none min-w-[130px]"
+              : "appearance-none cursor-pointer rounded-[7px] border border-border bg-transparent py-1.5 pr-7 pl-8 text-[12.5px] font-semibold text-muted-foreground transition-all hover:border-[var(--primary)] hover:text-foreground focus:border-[var(--primary)] focus:text-foreground focus:outline-none min-w-[130px]"
+          }
         >
           <option value="">All Profiles</option>
           {profiles.map((p) => (
@@ -98,7 +103,11 @@ export function HeaderControls({
         <select
           value={currentRange}
           onChange={(e) => setParam("range", e.target.value)}
-          className={`${filterSelectBase} min-w-[120px] ${currentRange !== "7" ? filterSelectActive : ""}`}
+          className={
+            currentRange !== "7"
+              ? "appearance-none cursor-pointer rounded-[7px] border border-border bg-[var(--accent-light)] py-1.5 pr-7 pl-8 text-[12.5px] font-semibold text-[var(--primary)] transition-all hover:border-[var(--primary)] focus:border-[var(--primary)] focus:outline-none min-w-[120px]"
+              : "appearance-none cursor-pointer rounded-[7px] border border-border bg-transparent py-1.5 pr-7 pl-8 text-[12.5px] font-semibold text-muted-foreground transition-all hover:border-[var(--primary)] hover:text-foreground focus:border-[var(--primary)] focus:text-foreground focus:outline-none min-w-[120px]"
+          }
         >
           {dateRanges.map((r) => (
             <option key={r.value} value={r.value}>
@@ -145,5 +154,13 @@ export function HeaderControls({
         </>
       )}
     </div>
+  );
+}
+
+export function HeaderControls(props: HeaderControlsProps) {
+  return (
+    <Suspense fallback={<div className="hidden md:flex items-center gap-2"><ThemeToggle /></div>}>
+      <FilterControls {...props} />
+    </Suspense>
   );
 }
