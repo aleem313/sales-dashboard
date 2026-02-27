@@ -42,16 +42,6 @@ export const BudgetTypeSplit = dynamic(
   { ssr: false, loading: ChartSkeleton }
 );
 
-export const RevenueChart = dynamic(
-  () => import("../revenue-chart").then((mod) => mod.RevenueChart),
-  { ssr: false, loading: ChartSkeleton }
-);
-
-export const StatusFunnelChart = dynamic(
-  () => import("../category-chart").then((mod) => mod.StatusFunnelChart),
-  { ssr: false, loading: ChartSkeleton }
-);
-
 export const VolumeChart = dynamic(
   () => import("../region-chart").then((mod) => mod.VolumeChart),
   { ssr: false, loading: ChartSkeleton }

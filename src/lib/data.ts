@@ -5,8 +5,6 @@ import type {
   AgentStats,
   ProfileStats,
   JobVolumePoint,
-  StatusFunnelStep,
-  ActivityEvent,
   SystemHealth,
   Job,
   Agent,
@@ -93,60 +91,6 @@ export async function getJobVolumeOverTime(
   return result.rows.map((row) => ({
     date: row.date,
     count: parseInt(row.count),
-  }));
-}
-
-export async function getStatusFunnel(
-  range?: DateRange
-): Promise<StatusFunnelStep[]> {
-  const { startDate, endDate } = range ?? {};
-
-  const result = await sql`
-    SELECT
-      clickup_status AS status,
-      COUNT(*) AS count
-    FROM jobs
-    WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
-    GROUP BY clickup_status
-    ORDER BY
-      CASE clickup_status
-        WHEN 'Proposal Ready' THEN 1
-        WHEN 'Sent' THEN 2
-        WHEN 'Following Up' THEN 3
-        WHEN 'Won' THEN 4
-        WHEN 'Lost' THEN 5
-        ELSE 6
-      END
-  `;
-
-  return result.rows.map((row) => ({
-    status: row.status,
-    count: parseInt(row.count),
-  }));
-}
-
-export async function getRevenueOverTime(
-  range?: DateRange
-): Promise<{ date: string; revenue: number }[]> {
-  const { startDate, endDate } = range ?? {};
-
-  const result = await sql`
-    SELECT
-      TO_CHAR(outcome_at, 'YYYY-MM-DD') AS date,
-      SUM(won_value) AS revenue
-    FROM jobs
-    WHERE outcome = 'won'
-      AND won_value IS NOT NULL
-      AND (${startDate}::timestamptz IS NULL OR outcome_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR outcome_at <= ${endDate}::timestamptz)
-    GROUP BY TO_CHAR(outcome_at, 'YYYY-MM-DD')
-    ORDER BY date
-  `;
-
-  return result.rows.map((row) => ({
-    date: row.date,
-    revenue: parseFloat(row.revenue) || 0,
   }));
 }
 
@@ -433,36 +377,6 @@ export async function getJobById(id: string): Promise<
 // ============================================================
 // ACTIVITY & HEALTH
 // ============================================================
-
-export async function getRecentActivity(
-  limit: number = 10
-): Promise<ActivityEvent[]> {
-  const result = await sql`
-    SELECT
-      j.id,
-      j.job_title,
-      a.name AS agent_name,
-      p.profile_name,
-      j.clickup_status,
-      j.outcome,
-      j.updated_at
-    FROM jobs j
-    LEFT JOIN agents a ON a.id = j.agent_id
-    LEFT JOIN profiles p ON p.profile_id = j.profile_id
-    ORDER BY j.updated_at DESC
-    LIMIT ${limit}
-  `;
-
-  return result.rows.map((row) => ({
-    id: row.id,
-    job_title: row.job_title,
-    agent_name: row.agent_name,
-    profile_name: row.profile_name,
-    clickup_status: row.clickup_status,
-    outcome: row.outcome,
-    updated_at: row.updated_at,
-  }));
-}
 
 export async function getSystemHealth(): Promise<SystemHealth> {
   const [syncResult, failureResult, openResult] = await Promise.all([
