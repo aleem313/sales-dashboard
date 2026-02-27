@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
-import { isClickUpConfigured, fetchTask, mapStatusToOutcome } from "@/lib/clickup";
+import { isClickUpConfigured, fetchTask, mapStatusToOutcome, RISING_LION_SPACE_ID } from "@/lib/clickup";
 import { createSyncLog, completeSyncLog } from "@/lib/data";
 import { auth as getSession } from "@/lib/auth";
 import { checkAlerts, dispatchAlerts } from "@/lib/alerts";
@@ -49,6 +49,9 @@ export async function GET(request: NextRequest) {
         batch.map(async (job) => {
           const task = await fetchTask(job.clickup_task_id);
           if (!task) return null;
+
+          // Skip tasks not in Rising Lion space
+          if (task.space?.id !== RISING_LION_SPACE_ID) return null;
 
           const newStatus = task.status.status;
           const newOutcome = mapStatusToOutcome(newStatus);

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import crypto from "crypto";
 import { sql } from "@vercel/postgres";
-import { mapStatusToOutcome } from "@/lib/clickup";
+import { mapStatusToOutcome, isRisingLionTask } from "@/lib/clickup";
 import { createSyncLog, completeSyncLog } from "@/lib/data";
 
 export async function POST(request: NextRequest) {
@@ -47,6 +48,12 @@ async function processEvent(data: Record<string, unknown>) {
 
   if (!taskId) {
     return NextResponse.json({ error: "No task ID found" }, { status: 400 });
+  }
+
+  // Only process tasks from Rising Lion space
+  const isRisingLion = await isRisingLionTask(taskId);
+  if (!isRisingLion) {
+    return NextResponse.json({ ok: true, skipped: true, reason: "Not in Rising Lion space" });
   }
 
   const syncLog = await createSyncLog("clickup");
@@ -98,6 +105,17 @@ async function processEvent(data: Record<string, unknown>) {
       records_updated: 1,
       status: "success",
     });
+
+    // Bust cache so dashboard shows status change instantly
+    revalidatePath("/dashboard");
+    revalidatePath("/jobs");
+    revalidatePath("/agents");
+    revalidatePath("/profiles");
+    revalidatePath("/pipeline");
+    revalidatePath("/connects");
+    revalidatePath("/alerts");
+    revalidatePath("/my-dashboard");
+    revalidatePath("/my-jobs");
 
     return NextResponse.json({ ok: true, updated: true });
   } catch (error) {

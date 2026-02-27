@@ -5,8 +5,11 @@ import {
   mapSheetRowToJobData,
 } from "@/lib/sheets";
 import { upsertJob, createSyncLog, completeSyncLog } from "@/lib/data";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST() {
+  const authError = await requireAuth();
+  if (authError) return authError;
   if (!isSheetsConfigured()) {
     return NextResponse.json(
       {

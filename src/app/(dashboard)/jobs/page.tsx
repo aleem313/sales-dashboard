@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { Header } from "@/components/layout/header";
 import { Separator } from "@/components/ui/separator";
 import { getJobs, getAllAgents, getAllProfiles } from "@/lib/data";
 import { JobFilters } from "@/components/job-filters";
@@ -37,13 +39,12 @@ export default async function JobsPage({
   ]);
 
   return (
+    <>
+    <Suspense>
+      <Header title="Jobs" subtitle="Browse and filter all received jobs" />
+    </Suspense>
+    <main className="flex-1 overflow-y-auto bg-background">
     <div className="container mx-auto px-4 py-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Jobs</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Browse and filter all received jobs
-        </p>
-      </div>
 
       <Separator />
 
@@ -65,5 +66,7 @@ export default async function JobsPage({
         total={jobsResult.total}
       />
     </div>
+    </main>
+    </>
   );
 }

@@ -11,14 +11,12 @@ export default async function AgentLayout({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  // Both agents and admins can access agent routes
-  // (admins may want to preview what agents see)
 
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Header />
+        <Header title="Agent Portal" />
         <main className="flex-1 overflow-y-auto bg-background">
           {children}
         </main>

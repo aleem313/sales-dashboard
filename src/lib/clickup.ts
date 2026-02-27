@@ -9,7 +9,7 @@ export function isClickUpConfigured(): boolean {
 
 export async function fetchTask(
   taskId: string
-): Promise<{ id: string; status: { status: string }; name: string } | null> {
+): Promise<{ id: string; status: { status: string }; name: string; space?: { id: string } } | null> {
   if (!CLICKUP_API_KEY) return null;
 
   const res = await fetch(`${CLICKUP_BASE_URL}/task/${taskId}`, {
@@ -70,4 +70,22 @@ export function mapStatusToOutcome(
   if (lower === "won" || lower === "closed won") return "won";
   if (lower === "lost" || lower === "closed lost") return "lost";
   return null;
+}
+
+// Rising Lion space ID — only process tasks from this space
+export const RISING_LION_SPACE_ID = process.env.CLICKUP_SPACE_ID ?? "90189402960";
+
+// Check if a task belongs to the Rising Lion space
+export async function isRisingLionTask(taskId: string): Promise<boolean> {
+  if (!CLICKUP_API_KEY) return false;
+
+  const res = await fetch(`${CLICKUP_BASE_URL}/task/${taskId}`, {
+    headers: { Authorization: CLICKUP_API_KEY },
+    next: { revalidate: 0 },
+  });
+
+  if (!res.ok) return false;
+
+  const task = await res.json();
+  return task.space?.id === RISING_LION_SPACE_ID;
 }

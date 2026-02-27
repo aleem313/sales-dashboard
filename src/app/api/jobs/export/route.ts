@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getJobs } from "@/lib/data";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
+    const authError = await requireAuth();
+    if (authError) return authError;
     const params = request.nextUrl.searchParams;
 
     const result = await getJobs({

@@ -257,3 +257,80 @@ export interface BudgetWinRate {
   won: number;
   win_rate_pct: number | null;
 }
+
+// ============================================================
+// CYBERPUNK DASHBOARD TYPES
+// ============================================================
+
+export interface KPIMetricsWithDeltas extends KPIMetrics {
+  meetingsBooked: number;
+  deltaJobs: number;
+  deltaProposals: number;
+  deltaMeetings: number;
+  deltaWon: number;
+  deltaWinRate: number;
+}
+
+export interface FunnelStep {
+  label: string;
+  count: number;
+  percentage: number;
+  color: string;
+}
+
+export interface PipelineStage {
+  key: string;
+  label: string;
+  count: number;
+  subtitle: string;
+}
+
+export interface PipelineJob {
+  id: string;
+  job_title: string;
+  profile_name: string | null;
+  agent_name: string | null;
+  clickup_status: string;
+  time_in_stage: string;
+  priority: string;
+}
+
+export interface EnhancedAgentStats extends AgentStats {
+  meetings_done: number;
+  conversion_rate: number;
+  bonus_earned: number;
+  score_pct: number;
+}
+
+export interface EnhancedProfileStats extends ProfileStats {
+  niche: string | null;
+  response_rate: number;
+  interview_rate: number;
+}
+
+export interface ConnectsUsage {
+  profile_name: string;
+  niche: string | null;
+  connects_used: number;
+  connects_budget: number;
+}
+
+export interface ConnectROI {
+  niche: string;
+  connects_spent: number;
+  wins: number;
+  cost_per_win: number | null;
+}
+
+export interface FilterQuality {
+  reason: string;
+  count: number;
+  percentage: number;
+}
+
+export interface AlertCounts {
+  critical: number;
+  warning: number;
+  opportunity: number;
+  overdue: number;
+}

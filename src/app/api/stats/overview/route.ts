@@ -7,8 +7,11 @@ import {
   setCachedStats,
 } from "@/lib/data";
 import type { DateRange } from "@/lib/types";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
+  const authError = await requireAuth();
+  if (authError) return authError;
   const days = parseInt(
     request.nextUrl.searchParams.get("days") ?? "30",
     10

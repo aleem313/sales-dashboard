@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { Header } from "@/components/layout/header";
 import { Separator } from "@/components/ui/separator";
 import {
   ModelComparison,
@@ -10,26 +12,29 @@ import {
   getCountryStats,
   getBestTimeToApply,
   getBudgetWinRate,
+  getAllAgents,
+  getAllProfiles,
 } from "@/lib/data";
 
 export const revalidate = 300;
 
 export default async function AnalyticsPage() {
-  const [modelData, countryData, timeData, budgetData] = await Promise.all([
+  const [modelData, countryData, timeData, budgetData, allAgents, allProfiles] = await Promise.all([
     getProposalAnalytics(),
     getCountryStats(),
     getBestTimeToApply(),
     getBudgetWinRate(),
+    getAllAgents(),
+    getAllProfiles(),
   ]);
 
   return (
+    <>
+    <Suspense>
+      <Header title="Analytics" agents={allAgents} profiles={allProfiles} />
+    </Suspense>
+    <main className="flex-1 overflow-y-auto bg-background">
     <div className="container mx-auto px-4 py-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Proposal intelligence, country insights, and timing analysis.
-        </p>
-      </div>
 
       <Separator />
 
@@ -42,5 +47,7 @@ export default async function AnalyticsPage() {
 
       <TimeHeatmap data={timeData} />
     </div>
+    </main>
+    </>
   );
 }

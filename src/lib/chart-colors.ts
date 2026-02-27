@@ -1,15 +1,14 @@
 export const CHART_COLORS = [
-  "hsl(221, 83%, 53%)",  // blue
-  "hsl(262, 83%, 58%)",  // purple
-  "hsl(142, 71%, 45%)",  // green
-  "hsl(38, 92%, 50%)",   // amber
-  "hsl(0, 84%, 60%)",    // red
-  "hsl(199, 89%, 48%)",  // sky
-  "hsl(24, 95%, 53%)",   // orange
-  "hsl(330, 81%, 60%)",  // pink
+  "#1a56db",  // blue
+  "#5b21b6",  // purple
+  "#0d7a4e",  // green
+  "#92400e",  // amber
+  "#991b1b",  // red
+  "#7c3aed",  // light purple
+  "#f97316",  // orange
 ];
 
 export const AREA_GRADIENT = {
-  start: "hsl(221, 83%, 53%)",
-  end: "hsl(221, 83%, 53%, 0.1)",
+  start: "#1a56db",
+  end: "rgba(26, 86, 219, 0.1)",
 };

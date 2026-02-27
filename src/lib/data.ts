@@ -1,6 +1,7 @@
 import { sql } from "@vercel/postgres";
 import type {
   KPIMetrics,
+  KPIMetricsWithDeltas,
   AgentStats,
   ProfileStats,
   JobVolumePoint,
@@ -24,6 +25,15 @@ import type {
   CountryStats,
   TimeSlotStats,
   BudgetWinRate,
+  FunnelStep,
+  PipelineStage,
+  PipelineJob,
+  EnhancedAgentStats,
+  EnhancedProfileStats,
+  ConnectsUsage,
+  ConnectROI,
+  FilterQuality,
+  AlertCounts,
 } from "./types";
 
 // ============================================================
@@ -1141,4 +1151,531 @@ export async function getAgentKPIMetrics(
     winRate: parseFloat(row.win_rate) || 0,
     totalRevenue: parseFloat(row.total_revenue) || 0,
   };
+}
+
+// ============================================================
+// CYBERPUNK DASHBOARD QUERIES
+// ============================================================
+
+function getRangeForDays(days: number): DateRange {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - days);
+  return { startDate: start.toISOString(), endDate: end.toISOString() };
+}
+
+function getPreviousRange(days: number): DateRange {
+  const end = new Date();
+  end.setDate(end.getDate() - days);
+  const start = new Date(end);
+  start.setDate(start.getDate() - days);
+  return { startDate: start.toISOString(), endDate: end.toISOString() };
+}
+
+export async function getKPIMetricsWithDeltas(
+  days: number = 7
+): Promise<KPIMetricsWithDeltas> {
+  const currentRange = getRangeForDays(days);
+  const prevRange = getPreviousRange(days);
+
+  const [current, prev] = await Promise.all([
+    getKPIMetrics(currentRange),
+    getKPIMetrics(prevRange),
+  ]);
+
+  // Count meetings (clickup_status in meeting-related statuses)
+  const meetResult = await sql`
+    SELECT
+      COUNT(CASE WHEN received_at >= ${currentRange.startDate}::timestamptz THEN 1 END) AS current_meetings,
+      COUNT(CASE WHEN received_at >= ${prevRange.startDate}::timestamptz AND received_at < ${prevRange.endDate}::timestamptz THEN 1 END) AS prev_meetings
+    FROM jobs
+    WHERE clickup_status IN ('Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won')
+  `;
+
+  const currentMeetings = parseInt(meetResult.rows[0]?.current_meetings) || 0;
+  const prevMeetings = parseInt(meetResult.rows[0]?.prev_meetings) || 0;
+
+  return {
+    ...current,
+    meetingsBooked: currentMeetings,
+    deltaJobs: current.totalJobs - prev.totalJobs,
+    deltaProposals: current.proposalsSent - prev.proposalsSent,
+    deltaMeetings: currentMeetings - prevMeetings,
+    deltaWon: current.won - prev.won,
+    deltaWinRate: current.winRate - prev.winRate,
+  };
+}
+
+export async function getConversionFunnel(
+  range?: DateRange
+): Promise<FunnelStep[]> {
+  const { startDate, endDate } = range ?? {};
+  const result = await sql`
+    SELECT
+      COUNT(*) AS total_jobs,
+      COUNT(CASE WHEN clickup_status NOT IN ('Rejected', 'Filtered Out') OR clickup_status IS NULL THEN 1 END) AS passed_filter,
+      COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN clickup_status IN ('Sent', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS responses,
+      COUNT(CASE WHEN clickup_status IN ('Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS meetings,
+      COUNT(CASE WHEN clickup_status IN ('Negotiation', 'Won') THEN 1 END) AS negotiation,
+      COUNT(CASE WHEN outcome = 'won' THEN 1 END) AS won
+    FROM jobs
+    WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+  `;
+
+  const r = result.rows[0];
+  const total = parseInt(r.total_jobs) || 1;
+  const steps = [
+    { label: "Jobs Received", count: parseInt(r.total_jobs) || 0, color: "#1a56db" },
+    { label: "Passed Filter", count: parseInt(r.passed_filter) || 0, color: "#4d8af0" },
+    { label: "Proposals Sent", count: parseInt(r.proposals_sent) || 0, color: "#7c3aed" },
+    { label: "Responses", count: parseInt(r.responses) || 0, color: "#8b5cf6" },
+    { label: "Meetings Done", count: parseInt(r.meetings) || 0, color: "#f59e0b" },
+    { label: "Negotiation", count: parseInt(r.negotiation) || 0, color: "#f97316" },
+    { label: "Won", count: parseInt(r.won) || 0, color: "#10b981" },
+  ];
+
+  return steps.map((s) => ({
+    ...s,
+    percentage: Math.round((s.count / total) * 100),
+  }));
+}
+
+export async function getPipelineNow(): Promise<
+  { label: string; count: number; color: string }[]
+> {
+  const result = await sql`
+    SELECT
+      COUNT(CASE WHEN clickup_status IN ('To Do', 'New', 'Proposal Ready') THEN 1 END) AS todo,
+      COUNT(CASE WHEN clickup_status IN ('Sent', 'Following Up', 'Submitted', 'Prototype Required', 'Prototype Done', 'Prototype Sent') THEN 1 END) AS in_progress,
+      COUNT(CASE WHEN clickup_status IN ('Meeting Scheduled', 'Meeting Done') THEN 1 END) AS meetings,
+      COUNT(CASE WHEN clickup_status = 'Negotiation' THEN 1 END) AS negotiation
+    FROM jobs
+    WHERE outcome IS NULL OR outcome = 'pending'
+  `;
+
+  const r = result.rows[0];
+  return [
+    { label: "To Do", count: parseInt(r.todo) || 0, color: "#1a56db" },
+    { label: "In Progress", count: parseInt(r.in_progress) || 0, color: "#7c3aed" },
+    { label: "Meetings", count: parseInt(r.meetings) || 0, color: "#f59e0b" },
+    { label: "Negotiation", count: parseInt(r.negotiation) || 0, color: "#10b981" },
+  ];
+}
+
+export async function getPipelineStages(
+  range?: DateRange
+): Promise<PipelineStage[]> {
+  const { startDate, endDate } = range ?? {};
+
+  const stageMap: Record<string, { label: string; subtitle: string }> = {
+    "To Do": { label: "To Do", subtitle: "Pending proposals" },
+    "Submitted": { label: "Submitted", subtitle: "Awaiting client" },
+    "Sent": { label: "Sent", subtitle: "Awaiting response" },
+    "Following Up": { label: "Following Up", subtitle: "Re-engaged" },
+    "Prototype Required": { label: "Proto Req.", subtitle: "Build needed" },
+    "Prototype Done": { label: "Proto Done", subtitle: "Ready to send" },
+    "Prototype Sent": { label: "Proto Sent", subtitle: "Awaiting feedback" },
+    "Meeting Scheduled": { label: "Mtg Sched.", subtitle: "Calendar booked" },
+    "Meeting Done": { label: "Mtg Done", subtitle: "Follow up needed" },
+    "Negotiation": { label: "Negotiation", subtitle: "Hot leads" },
+    "Won": { label: "Won", subtitle: "Closed won" },
+    "Lost": { label: "Lost", subtitle: "Closed lost" },
+    "On Hold": { label: "On Hold", subtitle: "Client paused" },
+  };
+
+  const result = await sql`
+    SELECT clickup_status, COUNT(*) AS count
+    FROM jobs
+    WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+    GROUP BY clickup_status
+    ORDER BY
+      CASE clickup_status
+        WHEN 'To Do' THEN 1 WHEN 'New' THEN 1 WHEN 'Proposal Ready' THEN 1
+        WHEN 'Submitted' THEN 2 WHEN 'Sent' THEN 3 WHEN 'Following Up' THEN 4
+        WHEN 'Prototype Required' THEN 5 WHEN 'Prototype Done' THEN 6
+        WHEN 'Prototype Sent' THEN 7 WHEN 'Meeting Scheduled' THEN 8
+        WHEN 'Meeting Done' THEN 9 WHEN 'Negotiation' THEN 10
+        WHEN 'Won' THEN 11 WHEN 'Lost' THEN 12 WHEN 'On Hold' THEN 13
+        ELSE 14
+      END
+  `;
+
+  return result.rows.map((row) => {
+    const status = row.clickup_status;
+    const mapped = stageMap[status] ?? { label: status, subtitle: "" };
+    return {
+      key: status,
+      label: mapped.label,
+      count: parseInt(row.count) || 0,
+      subtitle: mapped.subtitle,
+    };
+  });
+}
+
+export async function getActiveJobsInPipeline(): Promise<PipelineJob[]> {
+  const result = await sql`
+    SELECT
+      j.id,
+      j.job_title,
+      p.profile_name,
+      a.name AS agent_name,
+      j.clickup_status,
+      j.updated_at,
+      CASE
+        WHEN j.budget_max >= 5000 THEN 'high'
+        WHEN j.budget_max >= 1000 THEN 'medium'
+        ELSE 'low'
+      END AS priority
+    FROM jobs j
+    LEFT JOIN profiles p ON p.profile_id = j.profile_id
+    LEFT JOIN agents a ON a.id = j.agent_id
+    WHERE j.outcome IS NULL OR j.outcome = 'pending'
+    ORDER BY
+      CASE j.clickup_status
+        WHEN 'Negotiation' THEN 1 WHEN 'Meeting Done' THEN 2
+        WHEN 'Meeting Scheduled' THEN 3 WHEN 'Prototype Sent' THEN 4
+        WHEN 'Prototype Done' THEN 5 WHEN 'Prototype Required' THEN 6
+        WHEN 'Following Up' THEN 7 WHEN 'Sent' THEN 8
+        WHEN 'Submitted' THEN 9 WHEN 'To Do' THEN 10
+        ELSE 11
+      END,
+      j.updated_at ASC NULLS LAST
+    LIMIT 50
+  `;
+
+  return result.rows.map((row) => {
+    const enteredAt = row.updated_at;
+    const diffMs = Date.now() - new Date(enteredAt).getTime();
+    const hours = Math.floor(diffMs / 3600000);
+    const days = Math.floor(hours / 24);
+    const timeStr = days > 0 ? `${days}d ${hours % 24}h` : `${hours}h`;
+
+    return {
+      id: row.id,
+      job_title: row.job_title,
+      profile_name: row.profile_name,
+      agent_name: row.agent_name,
+      clickup_status: row.clickup_status,
+      time_in_stage: timeStr,
+      priority: row.priority || "low",
+    };
+  });
+}
+
+export async function getEnhancedAgentStats(
+  range?: DateRange
+): Promise<EnhancedAgentStats[]> {
+  const { startDate, endDate } = range ?? {};
+
+  const result = await sql`
+    SELECT
+      a.id,
+      a.name,
+      a.clickup_user_id,
+      COUNT(j.id) AS total_jobs,
+      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN j.outcome = 'won' THEN 1 END) AS won,
+      COUNT(CASE WHEN j.outcome = 'lost' THEN 1 END) AS lost,
+      ROUND(
+        COUNT(CASE WHEN j.outcome = 'won' THEN 1 END)::DECIMAL /
+        NULLIF(COUNT(CASE WHEN j.outcome IN ('won','lost') THEN 1 END), 0) * 100, 1
+      ) AS win_rate_pct,
+      COALESCE(SUM(CASE WHEN j.outcome = 'won' THEN j.won_value END), 0) AS total_revenue,
+      AVG(
+        CASE WHEN j.proposal_sent_at IS NOT NULL
+        THEN EXTRACT(EPOCH FROM (j.proposal_sent_at - j.received_at)) / 3600
+        END
+      ) AS avg_response_hours,
+      COUNT(CASE WHEN j.clickup_status IN ('Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS meetings_done
+    FROM agents a
+    LEFT JOIN jobs j ON j.agent_id = a.id
+      AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+    WHERE a.active = true
+    GROUP BY a.id, a.name, a.clickup_user_id
+    ORDER BY won DESC, proposals_sent DESC
+  `;
+
+  return result.rows.map((row) => {
+    const proposalsSent = parseInt(row.proposals_sent) || 0;
+    const won = parseInt(row.won) || 0;
+    const meetings = parseInt(row.meetings_done) || 0;
+    const convRate = proposalsSent > 0 ? Math.round((won / proposalsSent) * 1000) / 10 : 0;
+
+    // Score: weighted from win_rate (40%), conversion (30%), speed (30%)
+    const winRate = parseFloat(row.win_rate_pct) || 0;
+    const avgHours = parseFloat(row.avg_response_hours) || 2;
+    const speedScore = Math.max(0, 100 - avgHours * 10); // faster = better
+    const score = Math.round(winRate * 0.4 + convRate * 0.3 + speedScore * 0.3);
+
+    return {
+      id: row.id,
+      name: row.name,
+      clickup_user_id: row.clickup_user_id,
+      total_jobs: parseInt(row.total_jobs) || 0,
+      proposals_sent: proposalsSent,
+      won,
+      lost: parseInt(row.lost) || 0,
+      win_rate_pct: row.win_rate_pct ? parseFloat(row.win_rate_pct) : null,
+      total_revenue: parseFloat(row.total_revenue) || 0,
+      avg_response_hours: row.avg_response_hours
+        ? parseFloat(parseFloat(row.avg_response_hours).toFixed(1))
+        : null,
+      meetings_done: meetings,
+      conversion_rate: convRate,
+      bonus_earned: 0,
+      score_pct: Math.min(score, 100),
+    };
+  });
+}
+
+export async function getAgentWeeklyActivity(
+  agentId: string
+): Promise<{ day: string; count: number }[]> {
+  const result = await sql`
+    SELECT
+      TO_CHAR(proposal_sent_at, 'Dy') AS day,
+      COUNT(*) AS count
+    FROM jobs
+    WHERE agent_id = ${agentId}
+      AND proposal_sent_at IS NOT NULL
+      AND proposal_sent_at >= NOW() - INTERVAL '7 days'
+    GROUP BY TO_CHAR(proposal_sent_at, 'Dy'), EXTRACT(DOW FROM proposal_sent_at)
+    ORDER BY EXTRACT(DOW FROM proposal_sent_at)
+  `;
+
+  // Ensure all 7 days are present
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const dataMap = new Map(result.rows.map((r) => [r.day, parseInt(r.count) || 0]));
+  return days.map((d) => ({ day: d, count: dataMap.get(d) || 0 }));
+}
+
+export async function getEnhancedProfileStats(
+  range?: DateRange
+): Promise<EnhancedProfileStats[]> {
+  const { startDate, endDate } = range ?? {};
+
+  const result = await sql`
+    SELECT
+      p.id,
+      p.profile_id,
+      p.profile_name,
+      p.stack,
+      COUNT(j.id) AS total_jobs,
+      COUNT(CASE WHEN j.outcome = 'won' THEN 1 END) AS won,
+      ROUND(
+        COUNT(CASE WHEN j.outcome = 'won' THEN 1 END)::DECIMAL /
+        NULLIF(COUNT(CASE WHEN j.outcome IN ('won','lost') THEN 1 END), 0) * 100, 1
+      ) AS win_rate_pct,
+      AVG(CASE WHEN j.outcome = 'won' THEN j.won_value END) AS avg_won_value,
+      COALESCE(SUM(CASE WHEN j.outcome = 'won' THEN j.won_value END), 0) AS total_revenue,
+      COUNT(CASE WHEN j.clickup_status NOT IN ('To Do', 'New', 'Rejected', 'Filtered Out', 'Proposal Ready') AND j.proposal_sent_at IS NOT NULL THEN 1 END) AS moved_past_submitted,
+      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN j.clickup_status IN ('Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS reached_meeting
+    FROM profiles p
+    LEFT JOIN jobs j ON j.profile_id = p.profile_id
+      AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+    WHERE p.active = true
+    GROUP BY p.id, p.profile_id, p.profile_name, p.stack
+    ORDER BY total_jobs DESC
+  `;
+
+  return result.rows.map((row) => {
+    const proposals = parseInt(row.proposals_sent) || 0;
+    const movedPast = parseInt(row.moved_past_submitted) || 0;
+    const reached = parseInt(row.reached_meeting) || 0;
+
+    return {
+      id: row.id,
+      profile_id: row.profile_id,
+      profile_name: row.profile_name,
+      stack: row.stack,
+      niche: row.stack,
+      total_jobs: parseInt(row.total_jobs) || 0,
+      won: parseInt(row.won) || 0,
+      win_rate_pct: row.win_rate_pct ? parseFloat(row.win_rate_pct) : null,
+      avg_won_value: row.avg_won_value
+        ? parseFloat(parseFloat(row.avg_won_value).toFixed(0))
+        : null,
+      total_revenue: parseFloat(row.total_revenue) || 0,
+      response_rate: proposals > 0 ? Math.round((movedPast / proposals) * 100) : 0,
+      interview_rate: proposals > 0 ? Math.round((reached / proposals) * 100) : 0,
+    };
+  });
+}
+
+export async function getConnectsUsageByProfile(
+  range?: DateRange
+): Promise<ConnectsUsage[]> {
+  const { startDate, endDate } = range ?? {};
+
+  // connects_used column may not exist yet; return estimated data based on proposals
+  const result = await sql`
+    SELECT
+      p.profile_name,
+      p.stack,
+      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL THEN 1 END) * 6 AS connects_used
+    FROM profiles p
+    LEFT JOIN jobs j ON j.profile_id = p.profile_id
+      AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+    WHERE p.active = true
+    GROUP BY p.profile_name, p.stack
+    ORDER BY connects_used DESC
+  `;
+
+  return result.rows.map((row) => ({
+    profile_name: row.profile_name,
+    niche: row.stack,
+    connects_used: parseInt(row.connects_used) || 0,
+    connects_budget: 150,
+  }));
+}
+
+export async function getConnectROIByNiche(
+  range?: DateRange
+): Promise<ConnectROI[]> {
+  const { startDate, endDate } = range ?? {};
+
+  // Estimate connects from proposal count (avg ~6 connects per proposal)
+  const result = await sql`
+    SELECT
+      COALESCE(p.stack, 'Unknown') AS niche,
+      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL THEN 1 END) * 6 AS connects_spent,
+      COUNT(CASE WHEN j.outcome = 'won' THEN 1 END) AS wins
+    FROM jobs j
+    JOIN profiles p ON p.profile_id = j.profile_id
+    WHERE (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+    GROUP BY COALESCE(p.stack, 'Unknown')
+    HAVING COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL THEN 1 END) > 0
+    ORDER BY connects_spent DESC
+  `;
+
+  return result.rows.map((row) => {
+    const wins = parseInt(row.wins) || 0;
+    const spent = parseInt(row.connects_spent) || 0;
+    return {
+      niche: row.niche,
+      connects_spent: spent,
+      wins,
+      cost_per_win: wins > 0 ? Math.round(spent / wins) : null,
+    };
+  });
+}
+
+export async function getFilterQualityAnalysis(
+  range?: DateRange
+): Promise<FilterQuality[]> {
+  const { startDate, endDate } = range ?? {};
+
+  // Generate filter quality analysis from loss patterns
+  // rejection_reason column may not exist yet; use status-based analysis
+  const result = await sql`
+    SELECT
+      CASE
+        WHEN budget_max IS NOT NULL AND budget_max < 500 THEN 'Budget too low (<$500)'
+        WHEN client_rating IS NOT NULL AND client_rating < 3 THEN 'Low client rating'
+        WHEN client_hires IS NOT NULL AND client_hires = 0 THEN 'Unverified client'
+        WHEN clickup_status IN ('Rejected', 'Filtered Out') THEN 'Filtered out by system'
+        ELSE 'Other'
+      END AS reason,
+      COUNT(*) AS count
+    FROM jobs
+    WHERE (outcome = 'lost' OR clickup_status IN ('Rejected', 'Filtered Out', 'Lost'))
+      AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+    GROUP BY
+      CASE
+        WHEN budget_max IS NOT NULL AND budget_max < 500 THEN 'Budget too low (<$500)'
+        WHEN client_rating IS NOT NULL AND client_rating < 3 THEN 'Low client rating'
+        WHEN client_hires IS NOT NULL AND client_hires = 0 THEN 'Unverified client'
+        WHEN clickup_status IN ('Rejected', 'Filtered Out') THEN 'Filtered out by system'
+        ELSE 'Other'
+      END
+    ORDER BY count DESC
+  `;
+
+  const total = result.rows.reduce((sum, r) => sum + (parseInt(r.count) || 0), 0) || 1;
+
+  return result.rows.map((row) => ({
+    reason: row.reason,
+    count: parseInt(row.count) || 0,
+    percentage: Math.round(((parseInt(row.count) || 0) / total) * 100),
+  }));
+}
+
+export async function getAlertCounts(): Promise<AlertCounts> {
+  const [alertResult, overdueResult] = await Promise.all([
+    sql`
+      SELECT
+        COUNT(CASE WHEN alert_type IN ('win_rate_drop', 'agent_slow', 'profile_zero_wins') THEN 1 END) AS critical,
+        COUNT(CASE WHEN alert_type IN ('low_volume', 'connect_waste', 'follow_up_needed') THEN 1 END) AS warning,
+        COUNT(CASE WHEN alert_type IN ('niche_outperform', 'bonus_threshold', 'filter_recommendation') THEN 1 END) AS opportunity
+      FROM alerts
+      WHERE dismissed = false
+    `,
+    sql`
+      SELECT COUNT(*) AS count
+      FROM jobs
+      WHERE clickup_status IN ('To Do', 'New', 'Proposal Ready')
+        AND (outcome IS NULL OR outcome = 'pending')
+        AND updated_at < NOW() - INTERVAL '48 hours'
+    `,
+  ]);
+
+  const ar = alertResult.rows[0];
+  return {
+    critical: parseInt(ar?.critical) || 0,
+    warning: parseInt(ar?.warning) || 0,
+    opportunity: parseInt(ar?.opportunity) || 0,
+    overdue: parseInt(overdueResult.rows[0]?.count) || 0,
+  };
+}
+
+export async function getOverdueItems(): Promise<PipelineJob[]> {
+  const result = await sql`
+    SELECT
+      j.id,
+      j.job_title,
+      p.profile_name,
+      a.name AS agent_name,
+      j.clickup_status,
+      j.updated_at,
+      CASE
+        WHEN j.budget_max >= 5000 THEN 'high'
+        WHEN j.budget_max >= 1000 THEN 'medium'
+        ELSE 'low'
+      END AS priority
+    FROM jobs j
+    LEFT JOIN profiles p ON p.profile_id = j.profile_id
+    LEFT JOIN agents a ON a.id = j.agent_id
+    WHERE j.clickup_status IN ('To Do', 'New', 'Proposal Ready')
+      AND (j.outcome IS NULL OR j.outcome = 'pending')
+      AND j.updated_at < NOW() - INTERVAL '48 hours'
+    ORDER BY j.updated_at ASC
+    LIMIT 20
+  `;
+
+  return result.rows.map((row) => {
+    const enteredAt = row.updated_at;
+    const diffMs = Date.now() - new Date(enteredAt).getTime();
+    const hours = Math.floor(diffMs / 3600000);
+    const days = Math.floor(hours / 24);
+    const timeStr = days > 0 ? `${days}d ${hours % 24}h` : `${hours}h`;
+
+    return {
+      id: row.id,
+      job_title: row.job_title,
+      profile_name: row.profile_name,
+      agent_name: row.agent_name,
+      clickup_status: row.clickup_status,
+      time_in_stage: timeStr,
+      priority: row.priority || "low",
+    };
+  });
 }

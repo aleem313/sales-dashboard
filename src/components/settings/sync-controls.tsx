@@ -1,15 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { triggerClickUpSync, triggerSheetsSync } from "@/lib/actions";
 import { toast } from "sonner";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Link } from "lucide-react";
 
 export function SyncControls() {
   const [clickupLoading, setClickupLoading] = useState(false);
   const [sheetsLoading, setSheetsLoading] = useState(false);
+  const searchParams = useSearchParams();
+
+  // Show toast based on ClickUp OAuth redirect params
+  useEffect(() => {
+    const clickup = searchParams.get("clickup");
+    const webhook = searchParams.get("webhook");
+    if (clickup === "connected" && webhook === "created") {
+      toast.success("ClickUp connected and webhook created!");
+    } else if (clickup === "connected") {
+      toast.success("ClickUp connected!");
+      if (webhook === "failed") {
+        toast.error("Failed to create webhook — create it manually in ClickUp settings");
+      }
+    } else if (clickup === "error") {
+      toast.error(`ClickUp connection failed: ${searchParams.get("reason") ?? "unknown error"}`);
+    }
+  }, [searchParams]);
 
   async function handleClickUpSync() {
     setClickupLoading(true);
@@ -70,6 +88,12 @@ export function SyncControls() {
             className={`mr-2 h-4 w-4 ${sheetsLoading ? "animate-spin" : ""}`}
           />
           {sheetsLoading ? "Syncing..." : "Sync Google Sheets"}
+        </Button>
+        <Button asChild variant="outline">
+          <a href="/api/auth/clickup">
+            <Link className="mr-2 h-4 w-4" />
+            Connect ClickUp
+          </a>
         </Button>
       </CardContent>
     </Card>
