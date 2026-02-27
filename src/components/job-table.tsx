@@ -16,41 +16,28 @@ import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/utils";
 import { countryFlag } from "@/lib/country-flags";
 import type { Job } from "@/lib/types";
 
-function outcomeVariant(outcome: string | null, status: string) {
-  if (outcome === "won") return "default" as const;
-  if (outcome === "lost") return "destructive" as const;
-  if (outcome === "skipped") return "outline" as const;
-  if (status === "Following Up") return "secondary" as const;
-  if (status === "Sent") return "secondary" as const;
-  return "outline" as const;
+const statusStyles: Record<string, string> = {
+  won: "bg-accent-green/15 text-accent-green border-accent-green/25",
+  lost: "bg-destructive/15 text-destructive border-destructive/25",
+  skipped: "bg-muted text-muted-foreground border-border",
+  "Following Up": "bg-accent-warn/15 text-accent-warn border-accent-warn/25",
+  Sent: "bg-primary/15 text-primary border-primary/25",
+  pending: "bg-accent-purple/15 text-accent-purple border-accent-purple/25",
+};
+
+function StatusBadge({ outcome, status }: { outcome: string | null; status: string }) {
+  const label = outcome ?? status;
+  const key = outcome ?? status;
+  const style = statusStyles[key] ?? "bg-muted text-muted-foreground border-border";
+  return <Badge className={style}>{label}</Badge>;
 }
 
 type JobRow = Job & { agent_name?: string | null; profile_name?: string | null };
 
-function BudgetDisplay({ job }: { job: JobRow }) {
-  if (job.budget_max) {
-    return (
-      <span className="flex items-center gap-1.5">
-        <Badge variant="outline" className="text-[11px] px-1.5 py-0">Fixed</Badge>
-        {formatCurrency(job.budget_min ?? 0)} – {formatCurrency(job.budget_max)}
-      </span>
-    );
-  }
-  if (job.hourly_min || job.hourly_max) {
-    return (
-      <span className="flex items-center gap-1.5">
-        <Badge variant="secondary" className="text-[11px] px-1.5 py-0">Hourly</Badge>
-        ${job.hourly_min ?? 0}–${job.hourly_max ?? 0}/hr
-      </span>
-    );
-  }
-  return <span>—</span>;
-}
-
 export function JobTable({ jobs, compact }: { jobs: JobRow[]; compact?: boolean }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const colSpan = compact ? 6 : 8;
+  const colSpan = compact ? 8 : 9;
 
   return (
     <Table>
@@ -60,90 +47,105 @@ export function JobTable({ jobs, compact }: { jobs: JobRow[]; compact?: boolean 
           <TableHead className="hidden sm:table-cell">Profile</TableHead>
           <TableHead className="hidden sm:table-cell">Agent</TableHead>
           <TableHead className="hidden md:table-cell">Client</TableHead>
-          <TableHead className="hidden md:table-cell">Budget</TableHead>
+          <TableHead className="hidden md:table-cell">Hourly</TableHead>
+          <TableHead className="hidden md:table-cell">Fixed</TableHead>
           {!compact && <TableHead>Status</TableHead>}
           <TableHead className="hidden lg:table-cell">Received</TableHead>
           <TableHead className="w-10"></TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {jobs.map((job) => (
-          <>
-            <TableRow
-              key={job.id}
-              className={compact ? undefined : "cursor-pointer"}
-              onClick={compact ? undefined : () => setExpandedId(expandedId === job.id ? null : job.id)}
-            >
-              <TableCell>
-                <div className="font-medium max-w-[280px] truncate">{job.job_title}</div>
-              </TableCell>
-              <TableCell className="hidden sm:table-cell text-muted-foreground">
-                {job.profile_name ?? "—"}
-              </TableCell>
-              <TableCell className="hidden sm:table-cell text-muted-foreground">
-                {job.agent_name ?? "—"}
-              </TableCell>
-              <TableCell className="hidden md:table-cell">
-                <div className="flex items-center gap-2">
-                  {job.client_country && (
-                    <span title={job.client_country}>{countryFlag(job.client_country)}</span>
-                  )}
-                  <div className="flex flex-col">
-                    <span className="text-xs text-muted-foreground">
-                      {job.client_country ?? "—"}
-                    </span>
-                    <div className="flex items-center gap-2 text-[13.5px] text-muted-foreground">
-                      {job.client_hires != null && job.client_hires > 0 && (
-                        <span>{job.client_hires} hires</span>
-                      )}
-                      {job.client_total_spent != null && job.client_total_spent > 0 && (
-                        <span className="flex items-center gap-0.5">
-                          <ShieldCheck className="h-3 w-3 text-accent-green" />
-                          verified
-                        </span>
-                      )}
+        {jobs.map((job) => {
+          const isHourly = !!(job.hourly_min || job.hourly_max);
+          const isFixed = !!job.budget_max;
+
+          return (
+            <>
+              <TableRow
+                key={job.id}
+                className="cursor-pointer"
+                onClick={() => setExpandedId(expandedId === job.id ? null : job.id)}
+              >
+                <TableCell>
+                  <div className="font-medium max-w-[280px] truncate">{job.job_title}</div>
+                </TableCell>
+                <TableCell className="hidden sm:table-cell text-muted-foreground">
+                  {job.profile_name ?? "—"}
+                </TableCell>
+                <TableCell className="hidden sm:table-cell text-muted-foreground">
+                  {job.agent_name ?? "—"}
+                </TableCell>
+                <TableCell className="hidden md:table-cell">
+                  <div className="flex items-center gap-2">
+                    {job.client_country && (
+                      <span title={job.client_country}>{countryFlag(job.client_country)}</span>
+                    )}
+                    <div className="flex flex-col">
+                      <span className="text-xs text-muted-foreground">
+                        {job.client_country ?? "—"}
+                      </span>
+                      <div className="flex items-center gap-2 text-[13.5px] text-muted-foreground">
+                        {job.client_hires != null && job.client_hires > 0 && (
+                          <span>{job.client_hires} hires</span>
+                        )}
+                        {job.client_total_spent != null && job.client_total_spent > 0 && (
+                          <span className="flex items-center gap-0.5">
+                            <ShieldCheck className="h-3 w-3 text-accent-green" />
+                            verified
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </TableCell>
-              <TableCell className="hidden md:table-cell">
-                <BudgetDisplay job={job} />
-              </TableCell>
-              {!compact && (
-                <TableCell>
-                  <Badge variant={outcomeVariant(job.outcome, job.clickup_status)}>
-                    {job.outcome ?? job.clickup_status}
-                  </Badge>
                 </TableCell>
-              )}
-              <TableCell className="hidden lg:table-cell text-muted-foreground">
-                {formatRelativeTime(job.received_at)}
-              </TableCell>
-              <TableCell>
-                {job.job_url && (
-                  <a
-                    href={job.job_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground inline-flex"
-                    title="Open on Upwork"
-                  >
-                    <SquareArrowOutUpRight className="h-3.5 w-3.5" />
-                  </a>
+                <TableCell className="hidden md:table-cell">
+                  {isHourly ? (
+                    <span>${job.hourly_min ?? 0}–${job.hourly_max ?? 0}/hr</span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+                <TableCell className="hidden md:table-cell">
+                  {isFixed ? (
+                    <span>{formatCurrency(job.budget_min ?? 0)} – {formatCurrency(job.budget_max!)}</span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+                {!compact && (
+                  <TableCell>
+                    <StatusBadge outcome={job.outcome} status={job.clickup_status} />
+                  </TableCell>
                 )}
-              </TableCell>
-            </TableRow>
-
-            {!compact && expandedId === job.id && (
-              <TableRow key={`${job.id}-detail`}>
-                <TableCell colSpan={colSpan} className="bg-muted/30">
-                  <JobDetail job={job} />
+                <TableCell className="hidden lg:table-cell text-muted-foreground">
+                  {formatRelativeTime(job.received_at)}
+                </TableCell>
+                <TableCell>
+                  {job.job_url && (
+                    <a
+                      href={job.job_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground inline-flex"
+                      title="Open on Upwork"
+                    >
+                      <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+                    </a>
+                  )}
                 </TableCell>
               </TableRow>
-            )}
-          </>
-        ))}
+
+              {expandedId === job.id && (
+                <TableRow key={`${job.id}-detail`}>
+                  <TableCell colSpan={colSpan} className="bg-muted/30">
+                    <JobDetail job={job} />
+                  </TableCell>
+                </TableRow>
+              )}
+            </>
+          );
+        })}
         {jobs.length === 0 && (
           <TableRow>
             <TableCell colSpan={colSpan} className="text-center text-muted-foreground py-8">
