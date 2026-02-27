@@ -25,7 +25,7 @@ export function CyberBadge({
   return (
     <span
       className={cn(
-        "inline-block rounded-md px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.08em]",
+        "inline-block rounded-md px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.08em]",
         variantClasses[variant],
         className
       )}

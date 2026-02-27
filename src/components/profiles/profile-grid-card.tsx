@@ -25,11 +25,11 @@ export function ProfileGridCard({ profile, isTop }: ProfileGridCardProps) {
       <div className="text-xs font-semibold text-foreground">
         {profile.profile_name}
       </div>
-      <div className="mb-3 text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
+      <div className="mb-3 text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
         {profile.niche || profile.stack || "—"}
       </div>
 
-      <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
+      <div className="mb-1 flex justify-between text-[11.5px] text-muted-foreground">
         <span>Response Rate</span>
         <span
           style={{
@@ -47,7 +47,7 @@ export function ProfileGridCard({ profile, isTop }: ProfileGridCardProps) {
           {profile.response_rate}%
         </span>
       </div>
-      <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
+      <div className="mb-1 flex justify-between text-[11.5px] text-muted-foreground">
         <span>Interview Rate</span>
         <span
           style={{
@@ -65,7 +65,7 @@ export function ProfileGridCard({ profile, isTop }: ProfileGridCardProps) {
           {profile.interview_rate}%
         </span>
       </div>
-      <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
+      <div className="mb-1 flex justify-between text-[11.5px] text-muted-foreground">
         <span>Win Rate</span>
         <span
           style={{

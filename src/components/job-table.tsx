@@ -87,7 +87,7 @@ export function JobTable({ jobs }: { jobs: JobRow[] }) {
                     <span className="text-xs text-muted-foreground">
                       {job.client_country ?? "—"}
                     </span>
-                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                    <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
                       {job.client_hires != null && job.client_hires > 0 && (
                         <span>{job.client_hires} hires</span>
                       )}
@@ -175,7 +175,7 @@ function JobDetail({ job }: { job: JobRow }) {
               <p className="flex items-center gap-1">
                 Total Spent: {formatCurrency(job.client_total_spent)}
                 {job.client_total_spent > 0 && (
-                  <span className="inline-flex items-center gap-0.5 rounded bg-accent-green/10 px-1.5 py-0.5 text-[10px] font-medium text-accent-green">
+                  <span className="inline-flex items-center gap-0.5 rounded bg-accent-green/10 px-1.5 py-0.5 text-[11.5px] font-medium text-accent-green">
                     <ShieldCheck className="h-3 w-3" /> Payment Verified
                   </span>
                 )}

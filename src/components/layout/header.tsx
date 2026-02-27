@@ -28,7 +28,7 @@ export async function Header({ title, subtitle, agents = [], profiles = [] }: He
             <h1 className="text-lg font-bold text-foreground">
               {title ?? "Dashboard Overview"}
             </h1>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[12.5px] text-muted-foreground">
               Updated just now
             </p>
           </div>

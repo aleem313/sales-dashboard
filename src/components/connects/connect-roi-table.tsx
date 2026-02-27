@@ -21,10 +21,10 @@ export function ConnectROITable({ data }: ConnectROITableProps) {
   return (
     <div className="rounded-[10px] border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-[18px] py-3.5">
-        <h3 className="font-heading text-[13px] font-bold tracking-[0.03em]">
+        <h3 className="font-heading text-[14px] font-bold tracking-[0.03em]">
           Connect ROI by Niche
         </h3>
-        <span className="rounded-md bg-accent-green/10 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.1em] text-accent-green">
+        <span className="rounded-md bg-accent-green/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.1em] text-accent-green">
           Optimization View
         </span>
       </div>
@@ -36,7 +36,7 @@ export function ConnectROITable({ data }: ConnectROITableProps) {
                 (h) => (
                   <th
                     key={h}
-                    className="border-b border-border px-3 py-2.5 text-left text-[9px] font-normal uppercase tracking-[0.15em] text-muted-foreground"
+                    className="border-b border-border px-3 py-2.5 text-left text-[11px] font-normal uppercase tracking-[0.15em] text-muted-foreground"
                   >
                     {h}
                   </th>
@@ -49,20 +49,20 @@ export function ConnectROITable({ data }: ConnectROITableProps) {
               const signal = roiSignal(row);
               return (
                 <tr key={row.niche} className="hover:bg-secondary">
-                  <td className="border-b border-border px-3 py-2.5 text-[11px]">
+                  <td className="border-b border-border px-3 py-2.5 text-[12.5px]">
                     {row.niche}
                   </td>
-                  <td className="border-b border-border px-3 py-2.5 text-[11px]">
+                  <td className="border-b border-border px-3 py-2.5 text-[12.5px]">
                     {row.connects_spent}
                   </td>
                   <td
-                    className="border-b border-border px-3 py-2.5 text-[11px]"
+                    className="border-b border-border px-3 py-2.5 text-[12.5px]"
                     style={{ color: row.wins > 0 ? "var(--accent-green)" : undefined }}
                   >
                     {row.wins}
                   </td>
                   <td
-                    className="border-b border-border px-3 py-2.5 text-[11px]"
+                    className="border-b border-border px-3 py-2.5 text-[12.5px]"
                     style={{
                       color: row.cost_per_win
                         ? row.cost_per_win <= 100
@@ -73,7 +73,7 @@ export function ConnectROITable({ data }: ConnectROITableProps) {
                   >
                     {row.cost_per_win ?? "∞"}
                   </td>
-                  <td className="border-b border-border px-3 py-2.5 text-[11px]">
+                  <td className="border-b border-border px-3 py-2.5 text-[12.5px]">
                     <CyberBadge variant={signal.variant}>
                       {signal.label}
                     </CyberBadge>
@@ -85,7 +85,7 @@ export function ConnectROITable({ data }: ConnectROITableProps) {
               <tr>
                 <td
                   colSpan={5}
-                  className="px-3 py-6 text-center text-[11px] text-muted-foreground"
+                  className="px-3 py-6 text-center text-[12.5px] text-muted-foreground"
                 >
                   No connects data yet
                 </td>

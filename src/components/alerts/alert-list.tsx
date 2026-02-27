@@ -23,7 +23,7 @@ const variantIcons = {
 export function AlertList({ alerts, variant }: AlertListProps) {
   if (alerts.length === 0) {
     return (
-      <div className="py-6 text-center text-[11px] text-muted-foreground">
+      <div className="py-6 text-center text-[12.5px] text-muted-foreground">
         No {variant === "danger" ? "critical alerts" : "items"} at this time
       </div>
     );
@@ -35,7 +35,7 @@ export function AlertList({ alerts, variant }: AlertListProps) {
         <div
           key={alert.id}
           className={cn(
-            "flex items-start gap-3 rounded-lg border p-3 text-[11px] text-foreground",
+            "flex items-start gap-3 rounded-lg border p-3 text-[12.5px] text-foreground",
             variantStyles[variant]
           )}
         >
