@@ -1,7 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import type { Agent, Profile } from "@/lib/types";
 
@@ -16,14 +15,16 @@ const rangeLabels: Record<string, string> = {
   all: "All Time",
 };
 
-function ActiveFilterBarInner({ agents, profiles }: ActiveFilterBarProps) {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
+export function ActiveFilterBar({ agents, profiles }: ActiveFilterBarProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  const agentId = searchParams.get("agent");
-  const profileId = searchParams.get("profile");
-  const range = searchParams.get("range");
+  if (!mounted) return null;
+
+  const params = new URLSearchParams(window.location.search);
+  const agentId = params.get("agent");
+  const profileId = params.get("profile");
+  const range = params.get("range");
 
   const agentName = agentId
     ? agents.find((a) => a.id === agentId)?.name ?? agentId
@@ -37,14 +38,13 @@ function ActiveFilterBarInner({ agents, profiles }: ActiveFilterBarProps) {
   if (!hasFilters) return null;
 
   function removeParam(key: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete(key);
-    const qs = params.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname);
+    const url = new URL(window.location.href);
+    url.searchParams.delete(key);
+    window.location.assign(url.toString());
   }
 
   function clearAll() {
-    router.push(pathname);
+    window.location.assign(window.location.pathname);
   }
 
   const chips: { key: string; label: string; paramKey: string }[] = [];
@@ -74,13 +74,5 @@ function ActiveFilterBarInner({ agents, profiles }: ActiveFilterBarProps) {
         </button>
       )}
     </div>
-  );
-}
-
-export function ActiveFilterBar(props: ActiveFilterBarProps) {
-  return (
-    <Suspense fallback={null}>
-      <ActiveFilterBarInner {...props} />
-    </Suspense>
   );
 }

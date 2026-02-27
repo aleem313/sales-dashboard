@@ -1,7 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Users, Briefcase, Calendar, LogOut } from "lucide-react";
@@ -20,29 +19,32 @@ const dateRanges = [
   { label: "All Time", value: "all" },
 ];
 
-function FilterControls({
+function getParam(key: string): string {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get(key) ?? "";
+}
+
+export function HeaderControls({
   agents,
   profiles,
   user,
   signOutAction,
 }: HeaderControlsProps) {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  const currentRange = searchParams.get("range") ?? "7";
-  const currentAgent = searchParams.get("agent") ?? "";
-  const currentProfile = searchParams.get("profile") ?? "";
+  const currentRange = mounted ? (getParam("range") || "7") : "7";
+  const currentAgent = mounted ? getParam("agent") : "";
+  const currentProfile = mounted ? getParam("profile") : "";
 
   function setParam(key: string, value: string) {
-    const params = new URLSearchParams(searchParams.toString());
+    const url = new URL(window.location.href);
     if (!value || (key === "range" && value === "7")) {
-      params.delete(key);
+      url.searchParams.delete(key);
     } else {
-      params.set(key, value);
+      url.searchParams.set(key, value);
     }
-    const qs = params.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname);
+    window.location.assign(url.toString());
   }
 
   return (
@@ -154,13 +156,5 @@ function FilterControls({
         </>
       )}
     </div>
-  );
-}
-
-export function HeaderControls(props: HeaderControlsProps) {
-  return (
-    <Suspense fallback={<div className="hidden md:flex items-center gap-2"><ThemeToggle /></div>}>
-      <FilterControls {...props} />
-    </Suspense>
   );
 }
