@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Copy, Check, ShieldCheck } from "lucide-react";
+import { SquareArrowOutUpRight, ShieldCheck } from "lucide-react";
 import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/utils";
 import { countryFlag } from "@/lib/country-flags";
 import type { Job } from "@/lib/types";
@@ -27,29 +27,30 @@ function outcomeVariant(outcome: string | null, status: string) {
 
 type JobRow = Job & { agent_name?: string | null; profile_name?: string | null };
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
-  return (
-    <button
-      onClick={handleCopy}
-      className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-      title="Copy job URL"
-    >
-      {copied ? <Check className="h-3.5 w-3.5 text-accent-green" /> : <Copy className="h-3.5 w-3.5" />}
-    </button>
-  );
+function BudgetDisplay({ job }: { job: JobRow }) {
+  if (job.budget_max) {
+    return (
+      <span className="flex items-center gap-1.5">
+        <Badge variant="outline" className="text-[11px] px-1.5 py-0">Fixed</Badge>
+        {formatCurrency(job.budget_min ?? 0)} – {formatCurrency(job.budget_max)}
+      </span>
+    );
+  }
+  if (job.hourly_min || job.hourly_max) {
+    return (
+      <span className="flex items-center gap-1.5">
+        <Badge variant="secondary" className="text-[11px] px-1.5 py-0">Hourly</Badge>
+        ${job.hourly_min ?? 0}–${job.hourly_max ?? 0}/hr
+      </span>
+    );
+  }
+  return <span>—</span>;
 }
 
-export function JobTable({ jobs }: { jobs: JobRow[] }) {
+export function JobTable({ jobs, compact }: { jobs: JobRow[]; compact?: boolean }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const colSpan = compact ? 6 : 8;
 
   return (
     <Table>
@@ -57,9 +58,10 @@ export function JobTable({ jobs }: { jobs: JobRow[] }) {
         <TableRow>
           <TableHead>Title</TableHead>
           <TableHead className="hidden sm:table-cell">Profile</TableHead>
+          <TableHead className="hidden sm:table-cell">Agent</TableHead>
           <TableHead className="hidden md:table-cell">Client</TableHead>
           <TableHead className="hidden md:table-cell">Budget</TableHead>
-          <TableHead>Status</TableHead>
+          {!compact && <TableHead>Status</TableHead>}
           <TableHead className="hidden lg:table-cell">Received</TableHead>
           <TableHead className="w-10"></TableHead>
         </TableRow>
@@ -69,14 +71,17 @@ export function JobTable({ jobs }: { jobs: JobRow[] }) {
           <>
             <TableRow
               key={job.id}
-              className="cursor-pointer"
-              onClick={() => setExpandedId(expandedId === job.id ? null : job.id)}
+              className={compact ? undefined : "cursor-pointer"}
+              onClick={compact ? undefined : () => setExpandedId(expandedId === job.id ? null : job.id)}
             >
               <TableCell>
                 <div className="font-medium max-w-[280px] truncate">{job.job_title}</div>
               </TableCell>
               <TableCell className="hidden sm:table-cell text-muted-foreground">
                 {job.profile_name ?? "—"}
+              </TableCell>
+              <TableCell className="hidden sm:table-cell text-muted-foreground">
+                {job.agent_name ?? "—"}
               </TableCell>
               <TableCell className="hidden md:table-cell">
                 <div className="flex items-center gap-2">
@@ -102,34 +107,50 @@ export function JobTable({ jobs }: { jobs: JobRow[] }) {
                 </div>
               </TableCell>
               <TableCell className="hidden md:table-cell">
-                {job.budget_max
-                  ? `${formatCurrency(job.budget_min ?? 0)} - ${formatCurrency(job.budget_max)}`
-                  : job.hourly_min || job.hourly_max
-                    ? `$${job.hourly_min ?? 0}–$${job.hourly_max ?? 0}/hr`
-                    : "—"}
+                <BudgetDisplay job={job} />
               </TableCell>
-              <TableCell>
-                <Badge variant={outcomeVariant(job.outcome, job.clickup_status)}>
-                  {job.outcome ?? job.clickup_status}
-                </Badge>
-              </TableCell>
+              {!compact && (
+                <TableCell>
+                  <Badge variant={outcomeVariant(job.outcome, job.clickup_status)}>
+                    {job.outcome ?? job.clickup_status}
+                  </Badge>
+                </TableCell>
+              )}
               <TableCell className="hidden lg:table-cell text-muted-foreground">
                 {formatRelativeTime(job.received_at)}
               </TableCell>
               <TableCell>
-                {job.job_url && <CopyButton text={job.job_url} />}
+                {job.job_url && (
+                  <a
+                    href={job.job_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground inline-flex"
+                    title="Open on Upwork"
+                  >
+                    <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+                  </a>
+                )}
               </TableCell>
             </TableRow>
 
-            {expandedId === job.id && (
+            {!compact && expandedId === job.id && (
               <TableRow key={`${job.id}-detail`}>
-                <TableCell colSpan={7} className="bg-muted/30">
+                <TableCell colSpan={colSpan} className="bg-muted/30">
                   <JobDetail job={job} />
                 </TableCell>
               </TableRow>
             )}
           </>
         ))}
+        {jobs.length === 0 && (
+          <TableRow>
+            <TableCell colSpan={colSpan} className="text-center text-muted-foreground py-8">
+              No jobs found.
+            </TableCell>
+          </TableRow>
+        )}
       </TableBody>
     </Table>
   );

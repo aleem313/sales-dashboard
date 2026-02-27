@@ -4,7 +4,8 @@ import { ConversionFunnel } from "@/components/overview/conversion-funnel";
 import { PipelineNow } from "@/components/overview/pipeline-now";
 import { TopProfilesTable } from "@/components/overview/top-profiles-table";
 import { AgentLeaderboard } from "@/components/overview/agent-leaderboard";
-import { LiveJobFeed } from "@/components/overview/live-job-feed";
+import { JobTable } from "@/components/job-table";
+import Link from "next/link";
 import {
   getKPIMetricsWithDeltas,
   getConversionFunnel,
@@ -111,7 +112,29 @@ export default async function DashboardPage({
           <AgentLeaderboard agents={agents} />
         </div>
 
-        <LiveJobFeed jobs={recentJobs.data} />
+        <div className="rounded-xl border border-border bg-card shadow-sm">
+          <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+            <div>
+              <h3 className="text-sm font-bold">Live Job Feed</h3>
+              <p className="text-[13.5px] text-muted-foreground">
+                Latest incoming jobs from Upwork via Vollna
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 text-[15px] text-muted-foreground">
+                <div className="h-1.5 w-1.5 rounded-full bg-accent-green animate-pulse-glow" />
+                Live
+              </div>
+              <Link
+                href="/jobs"
+                className="rounded-[7px] border border-border px-3 py-1 text-[15px] font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                View all
+              </Link>
+            </div>
+          </div>
+          <JobTable jobs={recentJobs.data} compact />
+        </div>
       </main>
     </>
   );
