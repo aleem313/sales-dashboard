@@ -1,17 +1,9 @@
 "use client";
 
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Download, LogOut } from "lucide-react";
+import { Users, Briefcase, Calendar, LogOut } from "lucide-react";
 import type { Agent, Profile } from "@/lib/types";
 
 interface HeaderControlsProps {
@@ -43,7 +35,7 @@ export function HeaderControls({
 
   function setParam(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
-    if (!value || value === "all-agents" || value === "all-profiles" || (key === "range" && value === "7")) {
+    if (!value || (key === "range" && value === "7")) {
       params.delete(key);
     } else {
       params.set(key, value);
@@ -51,76 +43,82 @@ export function HeaderControls({
     router.push(`${pathname}?${params.toString()}`);
   }
 
+  const filterSelectBase =
+    "appearance-none cursor-pointer rounded-[7px] border border-border bg-transparent py-1.5 pr-7 pl-8 text-[12.5px] font-semibold text-muted-foreground transition-all hover:border-[var(--primary)] hover:text-foreground focus:border-[var(--primary)] focus:text-foreground focus:outline-none";
+  const filterSelectActive =
+    "!bg-[var(--accent-light)] !text-[var(--primary)] !border-[var(--primary)]/30";
+
   return (
-    <div className="flex items-center gap-2">
+    <div className="hidden items-center gap-2 md:flex">
       {/* Agent filter */}
-      <Select
-        value={currentAgent || "all-agents"}
-        onValueChange={(v) => setParam("agent", v)}
-      >
-        <SelectTrigger className="hidden h-8 w-[140px] text-xs md:flex">
-          <SelectValue placeholder="All Agents" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all-agents">All Agents</SelectItem>
+      <div className="relative inline-flex items-center">
+        <Users className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+        <select
+          value={currentAgent}
+          onChange={(e) => setParam("agent", e.target.value)}
+          className={`${filterSelectBase} min-w-[130px] ${currentAgent ? filterSelectActive : ""}`}
+        >
+          <option value="">All Agents</option>
           {agents.map((a) => (
-            <SelectItem key={a.id} value={a.id}>
+            <option key={a.id} value={a.id}>
               {a.name}
-            </SelectItem>
+            </option>
           ))}
-        </SelectContent>
-      </Select>
+        </select>
+        <span className="pointer-events-none absolute right-2 text-[10px] text-muted-foreground">
+          ▾
+        </span>
+      </div>
 
       {/* Profile filter */}
-      <Select
-        value={currentProfile || "all-profiles"}
-        onValueChange={(v) => setParam("profile", v)}
-      >
-        <SelectTrigger className="hidden h-8 w-[140px] text-xs md:flex">
-          <SelectValue placeholder="All Profiles" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all-profiles">All Profiles</SelectItem>
+      <div className="relative inline-flex items-center">
+        <Briefcase className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+        <select
+          value={currentProfile}
+          onChange={(e) => setParam("profile", e.target.value)}
+          className={`${filterSelectBase} min-w-[130px] ${currentProfile ? filterSelectActive : ""}`}
+        >
+          <option value="">All Profiles</option>
           {profiles.map((p) => (
-            <SelectItem key={p.id} value={p.id}>
+            <option key={p.id} value={p.id}>
               {p.profile_name}
-            </SelectItem>
+            </option>
           ))}
-        </SelectContent>
-      </Select>
+        </select>
+        <span className="pointer-events-none absolute right-2 text-[10px] text-muted-foreground">
+          ▾
+        </span>
+      </div>
+
+      <Separator orientation="vertical" className="h-5" />
 
       {/* Date range */}
-      <Select
-        value={currentRange}
-        onValueChange={(v) => setParam("range", v)}
-      >
-        <SelectTrigger className="hidden h-8 w-[120px] text-xs md:flex">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
+      <div className="relative inline-flex items-center">
+        <Calendar className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+        <select
+          value={currentRange}
+          onChange={(e) => setParam("range", e.target.value)}
+          className={`${filterSelectBase} min-w-[120px] ${currentRange !== "7" ? filterSelectActive : ""}`}
+        >
           {dateRanges.map((r) => (
-            <SelectItem key={r.value} value={r.value}>
+            <option key={r.value} value={r.value}>
               {r.label}
-            </SelectItem>
+            </option>
           ))}
-        </SelectContent>
-      </Select>
+        </select>
+        <span className="pointer-events-none absolute right-2 text-[10px] text-muted-foreground">
+          ▾
+        </span>
+      </div>
 
-      <Separator orientation="vertical" className="hidden h-6 md:block" />
-
-      {/* Export */}
-      <Button variant="ghost" size="icon" asChild className="hidden md:flex">
-        <a href="/api/jobs/export" title="Export CSV">
-          <Download className="h-4 w-4" />
-        </a>
-      </Button>
+      <Separator orientation="vertical" className="h-5" />
 
       {/* Theme toggle */}
       <ThemeToggle />
 
       {user && (
         <>
-          <Separator orientation="vertical" className="h-6" />
+          <Separator orientation="vertical" className="h-5" />
           {user.image && (
             <img
               src={user.image}
@@ -130,7 +128,7 @@ export function HeaderControls({
               className="rounded-full"
             />
           )}
-          <span className="hidden text-xs font-medium md:inline">
+          <span className="text-xs font-medium">
             {user.name}
           </span>
           {signOutAction && (

@@ -41,7 +41,7 @@ export default async function JobsPage({
   return (
     <>
     <Suspense>
-      <Header title="Jobs" subtitle="Browse and filter all received jobs" />
+      <Header title="Job Feed" agents={agents} profiles={profiles} />
     </Suspense>
     <main className="flex-1 overflow-y-auto bg-background">
     <div className="container mx-auto px-4 py-6 space-y-6">

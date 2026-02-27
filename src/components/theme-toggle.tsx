@@ -2,38 +2,38 @@
 
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
-import { Moon, Sun, Monitor } from "lucide-react";
-import { Button } from "@/components/ui/button";
-
-const modes = ["light", "dark", "system"] as const;
-const icons = { light: Sun, dark: Moon, system: Monitor };
+import { Moon, Sun } from "lucide-react";
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
   if (!mounted) {
     return (
-      <Button variant="ghost" size="icon" aria-label="Toggle theme">
+      <button
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-all hover:border-[var(--primary)] hover:bg-card hover:text-foreground"
+        aria-label="Toggle theme"
+      >
         <Sun className="h-4 w-4" />
-      </Button>
+      </button>
     );
   }
 
-  const current = (theme ?? "system") as (typeof modes)[number];
-  const next = modes[(modes.indexOf(current) + 1) % modes.length];
-  const Icon = icons[current];
+  const isDark = resolvedTheme === "dark";
 
   return (
-    <Button
-      variant="ghost"
-      size="icon"
+    <button
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-all hover:border-[var(--primary)] hover:bg-card hover:text-foreground"
       aria-label="Toggle theme"
-      onClick={() => setTheme(next)}
+      onClick={() => setTheme(isDark ? "light" : "dark")}
     >
-      <Icon className="h-4 w-4" />
-    </Button>
+      {isDark ? (
+        <Moon className="h-4 w-4 transition-transform hover:rotate-[20deg]" />
+      ) : (
+        <Sun className="h-4 w-4 transition-transform hover:rotate-[20deg]" />
+      )}
+    </button>
   );
 }

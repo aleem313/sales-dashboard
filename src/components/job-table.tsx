@@ -11,7 +11,9 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Copy, Check, ShieldCheck } from "lucide-react";
 import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/utils";
+import { countryFlag } from "@/lib/country-flags";
 import type { Job } from "@/lib/types";
 
 function outcomeVariant(outcome: string | null, status: string) {
@@ -25,6 +27,27 @@ function outcomeVariant(outcome: string | null, status: string) {
 
 type JobRow = Job & { agent_name?: string | null; profile_name?: string | null };
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+      title="Copy job URL"
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-accent-green" /> : <Copy className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
+
 export function JobTable({ jobs }: { jobs: JobRow[] }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -34,10 +57,11 @@ export function JobTable({ jobs }: { jobs: JobRow[] }) {
         <TableRow>
           <TableHead>Title</TableHead>
           <TableHead className="hidden sm:table-cell">Profile</TableHead>
-          <TableHead className="hidden md:table-cell">Agent</TableHead>
+          <TableHead className="hidden md:table-cell">Client</TableHead>
           <TableHead className="hidden md:table-cell">Budget</TableHead>
           <TableHead>Status</TableHead>
           <TableHead className="hidden lg:table-cell">Received</TableHead>
+          <TableHead className="w-10"></TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -54,13 +78,35 @@ export function JobTable({ jobs }: { jobs: JobRow[] }) {
               <TableCell className="hidden sm:table-cell text-muted-foreground">
                 {job.profile_name ?? "—"}
               </TableCell>
-              <TableCell className="hidden md:table-cell text-muted-foreground">
-                {job.agent_name ?? "—"}
+              <TableCell className="hidden md:table-cell">
+                <div className="flex items-center gap-2">
+                  {job.client_country && (
+                    <span title={job.client_country}>{countryFlag(job.client_country)}</span>
+                  )}
+                  <div className="flex flex-col">
+                    <span className="text-xs text-muted-foreground">
+                      {job.client_country ?? "—"}
+                    </span>
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                      {job.client_hires != null && job.client_hires > 0 && (
+                        <span>{job.client_hires} hires</span>
+                      )}
+                      {job.client_total_spent != null && job.client_total_spent > 0 && (
+                        <span className="flex items-center gap-0.5">
+                          <ShieldCheck className="h-3 w-3 text-accent-green" />
+                          verified
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </TableCell>
               <TableCell className="hidden md:table-cell">
                 {job.budget_max
                   ? `${formatCurrency(job.budget_min ?? 0)} - ${formatCurrency(job.budget_max)}`
-                  : "—"}
+                  : job.hourly_min || job.hourly_max
+                    ? `$${job.hourly_min ?? 0}–$${job.hourly_max ?? 0}/hr`
+                    : "—"}
               </TableCell>
               <TableCell>
                 <Badge variant={outcomeVariant(job.outcome, job.clickup_status)}>
@@ -70,11 +116,14 @@ export function JobTable({ jobs }: { jobs: JobRow[] }) {
               <TableCell className="hidden lg:table-cell text-muted-foreground">
                 {formatRelativeTime(job.received_at)}
               </TableCell>
+              <TableCell>
+                {job.job_url && <CopyButton text={job.job_url} />}
+              </TableCell>
             </TableRow>
 
             {expandedId === job.id && (
               <TableRow key={`${job.id}-detail`}>
-                <TableCell colSpan={6} className="bg-muted/30">
+                <TableCell colSpan={7} className="bg-muted/30">
                   <JobDetail job={job} />
                 </TableCell>
               </TableRow>
@@ -118,12 +167,21 @@ function JobDetail({ job }: { job: JobRow }) {
         <CardContent className="pt-4 space-y-2 text-sm">
           <h4 className="font-semibold text-xs uppercase text-muted-foreground">Client</h4>
           <div className="space-y-1">
-            {job.client_country && <p>Country: {job.client_country}</p>}
-            {job.client_rating && <p>Rating: {job.client_rating}/5</p>}
-            {job.client_total_spent && (
-              <p>Total Spent: {formatCurrency(job.client_total_spent)}</p>
+            {job.client_country && (
+              <p>{countryFlag(job.client_country)} {job.client_country}</p>
             )}
-            {job.client_hires && <p>Hires: {job.client_hires}</p>}
+            {job.client_rating && <p>Rating: {job.client_rating}/5</p>}
+            {job.client_total_spent != null && (
+              <p className="flex items-center gap-1">
+                Total Spent: {formatCurrency(job.client_total_spent)}
+                {job.client_total_spent > 0 && (
+                  <span className="inline-flex items-center gap-0.5 rounded bg-accent-green/10 px-1.5 py-0.5 text-[10px] font-medium text-accent-green">
+                    <ShieldCheck className="h-3 w-3" /> Payment Verified
+                  </span>
+                )}
+              </p>
+            )}
+            {job.client_hires != null && <p>Previous Hires: {job.client_hires}</p>}
           </div>
         </CardContent>
       </Card>

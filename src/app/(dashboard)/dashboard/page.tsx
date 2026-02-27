@@ -5,6 +5,7 @@ import { ConversionFunnel } from "@/components/overview/conversion-funnel";
 import { PipelineNow } from "@/components/overview/pipeline-now";
 import { TopProfilesTable } from "@/components/overview/top-profiles-table";
 import { AgentLeaderboard } from "@/components/overview/agent-leaderboard";
+import { LiveJobFeed } from "@/components/overview/live-job-feed";
 import {
   getKPIMetricsWithDeltas,
   getConversionFunnel,
@@ -13,6 +14,7 @@ import {
   getEnhancedProfileStats,
   getAllAgents,
   getAllProfiles,
+  getJobs,
 } from "@/lib/data";
 
 export const revalidate = 300;
@@ -36,7 +38,7 @@ export default async function DashboardPage({
   startDate.setDate(endDate.getDate() - days);
   const range = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
 
-  const [kpi, funnel, pipeline, agents, profiles, allAgents, allProfiles] = await Promise.all([
+  const [kpi, funnel, pipeline, agents, profiles, allAgents, allProfiles, recentJobs] = await Promise.all([
     getKPIMetricsWithDeltas(days),
     getConversionFunnel(range),
     getPipelineNow(),
@@ -44,6 +46,7 @@ export default async function DashboardPage({
     getEnhancedProfileStats(range),
     getAllAgents(),
     getAllProfiles(),
+    getJobs({ limit: 10, sortBy: "received_at", sortDir: "desc" }),
   ]);
 
   const topProfiles = [...profiles]
@@ -104,10 +107,12 @@ export default async function DashboardPage({
           <PipelineNow stages={pipeline} />
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="mb-5 grid gap-4 lg:grid-cols-2">
           <TopProfilesTable profiles={topProfiles} />
           <AgentLeaderboard agents={agents} />
         </div>
+
+        <LiveJobFeed jobs={recentJobs.data} />
       </main>
     </>
   );
