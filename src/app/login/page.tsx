@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Briefcase } from "lucide-react";
+import Image from "next/image";
 import { auth, signIn } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,10 +32,10 @@ export default async function LoginPage({
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <Briefcase className="h-6 w-6 text-primary" />
+          <div className="mx-auto mb-2">
+            <Image src="/logo.png" alt="Rising Lions" width={48} height={48} />
           </div>
-          <CardTitle className="text-2xl">Vollna Analytics</CardTitle>
+          <CardTitle className="text-2xl">Rising Lions</CardTitle>
           <CardDescription>
             Sign in to access your dashboard
           </CardDescription>

@@ -72,7 +72,7 @@ async function sendSlackAlert(alert: {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        text: `*Vollna Alert* — \`${alert.alert_type}\`\n${alert.message}`,
+        text: `*Rising Lions Alert* — \`${alert.alert_type}\`\n${alert.message}`,
       }),
     });
   } catch (err) {

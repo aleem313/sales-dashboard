@@ -1,4 +1,4 @@
-// Vollna Analytics Dashboard — Domain Types
+// Rising Lions Dashboard — Domain Types
 // Source of truth: DASHBOARD_DEV.md Section 4
 
 export interface DateRange {

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,6 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/s
 import {
   Menu,
   X,
-  Activity,
   LayoutDashboard,
   Filter,
   Users,
@@ -137,12 +137,10 @@ function SidebarLogo({ homeHref, onClick }: { homeHref: string; onClick?: () => 
   return (
     <div className="border-b border-border px-5 pb-5 pt-6">
       <Link href={homeHref} onClick={onClick} className="flex items-center gap-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary)] text-white">
-          <Activity className="h-4 w-4" />
-        </div>
+        <Image src="/logo.png" alt="Rising Lions" width={32} height={32} className="rounded-lg" />
         <div>
           <div className="text-[15px] font-bold text-foreground">
-            AgencyOS
+            Rising Lions
           </div>
           <div className="text-[13.5px] text-muted-foreground">
             Analytics Dashboard

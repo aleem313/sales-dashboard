@@ -17,7 +17,7 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AgencyOS",
+  title: "Rising Lions",
   description: "Real-time analytics for Upwork job automation — track proposals, win rates, agent performance, and revenue",
 };
 
