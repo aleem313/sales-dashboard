@@ -54,12 +54,12 @@ export function ActiveFilterBar({ agents, profiles }: ActiveFilterBarProps) {
 
   return (
     <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-2 md:px-7">
-      <span className="text-[12.5px] text-muted-foreground">Filters:</span>
+      <span className="text-[13.5px] text-muted-foreground">Filters:</span>
       {chips.map((chip) => (
         <button
           key={chip.key}
           onClick={() => removeParam(chip.paramKey)}
-          className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-light)] px-2.5 py-1 text-[12.5px] font-medium text-[var(--primary)] transition-colors hover:bg-[var(--primary)] hover:text-white"
+          className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-light)] px-2.5 py-1 text-[13.5px] font-medium text-[var(--primary)] transition-colors hover:bg-[var(--primary)] hover:text-white"
         >
           {chip.label}
           <X className="h-3 w-3" />
@@ -68,7 +68,7 @@ export function ActiveFilterBar({ agents, profiles }: ActiveFilterBarProps) {
       {chips.length > 1 && (
         <button
           onClick={clearAll}
-          className="text-[12.5px] text-muted-foreground underline hover:text-foreground"
+          className="text-[13.5px] text-muted-foreground underline hover:text-foreground"
         >
           Clear all
         </button>

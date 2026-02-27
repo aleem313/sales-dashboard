@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { Header } from "@/components/layout/header";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { ProfileGridCard } from "@/components/profiles/profile-grid-card";
@@ -51,13 +50,11 @@ export default async function ProfilesPage({
 
   return (
     <>
-      <Suspense>
-        <Header
+      <Header
           title="Profile Analytics"
           agents={allAgents}
           profiles={allProfiles}
         />
-      </Suspense>
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
         <StatRow className="mb-5">
           <StatCard label="Active Profiles" value={active} variant="accent" delta="All operational" />
@@ -88,10 +85,10 @@ export default async function ProfilesPage({
 
         <div className="rounded-[10px] border border-border bg-card">
           <div className="flex items-center justify-between border-b border-border px-[18px] py-3.5">
-            <h3 className="font-heading text-[14px] font-bold tracking-[0.03em]">
+            <h3 className="font-heading text-[15px] font-bold tracking-[0.03em]">
               All {active} Profiles · Performance Overview
             </h3>
-            <span className="rounded-md bg-[var(--accent-light)] px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--primary)]">
+            <span className="rounded-md bg-[var(--accent-light)] px-2 py-0.5 text-[12px] font-medium uppercase tracking-[0.1em] text-[var(--primary)]">
               This Period
             </span>
           </div>

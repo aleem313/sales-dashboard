@@ -89,7 +89,7 @@ function SidebarNav({
     <nav className="flex flex-col gap-1 px-3 py-4">
       {sections.map((section) => (
         <div key={section.label} className="mb-1">
-          <div className="px-2 pb-1 pt-3 text-[11.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+          <div className="px-2 pb-1 pt-3 text-[13.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
             {section.label}
           </div>
           {section.items.map((item) => {
@@ -102,7 +102,7 @@ function SidebarNav({
                 href={item.href}
                 onClick={onNavigate}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors",
+                  "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[15px] font-medium transition-colors",
                   isActive
                     ? "bg-[var(--accent-light)] text-[var(--primary)] font-semibold"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
@@ -111,7 +111,7 @@ function SidebarNav({
                 <Icon className="h-4 w-4 shrink-0" />
                 {item.label}
                 {item.badgeCount != null && item.badgeCount > 0 && (
-                  <span className="ml-auto rounded-full bg-destructive/15 px-1.5 py-0.5 text-[11px] text-destructive">
+                  <span className="ml-auto rounded-full bg-destructive/15 px-1.5 py-0.5 text-[12px] text-destructive">
                     {item.badgeCount}
                   </span>
                 )}
@@ -144,7 +144,7 @@ function SidebarLogo({ homeHref, onClick }: { homeHref: string; onClick?: () => 
           <div className="text-[15px] font-bold text-foreground">
             AgencyOS
           </div>
-          <div className="text-[11.5px] text-muted-foreground">
+          <div className="text-[13.5px] text-muted-foreground">
             Analytics Dashboard
           </div>
         </div>
@@ -165,7 +165,7 @@ export function Sidebar() {
         <SidebarNav sections={sections} pathname={pathname} />
       </div>
       <div className="border-t border-border px-5 py-4">
-        <div className="flex items-center gap-2 text-[11.5px] text-accent-green">
+        <div className="flex items-center gap-2 text-[13.5px] text-accent-green">
           <div className="h-1.5 w-1.5 rounded-full bg-accent-green animate-pulse-glow" />
           All systems operational
         </div>
@@ -207,7 +207,7 @@ export function MobileSidebar() {
           onNavigate={() => setOpen(false)}
         />
         <div className="border-t border-border px-5 py-4">
-          <div className="flex items-center gap-2 text-[11.5px] text-accent-green">
+          <div className="flex items-center gap-2 text-[13.5px] text-accent-green">
             <div className="h-1.5 w-1.5 rounded-full bg-accent-green animate-pulse-glow" />
             All systems operational
           </div>

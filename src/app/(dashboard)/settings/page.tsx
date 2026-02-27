@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { Header } from "@/components/layout/header";
 import { Separator } from "@/components/ui/separator";
 import { getSyncLogs, getSystemHealth, getAllAgents, getAllProfiles, getAlertHistory } from "@/lib/data";
@@ -23,9 +22,7 @@ export default async function SettingsPage() {
 
   return (
     <>
-    <Suspense>
-      <Header title="Settings" agents={agents} profiles={profiles} />
-    </Suspense>
+    <Header title="Settings" agents={agents} profiles={profiles} />
     <main className="flex-1 overflow-y-auto bg-background">
     <div className="container mx-auto px-4 py-6 space-y-6">
 

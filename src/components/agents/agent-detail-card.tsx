@@ -37,7 +37,7 @@ export function AgentDetailCard({ agent, weeklyData, rank }: AgentDetailCardProp
   return (
     <div className="animate-slide-in rounded-[10px] border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-[18px] py-3.5">
-        <h3 className="font-heading text-[14px] font-bold tracking-[0.03em]">
+        <h3 className="font-heading text-[15px] font-bold tracking-[0.03em]">
           {agent.name}
         </h3>
         <CyberBadge variant={badge.variant}>{badge.label}</CyberBadge>
@@ -48,7 +48,7 @@ export function AgentDetailCard({ agent, weeklyData, rank }: AgentDetailCardProp
             <div className="font-mono-data text-[32px] font-bold leading-none text-accent-green">
               {agent.won}
             </div>
-            <div className="mt-0.5 text-[11.5px] text-muted-foreground">
+            <div className="mt-0.5 text-[13.5px] text-muted-foreground">
               Wins this period
             </div>
           </div>
@@ -89,7 +89,7 @@ export function AgentDetailCard({ agent, weeklyData, rank }: AgentDetailCardProp
         </div>
 
         <div className="mt-3.5">
-          <div className="mb-1.5 text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
+          <div className="mb-1.5 text-[12px] uppercase tracking-[0.1em] text-muted-foreground">
             Weekly Activity
           </div>
           <Sparkline data={weeklyData} />
@@ -111,7 +111,7 @@ function MetricRow({
   bold?: boolean;
 }) {
   return (
-    <div className="flex justify-between text-[12.5px]">
+    <div className="flex justify-between text-[13.5px]">
       <span className="text-muted-foreground">{label}</span>
       <span
         style={color ? { color } : undefined}

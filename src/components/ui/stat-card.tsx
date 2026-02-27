@@ -33,7 +33,7 @@ export function StatCard({
         className
       )}
     >
-      <div className="text-[12.5px] uppercase tracking-[0.08em] text-muted-foreground">
+      <div className="text-[13.5px] uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </div>
       <div
@@ -47,7 +47,7 @@ export function StatCard({
       {delta && (
         <div
           className={cn(
-            "mt-1.5 text-[11.5px]",
+            "mt-1.5 text-[13.5px]",
             deltaDown ? "text-destructive" : "text-accent-green"
           )}
         >

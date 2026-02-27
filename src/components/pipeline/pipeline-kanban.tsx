@@ -34,10 +34,10 @@ export function PipelineKanban({ stages }: PipelineKanbanProps) {
   return (
     <div className="rounded-[10px] border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-[18px] py-3.5">
-        <h3 className="font-heading text-[14px] font-bold tracking-[0.03em]">
+        <h3 className="font-heading text-[15px] font-bold tracking-[0.03em]">
           Pipeline Stages
         </h3>
-        <span className="rounded-md bg-[var(--accent-light)] px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--primary)]">
+        <span className="rounded-md bg-[var(--accent-light)] px-2 py-0.5 text-[12px] font-medium uppercase tracking-[0.1em] text-[var(--primary)]">
           All Profiles · Live
         </span>
       </div>
@@ -49,7 +49,7 @@ export function PipelineKanban({ stages }: PipelineKanbanProps) {
               className="w-[130px] shrink-0 rounded-lg border border-border bg-secondary p-2.5"
             >
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                <span className="text-[12px] uppercase tracking-[0.12em] text-muted-foreground">
                   {stage.label}
                 </span>
                 <CyberBadge variant={stageBadgeVariant(stage.key)}>
@@ -62,13 +62,13 @@ export function PipelineKanban({ stages }: PipelineKanbanProps) {
               >
                 {stage.count}
               </div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground">
+              <div className="mt-0.5 text-[12px] text-muted-foreground">
                 {stage.subtitle}
               </div>
             </div>
           ))}
           {stages.length === 0 && (
-            <div className="py-6 text-center text-[12.5px] text-muted-foreground">
+            <div className="py-6 text-center text-[13.5px] text-muted-foreground">
               No pipeline data
             </div>
           )}

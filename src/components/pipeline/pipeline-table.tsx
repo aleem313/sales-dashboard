@@ -23,10 +23,10 @@ export function PipelineTable({ jobs }: PipelineTableProps) {
   return (
     <div className="rounded-[10px] border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-[18px] py-3.5">
-        <h3 className="font-heading text-[14px] font-bold tracking-[0.03em]">
+        <h3 className="font-heading text-[15px] font-bold tracking-[0.03em]">
           Active Jobs in Pipeline
         </h3>
-        <span className="rounded-md bg-[var(--accent-light)] px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--primary)]">
+        <span className="rounded-md bg-[var(--accent-light)] px-2 py-0.5 text-[12px] font-medium uppercase tracking-[0.1em] text-[var(--primary)]">
           Sorted by stage
         </span>
       </div>
@@ -38,7 +38,7 @@ export function PipelineTable({ jobs }: PipelineTableProps) {
                 (h) => (
                   <th
                     key={h}
-                    className="border-b border-border px-3 py-2.5 text-left text-[11px] font-normal uppercase tracking-[0.15em] text-muted-foreground"
+                    className="border-b border-border px-3 py-2.5 text-left text-[12px] font-normal uppercase tracking-[0.15em] text-muted-foreground"
                   >
                     {h}
                   </th>
@@ -49,24 +49,24 @@ export function PipelineTable({ jobs }: PipelineTableProps) {
           <tbody>
             {jobs.map((job) => (
               <tr key={job.id} className="hover:bg-secondary">
-                <td className="border-b border-border px-3 py-2.5 text-[12.5px] font-semibold">
+                <td className="border-b border-border px-3 py-2.5 text-[13.5px] font-semibold">
                   {job.job_title}
                 </td>
-                <td className="border-b border-border px-3 py-2.5 text-[12.5px]">
+                <td className="border-b border-border px-3 py-2.5 text-[13.5px]">
                   {job.profile_name || "—"}
                 </td>
-                <td className="border-b border-border px-3 py-2.5 text-[12.5px]">
+                <td className="border-b border-border px-3 py-2.5 text-[13.5px]">
                   {job.agent_name || "—"}
                 </td>
-                <td className="border-b border-border px-3 py-2.5 text-[12.5px]">
+                <td className="border-b border-border px-3 py-2.5 text-[13.5px]">
                   <CyberBadge variant={statusBadgeVariant(job.clickup_status)}>
                     {job.clickup_status}
                   </CyberBadge>
                 </td>
-                <td className="border-b border-border px-3 py-2.5 text-[12.5px] text-accent-green">
+                <td className="border-b border-border px-3 py-2.5 text-[13.5px] text-accent-green">
                   {job.time_in_stage}
                 </td>
-                <td className="border-b border-border px-3 py-2.5 text-[12.5px]">
+                <td className="border-b border-border px-3 py-2.5 text-[13.5px]">
                   <CyberBadge variant={priorityBadgeVariant(job.priority)}>
                     {job.priority.toUpperCase()}
                   </CyberBadge>
@@ -77,7 +77,7 @@ export function PipelineTable({ jobs }: PipelineTableProps) {
               <tr>
                 <td
                   colSpan={6}
-                  className="px-3 py-6 text-center text-[12.5px] text-muted-foreground"
+                  className="px-3 py-6 text-center text-[13.5px] text-muted-foreground"
                 >
                   No active jobs in pipeline
                 </td>

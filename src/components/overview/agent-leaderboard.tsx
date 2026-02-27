@@ -25,10 +25,10 @@ export function AgentLeaderboard({ agents }: AgentLeaderboardProps) {
   return (
     <div className="rounded-[10px] border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-[18px] py-3.5">
-        <h3 className="font-heading text-[14px] font-bold tracking-[0.03em]">
+        <h3 className="font-heading text-[15px] font-bold tracking-[0.03em]">
           Agent Leaderboard
         </h3>
-        <span className="rounded-md bg-[var(--accent-light)] px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--primary)]">
+        <span className="rounded-md bg-[var(--accent-light)] px-2 py-0.5 text-[12px] font-medium uppercase tracking-[0.1em] text-[var(--primary)]">
           This Period
         </span>
       </div>
@@ -45,10 +45,10 @@ export function AgentLeaderboard({ agents }: AgentLeaderboardProps) {
               {getInitials(agent.name)}
             </div>
             <div className="flex-1">
-              <div className="text-[14px] font-semibold">
+              <div className="text-[15px] font-semibold">
                 {agent.name}
               </div>
-              <div className="text-[11.5px] text-muted-foreground">
+              <div className="text-[13.5px] text-muted-foreground">
                 {agent.proposals_sent} proposals
               </div>
             </div>
@@ -81,7 +81,7 @@ export function AgentLeaderboard({ agents }: AgentLeaderboardProps) {
           </div>
         ))}
         {agents.length === 0 && (
-          <div className="py-6 text-center text-[12.5px] text-muted-foreground">
+          <div className="py-6 text-center text-[13.5px] text-muted-foreground">
             No agent data yet
           </div>
         )}

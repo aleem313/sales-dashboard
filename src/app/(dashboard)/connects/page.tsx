@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { Header } from "@/components/layout/header";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { ConnectsUsageBars } from "@/components/connects/connects-usage-bars";
@@ -57,13 +56,11 @@ export default async function ConnectsPage({
 
   return (
     <>
-      <Suspense>
-        <Header
+      <Header
           title="Connect Efficiency"
           agents={allAgents}
           profiles={allProfiles}
         />
-      </Suspense>
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
         <StatRow className="mb-5">
           <StatCard label="Total Connects Used" value={totalUsed} variant="warn" delta="This period" />

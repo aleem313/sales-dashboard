@@ -10,10 +10,10 @@ export function ConversionFunnel({ steps }: ConversionFunnelProps) {
   return (
     <div className="rounded-[10px] border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-[18px] py-3.5">
-        <h3 className="font-heading text-[14px] font-bold tracking-[0.03em]">
+        <h3 className="font-heading text-[15px] font-bold tracking-[0.03em]">
           Conversion Funnel
         </h3>
-        <span className="rounded-md bg-[var(--accent-light)] px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--primary)]">
+        <span className="rounded-md bg-[var(--accent-light)] px-2 py-0.5 text-[12px] font-medium uppercase tracking-[0.1em] text-[var(--primary)]">
           This Period
         </span>
       </div>
@@ -22,12 +22,12 @@ export function ConversionFunnel({ steps }: ConversionFunnelProps) {
           const widthPct = Math.max((step.count / maxCount) * 100, 5);
           return (
             <div key={step.label} className="flex items-center gap-3">
-              <div className="w-[120px] shrink-0 text-[11.5px] tracking-[0.05em] text-muted-foreground">
+              <div className="w-[120px] shrink-0 text-[13.5px] tracking-[0.05em] text-muted-foreground">
                 {step.label}
               </div>
               <div className="flex-1 rounded-[3px] bg-secondary" style={{ height: 20 }}>
                 <div
-                  className="flex h-full items-center rounded-[3px] pl-2 text-[11.5px] font-medium text-black transition-all duration-500"
+                  className="flex h-full items-center rounded-[3px] pl-2 text-[13.5px] font-medium text-black transition-all duration-500"
                   style={{
                     width: `${widthPct}%`,
                     background: step.color,
@@ -37,7 +37,7 @@ export function ConversionFunnel({ steps }: ConversionFunnelProps) {
                   {step.count}
                 </div>
               </div>
-              <div className="w-10 shrink-0 text-right text-[12.5px] text-muted-foreground">
+              <div className="w-10 shrink-0 text-right text-[13.5px] text-muted-foreground">
                 {step.count}
               </div>
             </div>

@@ -32,7 +32,7 @@ export function ScoreRing({
           inset: 5,
         }}
       />
-      <span className="relative z-10 font-mono-data text-[11.5px] font-bold text-foreground">
+      <span className="relative z-10 font-mono-data text-[13.5px] font-bold text-foreground">
         {pct}%
       </span>
     </div>

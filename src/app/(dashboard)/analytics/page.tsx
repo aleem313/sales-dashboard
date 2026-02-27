@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { Header } from "@/components/layout/header";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -30,9 +29,7 @@ export default async function AnalyticsPage() {
 
   return (
     <>
-    <Suspense>
-      <Header title="Analytics" agents={allAgents} profiles={allProfiles} />
-    </Suspense>
+    <Header title="Analytics" agents={allAgents} profiles={allProfiles} />
     <main className="flex-1 overflow-y-auto bg-background">
     <div className="container mx-auto px-4 py-6 space-y-6">
 

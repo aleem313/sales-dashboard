@@ -21,18 +21,18 @@ export function LiveJobFeed({ jobs }: LiveJobFeedProps) {
       <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
         <div>
           <h3 className="text-sm font-bold">Live Job Feed</h3>
-          <p className="text-[12.5px] text-muted-foreground">
+          <p className="text-[13.5px] text-muted-foreground">
             Latest incoming jobs from Upwork via Vollna
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-[15px] text-muted-foreground">
             <div className="h-1.5 w-1.5 rounded-full bg-accent-green animate-pulse-glow" />
             Live
           </div>
           <Link
             href="/jobs"
-            className="rounded-[7px] border border-border px-3 py-1 text-[14px] font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            className="rounded-[7px] border border-border px-3 py-1 text-[15px] font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           >
             View all
           </Link>
@@ -45,7 +45,7 @@ export function LiveJobFeed({ jobs }: LiveJobFeedProps) {
               {["Job Title", "Budget", "Profile Match", "Client", "Received"].map((h) => (
                 <th
                   key={h}
-                  className="border-b border-border px-4 py-2.5 text-left text-[12.5px] font-semibold uppercase tracking-[0.07em] text-muted-foreground"
+                  className="border-b border-border px-4 py-2.5 text-left text-[13.5px] font-semibold uppercase tracking-[0.07em] text-muted-foreground"
                 >
                   {h}
                 </th>
@@ -55,16 +55,16 @@ export function LiveJobFeed({ jobs }: LiveJobFeedProps) {
           <tbody>
             {jobs.map((job) => (
               <tr key={job.id} className="hover:bg-secondary/50">
-                <td className="border-b border-border px-4 py-2.5 text-[14px] font-medium">
+                <td className="border-b border-border px-4 py-2.5 text-[15px] font-medium">
                   <div className="max-w-[300px] truncate">{job.job_title}</div>
                 </td>
-                <td className="border-b border-border px-4 py-2.5 font-mono-data text-[13px]">
+                <td className="border-b border-border px-4 py-2.5 font-mono-data text-[15px]">
                   {budgetLabel(job)}
                 </td>
-                <td className="border-b border-border px-4 py-2.5 text-[13px] text-muted-foreground">
+                <td className="border-b border-border px-4 py-2.5 text-[15px] text-muted-foreground">
                   {job.profile_name ?? "—"}
                 </td>
-                <td className="border-b border-border px-4 py-2.5 text-[13px]">
+                <td className="border-b border-border px-4 py-2.5 text-[15px]">
                   <div className="flex items-center gap-1.5">
                     {job.client_country && (
                       <span title={job.client_country}>{countryFlag(job.client_country)}</span>
@@ -74,14 +74,14 @@ export function LiveJobFeed({ jobs }: LiveJobFeedProps) {
                     </span>
                   </div>
                 </td>
-                <td className="border-b border-border px-4 py-2.5 text-[13px] text-muted-foreground">
+                <td className="border-b border-border px-4 py-2.5 text-[15px] text-muted-foreground">
                   {formatRelativeTime(job.received_at)}
                 </td>
               </tr>
             ))}
             {jobs.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                <td colSpan={5} className="px-4 py-8 text-center text-[15px] text-muted-foreground">
                   Waiting for jobs…
                 </td>
               </tr>

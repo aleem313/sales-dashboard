@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { Header } from "@/components/layout/header";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { AgentDetailCard } from "@/components/agents/agent-detail-card";
@@ -53,13 +52,11 @@ export default async function AgentsPage({
 
   return (
     <>
-      <Suspense>
-        <Header
+      <Header
           title="Agent Performance"
           agents={allAgents}
           profiles={allProfiles}
         />
-      </Suspense>
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
         <StatRow className="mb-5">
           <StatCard

@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { Header } from "@/components/layout/header";
 import { Separator } from "@/components/ui/separator";
 import { getJobs, getAllAgents, getAllProfiles } from "@/lib/data";
@@ -40,9 +39,7 @@ export default async function JobsPage({
 
   return (
     <>
-    <Suspense>
-      <Header title="Job Feed" agents={agents} profiles={profiles} />
-    </Suspense>
+    <Header title="Job Feed" agents={agents} profiles={profiles} />
     <main className="flex-1 overflow-y-auto bg-background">
     <div className="container mx-auto px-4 py-6 space-y-6">
 

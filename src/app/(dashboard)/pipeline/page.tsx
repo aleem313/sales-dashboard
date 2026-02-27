@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { Header } from "@/components/layout/header";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { PipelineKanban } from "@/components/pipeline/pipeline-kanban";
@@ -44,13 +43,11 @@ export default async function PipelinePage({
 
   return (
     <>
-      <Suspense>
-        <Header
+      <Header
           title="Pipeline Tracker"
           agents={allAgents}
           profiles={allProfiles}
         />
-      </Suspense>
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
         <StatRow className="mb-5">
           <StatCard label="To Do" value={todo} variant="accent" delta="Awaiting action" />
