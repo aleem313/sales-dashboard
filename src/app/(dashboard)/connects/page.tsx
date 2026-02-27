@@ -16,19 +16,21 @@ export const revalidate = 300;
 export default async function ConnectsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string }>;
+  searchParams: Promise<{ range?: string; agent?: string; profile?: string }>;
 }) {
   const params = await searchParams;
   const days = params.range === "30" ? 30 : params.range === "all" ? 365 * 5 : 7;
+  const agentId = typeof params.agent === "string" ? params.agent : undefined;
+  const profileId = typeof params.profile === "string" ? params.profile : undefined;
   const endDate = new Date();
   const startDate = new Date();
   startDate.setDate(endDate.getDate() - days);
   const range = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
 
   const [usage, roi, filterQuality, allAgents, allProfiles] = await Promise.all([
-    getConnectsUsageByProfile(range),
-    getConnectROIByNiche(range),
-    getFilterQualityAnalysis(range),
+    getConnectsUsageByProfile(range, agentId, profileId),
+    getConnectROIByNiche(range, agentId, profileId),
+    getFilterQualityAnalysis(range, agentId, profileId),
     getAllAgents(),
     getAllProfiles(),
   ]);

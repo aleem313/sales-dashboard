@@ -30,7 +30,7 @@ export function ActiveFilterBar({ agents, profiles }: ActiveFilterBarProps) {
     ? agents.find((a) => a.id === agentId)?.name ?? agentId
     : null;
   const profileName = profileId
-    ? profiles.find((p) => p.id === profileId)?.profile_name ?? profileId
+    ? profiles.find((p) => p.profile_id === profileId)?.profile_name ?? profileId
     : null;
   const rangeLabel = range ? rangeLabels[range] ?? range : null;
 

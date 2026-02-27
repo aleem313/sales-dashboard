@@ -38,7 +38,7 @@ import type {
 // DASHBOARD KPIs
 // ============================================================
 
-export async function getKPIMetrics(range?: DateRange): Promise<KPIMetrics> {
+export async function getKPIMetrics(range?: DateRange, agentId?: string, profileId?: string): Promise<KPIMetrics> {
   const { startDate, endDate } = range ?? {};
 
   const result = await sql`
@@ -55,6 +55,8 @@ export async function getKPIMetrics(range?: DateRange): Promise<KPIMetrics> {
     FROM jobs
     WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
   `;
 
   const row = result.rows[0];
@@ -1087,14 +1089,16 @@ function getPreviousRange(days: number): DateRange {
 }
 
 export async function getKPIMetricsWithDeltas(
-  days: number = 7
+  days: number = 7,
+  agentId?: string,
+  profileId?: string
 ): Promise<KPIMetricsWithDeltas> {
   const currentRange = getRangeForDays(days);
   const prevRange = getPreviousRange(days);
 
   const [current, prev] = await Promise.all([
-    getKPIMetrics(currentRange),
-    getKPIMetrics(prevRange),
+    getKPIMetrics(currentRange, agentId, profileId),
+    getKPIMetrics(prevRange, agentId, profileId),
   ]);
 
   // Count meetings (clickup_status in meeting-related statuses)
@@ -1104,6 +1108,8 @@ export async function getKPIMetricsWithDeltas(
       COUNT(CASE WHEN received_at >= ${prevRange.startDate}::timestamptz AND received_at < ${prevRange.endDate}::timestamptz THEN 1 END) AS prev_meetings
     FROM jobs
     WHERE clickup_status IN ('Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won')
+      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
   `;
 
   const currentMeetings = parseInt(meetResult.rows[0]?.current_meetings) || 0;
@@ -1121,7 +1127,9 @@ export async function getKPIMetricsWithDeltas(
 }
 
 export async function getConversionFunnel(
-  range?: DateRange
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string
 ): Promise<FunnelStep[]> {
   const { startDate, endDate } = range ?? {};
   const result = await sql`
@@ -1136,6 +1144,8 @@ export async function getConversionFunnel(
     FROM jobs
     WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
   `;
 
   const r = result.rows[0];
@@ -1156,7 +1166,7 @@ export async function getConversionFunnel(
   }));
 }
 
-export async function getPipelineNow(): Promise<
+export async function getPipelineNow(agentId?: string, profileId?: string): Promise<
   { label: string; count: number; color: string }[]
 > {
   const result = await sql`
@@ -1166,7 +1176,9 @@ export async function getPipelineNow(): Promise<
       COUNT(CASE WHEN clickup_status IN ('Meeting Scheduled', 'Meeting Done') THEN 1 END) AS meetings,
       COUNT(CASE WHEN clickup_status = 'Negotiation' THEN 1 END) AS negotiation
     FROM jobs
-    WHERE outcome IS NULL OR outcome = 'pending'
+    WHERE (outcome IS NULL OR outcome = 'pending')
+      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
   `;
 
   const r = result.rows[0];
@@ -1179,7 +1191,9 @@ export async function getPipelineNow(): Promise<
 }
 
 export async function getPipelineStages(
-  range?: DateRange
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string
 ): Promise<PipelineStage[]> {
   const { startDate, endDate } = range ?? {};
 
@@ -1204,6 +1218,8 @@ export async function getPipelineStages(
     FROM jobs
     WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
     GROUP BY clickup_status
     ORDER BY
       CASE clickup_status
@@ -1229,7 +1245,7 @@ export async function getPipelineStages(
   });
 }
 
-export async function getActiveJobsInPipeline(): Promise<PipelineJob[]> {
+export async function getActiveJobsInPipeline(agentId?: string, profileId?: string): Promise<PipelineJob[]> {
   const result = await sql`
     SELECT
       j.id,
@@ -1246,7 +1262,9 @@ export async function getActiveJobsInPipeline(): Promise<PipelineJob[]> {
     FROM jobs j
     LEFT JOIN profiles p ON p.profile_id = j.profile_id
     LEFT JOIN agents a ON a.id = j.agent_id
-    WHERE j.outcome IS NULL OR j.outcome = 'pending'
+    WHERE (j.outcome IS NULL OR j.outcome = 'pending')
+      AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
     ORDER BY
       CASE j.clickup_status
         WHEN 'Negotiation' THEN 1 WHEN 'Meeting Done' THEN 2
@@ -1280,7 +1298,9 @@ export async function getActiveJobsInPipeline(): Promise<PipelineJob[]> {
 }
 
 export async function getEnhancedAgentStats(
-  range?: DateRange
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string
 ): Promise<EnhancedAgentStats[]> {
   const { startDate, endDate } = range ?? {};
 
@@ -1308,7 +1328,9 @@ export async function getEnhancedAgentStats(
     LEFT JOIN jobs j ON j.agent_id = a.id
       AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
     WHERE a.active = true
+      AND (${agentId ?? null}::uuid IS NULL OR a.id = ${agentId ?? null}::uuid)
     GROUP BY a.id, a.name, a.clickup_user_id
     ORDER BY won DESC, proposals_sent DESC
   `;
@@ -1368,7 +1390,9 @@ export async function getAgentWeeklyActivity(
 }
 
 export async function getEnhancedProfileStats(
-  range?: DateRange
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string
 ): Promise<EnhancedProfileStats[]> {
   const { startDate, endDate } = range ?? {};
 
@@ -1393,7 +1417,9 @@ export async function getEnhancedProfileStats(
     LEFT JOIN jobs j ON j.profile_id = p.profile_id
       AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
     WHERE p.active = true
+      AND (${profileId ?? null}::text IS NULL OR p.profile_id = ${profileId ?? null}::text)
     GROUP BY p.id, p.profile_id, p.profile_name, p.stack
     ORDER BY total_jobs DESC
   `;
@@ -1423,7 +1449,9 @@ export async function getEnhancedProfileStats(
 }
 
 export async function getConnectsUsageByProfile(
-  range?: DateRange
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string
 ): Promise<ConnectsUsage[]> {
   const { startDate, endDate } = range ?? {};
 
@@ -1437,7 +1465,9 @@ export async function getConnectsUsageByProfile(
     LEFT JOIN jobs j ON j.profile_id = p.profile_id
       AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
     WHERE p.active = true
+      AND (${profileId ?? null}::text IS NULL OR p.profile_id = ${profileId ?? null}::text)
     GROUP BY p.profile_name, p.stack
     ORDER BY connects_used DESC
   `;
@@ -1451,7 +1481,9 @@ export async function getConnectsUsageByProfile(
 }
 
 export async function getConnectROIByNiche(
-  range?: DateRange
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string
 ): Promise<ConnectROI[]> {
   const { startDate, endDate } = range ?? {};
 
@@ -1465,6 +1497,8 @@ export async function getConnectROIByNiche(
     JOIN profiles p ON p.profile_id = j.profile_id
     WHERE (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
     GROUP BY COALESCE(p.stack, 'Unknown')
     HAVING COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL THEN 1 END) > 0
     ORDER BY connects_spent DESC
@@ -1483,7 +1517,9 @@ export async function getConnectROIByNiche(
 }
 
 export async function getFilterQualityAnalysis(
-  range?: DateRange
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string
 ): Promise<FilterQuality[]> {
   const { startDate, endDate } = range ?? {};
 
@@ -1503,6 +1539,8 @@ export async function getFilterQualityAnalysis(
     WHERE (outcome = 'lost' OR clickup_status IN ('Rejected', 'Filtered Out', 'Lost'))
       AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
     GROUP BY
       CASE
         WHEN budget_max IS NOT NULL AND budget_max < 500 THEN 'Budget too low (<$500)'

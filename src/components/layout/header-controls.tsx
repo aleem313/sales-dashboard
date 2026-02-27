@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -17,22 +18,32 @@ const dateRanges = [
   { label: "All Time", value: "all" },
 ];
 
-function handleSelectChange(e: React.ChangeEvent<HTMLSelectElement>) {
-  const key = e.target.name;
-  const value = e.target.value;
-  const url = new URL(window.location.href);
-
-  if (!value || (key === "range" && value === "7")) {
-    url.searchParams.delete(key);
-  } else {
-    url.searchParams.set(key, value);
-  }
-
-  window.location.href = url.toString();
-}
-
 export function HeaderControls({ agents, profiles }: HeaderControlsProps) {
   const { data: session } = useSession();
+  const [agentValue, setAgentValue] = useState("");
+  const [profileValue, setProfileValue] = useState("");
+  const [rangeValue, setRangeValue] = useState("7");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setAgentValue(params.get("agent") || "");
+    setProfileValue(params.get("profile") || "");
+    setRangeValue(params.get("range") || "7");
+  }, []);
+
+  function handleSelectChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const key = e.target.name;
+    const value = e.target.value;
+    const url = new URL(window.location.href);
+
+    if (!value || (key === "range" && value === "7")) {
+      url.searchParams.delete(key);
+    } else {
+      url.searchParams.set(key, value);
+    }
+
+    window.location.href = url.toString();
+  }
   const user = session?.user;
 
   return (
@@ -42,7 +53,7 @@ export function HeaderControls({ agents, profiles }: HeaderControlsProps) {
         <Users className="pointer-events-none absolute left-2.5 z-10 h-3.5 w-3.5 text-muted-foreground" />
         <select
           name="agent"
-          defaultValue=""
+          value={agentValue}
           onChange={handleSelectChange}
           className="appearance-none cursor-pointer rounded-[7px] border border-border bg-transparent py-1.5 pr-7 pl-8 text-[13.5px] font-semibold text-muted-foreground transition-all hover:border-[var(--primary)] hover:text-foreground focus:border-[var(--primary)] focus:text-foreground focus:outline-none min-w-[130px]"
         >
@@ -63,13 +74,13 @@ export function HeaderControls({ agents, profiles }: HeaderControlsProps) {
         <Briefcase className="pointer-events-none absolute left-2.5 z-10 h-3.5 w-3.5 text-muted-foreground" />
         <select
           name="profile"
-          defaultValue=""
+          value={profileValue}
           onChange={handleSelectChange}
           className="appearance-none cursor-pointer rounded-[7px] border border-border bg-transparent py-1.5 pr-7 pl-8 text-[13.5px] font-semibold text-muted-foreground transition-all hover:border-[var(--primary)] hover:text-foreground focus:border-[var(--primary)] focus:text-foreground focus:outline-none min-w-[130px]"
         >
           <option value="">All Profiles</option>
           {profiles.map((p) => (
-            <option key={p.id} value={p.id}>
+            <option key={p.profile_id} value={p.profile_id}>
               {p.profile_name}
             </option>
           ))}
@@ -86,7 +97,7 @@ export function HeaderControls({ agents, profiles }: HeaderControlsProps) {
         <Calendar className="pointer-events-none absolute left-2.5 z-10 h-3.5 w-3.5 text-muted-foreground" />
         <select
           name="range"
-          defaultValue="7"
+          value={rangeValue}
           onChange={handleSelectChange}
           className="appearance-none cursor-pointer rounded-[7px] border border-border bg-transparent py-1.5 pr-7 pl-8 text-[13.5px] font-semibold text-muted-foreground transition-all hover:border-[var(--primary)] hover:text-foreground focus:border-[var(--primary)] focus:text-foreground focus:outline-none min-w-[120px]"
         >

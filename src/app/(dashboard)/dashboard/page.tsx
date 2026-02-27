@@ -27,10 +27,12 @@ function parseDays(range?: string): number {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string }>;
+  searchParams: Promise<{ range?: string; agent?: string; profile?: string }>;
 }) {
   const params = await searchParams;
   const days = parseDays(params.range);
+  const agentId = typeof params.agent === "string" ? params.agent : undefined;
+  const profileId = typeof params.profile === "string" ? params.profile : undefined;
 
   const endDate = new Date();
   const startDate = new Date();
@@ -38,14 +40,14 @@ export default async function DashboardPage({
   const range = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
 
   const [kpi, funnel, pipeline, agents, profiles, allAgents, allProfiles, recentJobs] = await Promise.all([
-    getKPIMetricsWithDeltas(days),
-    getConversionFunnel(range),
-    getPipelineNow(),
-    getEnhancedAgentStats(range),
-    getEnhancedProfileStats(range),
+    getKPIMetricsWithDeltas(days, agentId, profileId),
+    getConversionFunnel(range, agentId, profileId),
+    getPipelineNow(agentId, profileId),
+    getEnhancedAgentStats(range, agentId, profileId),
+    getEnhancedProfileStats(range, agentId, profileId),
     getAllAgents(),
     getAllProfiles(),
-    getJobs({ limit: 10, sortBy: "received_at", sortDir: "desc" }),
+    getJobs({ agent_id: agentId, profile_id: profileId, limit: 10, sortBy: "received_at", sortDir: "desc" }),
   ]);
 
   const topProfiles = [...profiles]

@@ -14,18 +14,20 @@ export const revalidate = 300;
 export default async function PipelinePage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string }>;
+  searchParams: Promise<{ range?: string; agent?: string; profile?: string }>;
 }) {
   const params = await searchParams;
   const days = params.range === "30" ? 30 : params.range === "all" ? 365 * 5 : 7;
+  const agentId = typeof params.agent === "string" ? params.agent : undefined;
+  const profileId = typeof params.profile === "string" ? params.profile : undefined;
   const endDate = new Date();
   const startDate = new Date();
   startDate.setDate(endDate.getDate() - days);
   const range = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
 
   const [stages, jobs, allAgents, allProfiles] = await Promise.all([
-    getPipelineStages(range),
-    getActiveJobsInPipeline(),
+    getPipelineStages(range, agentId, profileId),
+    getActiveJobsInPipeline(agentId, profileId),
     getAllAgents(),
     getAllProfiles(),
   ]);

@@ -17,12 +17,20 @@ import {
 
 export const revalidate = 300;
 
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: string; agent?: string; profile?: string }>;
+}) {
+  const params = await searchParams;
+  const agentId = typeof params.agent === "string" ? params.agent : undefined;
+  const profileId = typeof params.profile === "string" ? params.profile : undefined;
+
   const [modelData, countryData, timeData, budgetData, allAgents, allProfiles] = await Promise.all([
     getProposalAnalytics(),
     getCountryStats(),
     getBestTimeToApply(),
-    getBudgetWinRate(),
+    getBudgetWinRate(profileId),
     getAllAgents(),
     getAllProfiles(),
   ]);
