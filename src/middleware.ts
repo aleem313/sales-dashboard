@@ -19,7 +19,7 @@ export const config = {
     "/connects/:path*",
     "/alerts/:path*",
     "/api/stats/:path*",
-    "/api/sync/:path*",
+    "/api/sync/sheets",
     "/api/jobs/:path*",
     "/api/settings/:path*",
     "/api/auth/clickup",
