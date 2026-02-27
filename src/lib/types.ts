@@ -94,6 +94,7 @@ export interface StatsCache {
 export interface KPIMetrics {
   totalJobs: number;
   proposalsSent: number;
+  meetingsBooked: number;
   won: number;
   lost: number;
   winRate: number;
@@ -263,7 +264,6 @@ export interface BudgetWinRate {
 // ============================================================
 
 export interface KPIMetricsWithDeltas extends KPIMetrics {
-  meetingsBooked: number;
   deltaJobs: number;
   deltaProposals: number;
   deltaMeetings: number;

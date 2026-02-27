@@ -41,17 +41,19 @@ import type {
 export async function getKPIMetrics(range?: DateRange, agentId?: string, profileId?: string): Promise<KPIMetrics> {
   const { startDate, endDate } = range ?? {};
 
+  // All KPI counts derived from clickup_status (source of truth from ClickUp)
   const result = await sql`
     SELECT
       COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN outcome = 'won' THEN 1 END) AS won,
-      COUNT(CASE WHEN outcome = 'lost' THEN 1 END) AS lost,
+      COUNT(CASE WHEN clickup_status NOT IN ('To Do', 'New', 'Proposal Ready', 'Rejected', 'Filtered Out', 'On Hold') THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN clickup_status IN ('Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS meetings_booked,
+      COUNT(CASE WHEN clickup_status = 'Won' THEN 1 END) AS won,
+      COUNT(CASE WHEN clickup_status = 'Lost' THEN 1 END) AS lost,
       ROUND(
-        COUNT(CASE WHEN outcome = 'won' THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE WHEN outcome IN ('won','lost') THEN 1 END), 0) * 100, 1
+        COUNT(CASE WHEN clickup_status = 'Won' THEN 1 END)::DECIMAL /
+        NULLIF(COUNT(CASE WHEN clickup_status IN ('Won', 'Lost') THEN 1 END), 0) * 100, 1
       ) AS win_rate,
-      COALESCE(SUM(CASE WHEN outcome = 'won' THEN won_value END), 0) AS total_revenue
+      COALESCE(SUM(CASE WHEN clickup_status = 'Won' THEN won_value END), 0) AS total_revenue
     FROM jobs
     WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
@@ -63,6 +65,7 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
   return {
     totalJobs: parseInt(row.total_jobs) || 0,
     proposalsSent: parseInt(row.proposals_sent) || 0,
+    meetingsBooked: parseInt(row.meetings_booked) || 0,
     won: parseInt(row.won) || 0,
     lost: parseInt(row.lost) || 0,
     winRate: parseFloat(row.win_rate) || 0,
@@ -1045,14 +1048,15 @@ export async function getAgentKPIMetrics(
   const result = await sql`
     SELECT
       COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN outcome = 'won' THEN 1 END) AS won,
-      COUNT(CASE WHEN outcome = 'lost' THEN 1 END) AS lost,
+      COUNT(CASE WHEN clickup_status NOT IN ('To Do', 'New', 'Proposal Ready', 'Rejected', 'Filtered Out', 'On Hold') THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN clickup_status IN ('Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS meetings_booked,
+      COUNT(CASE WHEN clickup_status = 'Won' THEN 1 END) AS won,
+      COUNT(CASE WHEN clickup_status = 'Lost' THEN 1 END) AS lost,
       ROUND(
-        COUNT(CASE WHEN outcome = 'won' THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE WHEN outcome IN ('won','lost') THEN 1 END), 0) * 100, 1
+        COUNT(CASE WHEN clickup_status = 'Won' THEN 1 END)::DECIMAL /
+        NULLIF(COUNT(CASE WHEN clickup_status IN ('Won', 'Lost') THEN 1 END), 0) * 100, 1
       ) AS win_rate,
-      COALESCE(SUM(CASE WHEN outcome = 'won' THEN won_value END), 0) AS total_revenue
+      COALESCE(SUM(CASE WHEN clickup_status = 'Won' THEN won_value END), 0) AS total_revenue
     FROM jobs
     WHERE agent_id = ${agentId}
       AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
@@ -1062,6 +1066,7 @@ export async function getAgentKPIMetrics(
   return {
     totalJobs: parseInt(row.total_jobs) || 0,
     proposalsSent: parseInt(row.proposals_sent) || 0,
+    meetingsBooked: parseInt(row.meetings_booked) || 0,
     won: parseInt(row.won) || 0,
     lost: parseInt(row.lost) || 0,
     winRate: parseFloat(row.win_rate) || 0,
@@ -1101,26 +1106,11 @@ export async function getKPIMetricsWithDeltas(
     getKPIMetrics(prevRange, agentId, profileId),
   ]);
 
-  // Count meetings (clickup_status in meeting-related statuses)
-  const meetResult = await sql`
-    SELECT
-      COUNT(CASE WHEN received_at >= ${currentRange.startDate}::timestamptz THEN 1 END) AS current_meetings,
-      COUNT(CASE WHEN received_at >= ${prevRange.startDate}::timestamptz AND received_at < ${prevRange.endDate}::timestamptz THEN 1 END) AS prev_meetings
-    FROM jobs
-    WHERE clickup_status IN ('Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won')
-      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
-      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
-  `;
-
-  const currentMeetings = parseInt(meetResult.rows[0]?.current_meetings) || 0;
-  const prevMeetings = parseInt(meetResult.rows[0]?.prev_meetings) || 0;
-
   return {
     ...current,
-    meetingsBooked: currentMeetings,
     deltaJobs: current.totalJobs - prev.totalJobs,
     deltaProposals: current.proposalsSent - prev.proposalsSent,
-    deltaMeetings: currentMeetings - prevMeetings,
+    deltaMeetings: current.meetingsBooked - prev.meetingsBooked,
     deltaWon: current.won - prev.won,
     deltaWinRate: current.winRate - prev.winRate,
   };
@@ -1136,7 +1126,7 @@ export async function getConversionFunnel(
     SELECT
       COUNT(*) AS total_jobs,
       COUNT(CASE WHEN clickup_status NOT IN ('Rejected', 'Filtered Out') OR clickup_status IS NULL THEN 1 END) AS passed_filter,
-      COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN clickup_status NOT IN ('To Do', 'New', 'Proposal Ready', 'Rejected', 'Filtered Out', 'On Hold') THEN 1 END) AS proposals_sent,
       COUNT(CASE WHEN clickup_status IN ('Sent', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS responses,
       COUNT(CASE WHEN clickup_status IN ('Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS meetings,
       COUNT(CASE WHEN clickup_status IN ('Negotiation', 'Won') THEN 1 END) AS negotiation,
