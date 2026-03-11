@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
+import Credentials from "next-auth/providers/credentials";
 import { NextResponse } from "next/server";
 import { getAgentByGithubEmail } from "./data";
 
@@ -23,11 +24,46 @@ declare module "@auth/core/jwt" {
   }
 }
 
+function parseAdminCredentials(): { email: string; password: string }[] {
+  const raw = process.env.ADMIN_CREDENTIALS;
+  if (!raw) return [];
+  return raw.split(",").map((entry) => {
+    const [email, ...rest] = entry.trim().split(":");
+    return { email: email.toLowerCase(), password: rest.join(":") };
+  });
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  providers: [GitHub],
+  providers: [
+    Credentials({
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null;
+        const users = parseAdminCredentials();
+        const match = users.find(
+          (u) =>
+            u.email === (credentials.email as string).toLowerCase() &&
+            u.password === credentials.password
+        );
+        if (!match) return null;
+        return {
+          id: match.email,
+          email: match.email,
+          name: match.email.split("@")[0],
+        };
+      },
+    }),
+    GitHub,
+  ],
   pages: { signIn: "/login" },
   callbacks: {
-    signIn({ profile }) {
+    signIn({ account, profile }) {
+      // Credentials users are already verified in authorize()
+      if (account?.provider === "credentials") return true;
+
       const allowedEmails = process.env.ALLOWED_EMAILS;
       if (!allowedEmails) return true;
 
@@ -37,10 +73,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const email = profile?.email?.toLowerCase();
       return email ? allowed.includes(email) : false;
     },
-    async jwt({ token, profile }) {
-      // On initial sign-in, check if user is an agent
-      if (profile?.email && token.role === undefined) {
-        const agent = await getAgentByGithubEmail(profile.email);
+    async jwt({ token, profile, user }) {
+      const email = profile?.email ?? user?.email;
+      if (email && token.role === undefined) {
+        const agent = await getAgentByGithubEmail(email);
         if (agent) {
           token.role = "agent";
           token.agentId = agent.id;
