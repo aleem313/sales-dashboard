@@ -1078,31 +1078,24 @@ export async function getAgentKPIMetrics(
 // CYBERPUNK DASHBOARD QUERIES
 // ============================================================
 
-function getRangeForDays(days: number): DateRange {
-  const end = new Date();
-  const start = new Date();
-  start.setDate(end.getDate() - days);
-  return { startDate: start.toISOString(), endDate: end.toISOString() };
-}
-
-function getPreviousRange(days: number): DateRange {
-  const end = new Date();
-  end.setDate(end.getDate() - days);
-  const start = new Date(end);
-  start.setDate(start.getDate() - days);
-  return { startDate: start.toISOString(), endDate: end.toISOString() };
+function getPreviousRange(range: DateRange): DateRange {
+  const start = new Date(range.startDate!);
+  const end = new Date(range.endDate!);
+  const durationMs = end.getTime() - start.getTime();
+  const prevEnd = new Date(start.getTime() - 1); // 1ms before current start
+  const prevStart = new Date(prevEnd.getTime() - durationMs);
+  return { startDate: prevStart.toISOString(), endDate: prevEnd.toISOString() };
 }
 
 export async function getKPIMetricsWithDeltas(
-  days: number = 7,
+  range: DateRange,
   agentId?: string,
   profileId?: string
 ): Promise<KPIMetricsWithDeltas> {
-  const currentRange = getRangeForDays(days);
-  const prevRange = getPreviousRange(days);
+  const prevRange = getPreviousRange(range);
 
   const [current, prev] = await Promise.all([
-    getKPIMetrics(currentRange, agentId, profileId),
+    getKPIMetrics(range, agentId, profileId),
     getKPIMetrics(prevRange, agentId, profileId),
   ]);
 
@@ -1130,7 +1123,7 @@ export async function getConversionFunnel(
       COUNT(CASE WHEN clickup_status IN ('Sent', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS responses,
       COUNT(CASE WHEN clickup_status IN ('Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS meetings,
       COUNT(CASE WHEN clickup_status IN ('Negotiation', 'Won') THEN 1 END) AS negotiation,
-      COUNT(CASE WHEN outcome = 'won' THEN 1 END) AS won
+      COUNT(CASE WHEN clickup_status = 'Won' THEN 1 END) AS won
     FROM jobs
     WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)

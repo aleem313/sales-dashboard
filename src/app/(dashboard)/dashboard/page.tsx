@@ -17,7 +17,7 @@ import {
   getJobs,
 } from "@/lib/data";
 
-import { parseDateRange, rangeToDays } from "@/lib/date-utils";
+import { parseDateRange } from "@/lib/date-utils";
 
 export const revalidate = 300;
 
@@ -27,13 +27,12 @@ export default async function DashboardPage({
   searchParams: Promise<{ range?: string; from?: string; to?: string; agent?: string; profile?: string }>;
 }) {
   const params = await searchParams;
-  const days = rangeToDays(params);
   const agentId = typeof params.agent === "string" ? params.agent : undefined;
   const profileId = typeof params.profile === "string" ? params.profile : undefined;
   const range = parseDateRange(params);
 
   const [kpi, funnel, pipeline, agents, profiles, allAgents, allProfiles, recentJobs] = await Promise.all([
-    getKPIMetricsWithDeltas(days, agentId, profileId),
+    getKPIMetricsWithDeltas(range, agentId, profileId),
     getConversionFunnel(range, agentId, profileId),
     getPipelineNow(agentId, profileId),
     getEnhancedAgentStats(range, agentId, profileId),
