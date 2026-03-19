@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -20,7 +20,7 @@ import {
   Briefcase,
   TrendingUp,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import type { LucideIcon } from "lucide-react";
 
 interface NavItem {
@@ -76,6 +76,19 @@ const agentNavSections: NavSection[] = [
   },
 ];
 
+// Global filter params to preserve across page navigation
+const PERSISTENT_PARAMS = ["range", "from", "to", "agent", "profile"];
+
+function buildHrefWithParams(basePath: string, searchParams: URLSearchParams): string {
+  const preserved = new URLSearchParams();
+  for (const key of PERSISTENT_PARAMS) {
+    const val = searchParams.get(key);
+    if (val) preserved.set(key, val);
+  }
+  const qs = preserved.toString();
+  return qs ? `${basePath}?${qs}` : basePath;
+}
+
 function SidebarNav({
   sections,
   pathname,
@@ -85,6 +98,8 @@ function SidebarNav({
   pathname: string;
   onNavigate?: () => void;
 }) {
+  const searchParams = useSearchParams();
+
   return (
     <nav className="flex flex-col gap-1 px-3 py-4">
       {sections.map((section) => (
@@ -99,7 +114,7 @@ function SidebarNav({
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                href={buildHrefWithParams(item.href, searchParams)}
                 onClick={onNavigate}
                 className={cn(
                   "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[15px] font-medium transition-colors",
@@ -160,7 +175,9 @@ export function Sidebar() {
     <aside className="hidden w-[232px] shrink-0 flex-col border-r border-border bg-card md:flex">
       <SidebarLogo homeHref={homeHref} />
       <div className="flex-1 overflow-y-auto">
-        <SidebarNav sections={sections} pathname={pathname} />
+        <Suspense fallback={<nav className="px-3 py-4" />}>
+          <SidebarNav sections={sections} pathname={pathname} />
+        </Suspense>
       </div>
       <div className="border-t border-border px-5 py-4">
         <div className="flex items-center gap-2 text-[13.5px] text-accent-green">
@@ -199,11 +216,13 @@ export function MobileSidebar() {
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <SidebarNav
-          sections={sections}
-          pathname={pathname}
-          onNavigate={() => setOpen(false)}
-        />
+        <Suspense fallback={<nav className="px-3 py-4" />}>
+          <SidebarNav
+            sections={sections}
+            pathname={pathname}
+            onNavigate={() => setOpen(false)}
+          />
+        </Suspense>
         <div className="border-t border-border px-5 py-4">
           <div className="flex items-center gap-2 text-[13.5px] text-accent-green">
             <div className="h-1.5 w-1.5 rounded-full bg-accent-green animate-pulse-glow" />
