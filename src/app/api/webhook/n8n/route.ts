@@ -190,15 +190,56 @@ async function normalizePayload(data: Record<string, unknown>) {
     clickup_task_url: (clickup?.taskUrl as string) ?? (data.clickup_task_url as string) ?? null,
     clickup_status: (clickup?.status as string) ?? (data.clickup_status as string) ?? undefined,
     proposal_text: (data.proposal as string) ?? null,
-    gpt_model: (data.gpt_model as string) ?? (scores?.aiModel as string) ?? null,
+    gpt_model:
+      (data.gpt_model as string) ??
+      (scores?.aiModel as string) ??
+      // Default: if a proposal exists, n8n uses Claude Haiku 4.5
+      (data.proposal ? "claude-haiku-4-5" : null),
     gpt_tokens_used: parseNumber(data.gpt_tokens_used ?? scores?.aiTokens) ?? null,
   };
 }
 
+// n8n outcomes that should NOT create/update a job record
+const SKIP_OUTCOMES = new Set([
+  "no_profile",
+  "duplicate",
+  "rejected",
+  "weekend",
+  "inactive",
+]);
+
+// Map n8n outcome to the appropriate clickup_status
+function outcomeToClickupStatus(outcome: string | undefined): string | undefined {
+  switch (outcome) {
+    case "proposal_created":
+      return "Proposal Ready";
+    case "gpt_error":
+      return "New";
+    default:
+      return undefined;
+  }
+}
+
 async function processWebhook(data: Record<string, unknown>) {
   const syncLog = await createSyncLog("n8n_webhook");
+  const n8nOutcome = data.outcome as string | undefined;
 
   try {
+    // Skip non-job events — these are informational only
+    if (n8nOutcome && SKIP_OUTCOMES.has(n8nOutcome)) {
+      await completeSyncLog(syncLog.id, {
+        records_synced: 0,
+        records_updated: 0,
+        status: "success",
+      });
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        outcome: n8nOutcome,
+        reason: (data.reason as string) || "Non-job event",
+      });
+    }
+
     const normalized = await normalizePayload(data);
 
     if (!normalized.job_id) {
@@ -209,6 +250,12 @@ async function processWebhook(data: Record<string, unknown>) {
         status: "failed",
       });
       return NextResponse.json({ error: "Missing job_id" }, { status: 400 });
+    }
+
+    // Set clickup_status based on n8n outcome if not already set
+    const derivedStatus = outcomeToClickupStatus(n8nOutcome);
+    if (!normalized.clickup_status && derivedStatus) {
+      normalized.clickup_status = derivedStatus;
     }
 
     const job = await upsertJob(normalized);
