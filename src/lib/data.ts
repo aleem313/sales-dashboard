@@ -1159,7 +1159,7 @@ export async function getPipelineNow(agentId?: string, profileId?: string): Prom
       COUNT(CASE WHEN clickup_status IN ('Meeting Scheduled', 'Meeting Done') THEN 1 END) AS meetings,
       COUNT(CASE WHEN clickup_status = 'Negotiation' THEN 1 END) AS negotiation
     FROM jobs
-    WHERE (outcome IS NULL OR outcome = 'pending')
+    WHERE clickup_status NOT IN ('Won', 'Lost', 'Rejected', 'Filtered Out')
       AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
   `;
