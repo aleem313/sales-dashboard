@@ -59,7 +59,7 @@ export function TopProfilesTable({ profiles }: TopProfilesTableProps) {
                   </CyberBadge>
                 </td>
                 <td className="border-b border-border px-3 py-2.5 text-[13.5px]">
-                  {p.total_jobs}
+                  {p.proposals_sent}
                 </td>
                 <td className="border-b border-border px-3 py-2.5 text-[13.5px]" style={{ color: p.interview_rate >= 30 ? "var(--accent-green)" : p.interview_rate >= 15 ? "var(--accent-warn)" : "var(--foreground)" }}>
                   {p.interview_rate}%

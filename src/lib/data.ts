@@ -1419,6 +1419,7 @@ export async function getEnhancedProfileStats(
       stack: row.stack,
       niche: row.stack,
       total_jobs: parseInt(row.total_jobs) || 0,
+      proposals_sent: proposals,
       won: parseInt(row.won) || 0,
       win_rate_pct: row.win_rate_pct ? parseFloat(row.win_rate_pct) : null,
       avg_won_value: row.avg_won_value

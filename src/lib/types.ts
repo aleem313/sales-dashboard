@@ -304,6 +304,7 @@ export interface EnhancedAgentStats extends AgentStats {
 
 export interface EnhancedProfileStats extends ProfileStats {
   niche: string | null;
+  proposals_sent: number;
   response_rate: number;
   interview_rate: number;
 }
