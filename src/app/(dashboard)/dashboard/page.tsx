@@ -112,8 +112,6 @@ export default async function DashboardPage({
           />
         </StatRow>
 
-        <SlowResponseAlert jobs={slowJobs} />
-
         <div className="mb-5 grid gap-4 lg:grid-cols-[2fr_1fr]">
           <ConversionFunnel steps={funnel} />
           <PipelineNow stages={pipeline} />
@@ -123,6 +121,8 @@ export default async function DashboardPage({
           <TopProfilesTable profiles={topProfiles} />
           <AgentLeaderboard agents={agents} />
         </div>
+
+        <SlowResponseAlert jobs={slowJobs} />
 
         <div className="rounded-xl border border-border bg-card shadow-sm">
           <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
