@@ -173,6 +173,30 @@ function JobDetail({ job }: { job: JobRow }) {
             {job.proposal_sent_at && (
               <p>Proposal Sent: {formatDate(job.proposal_sent_at)}</p>
             )}
+            {(() => {
+              const sentAt = job.proposal_sent_at ? new Date(job.proposal_sent_at) : null;
+              const receivedAt = new Date(job.received_at);
+              if (sentAt) {
+                const diffMin = Math.round((sentAt.getTime() - receivedAt.getTime()) / 60000);
+                const label = diffMin < 60 ? `${diffMin}m` : `${Math.floor(diffMin / 60)}h ${diffMin % 60}m`;
+                return (
+                  <p className={diffMin > 15 ? "text-destructive font-medium" : "text-accent-green font-medium"}>
+                    Response Time: {label}
+                  </p>
+                );
+              }
+              const preSent = ['To Do', 'New', 'Proposal Ready'];
+              if (preSent.includes(job.clickup_status)) {
+                const diffMin = Math.round((Date.now() - receivedAt.getTime()) / 60000);
+                const label = diffMin < 60 ? `${diffMin}m` : `${Math.floor(diffMin / 60)}h ${diffMin % 60}m`;
+                return (
+                  <p className={diffMin > 15 ? "text-destructive font-medium" : "text-accent-warn font-medium"}>
+                    Waiting: {label} (not sent yet)
+                  </p>
+                );
+              }
+              return null;
+            })()}
             {job.outcome_at && (
               <p>
                 Outcome ({job.outcome}): {formatDate(job.outcome_at)}

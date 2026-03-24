@@ -4,6 +4,7 @@ import { ConversionFunnel } from "@/components/overview/conversion-funnel";
 import { PipelineNow } from "@/components/overview/pipeline-now";
 import { TopProfilesTable } from "@/components/overview/top-profiles-table";
 import { AgentLeaderboard } from "@/components/overview/agent-leaderboard";
+import { SlowResponseAlert } from "@/components/overview/slow-response-alert";
 import { JobTable } from "@/components/job-table";
 import Link from "next/link";
 import {
@@ -12,6 +13,8 @@ import {
   getPipelineNow,
   getEnhancedAgentStats,
   getEnhancedProfileStats,
+  getAvgResponseTime,
+  getSlowResponseJobs,
   getAllAgents,
   getAllProfiles,
   getJobs,
@@ -31,12 +34,14 @@ export default async function DashboardPage({
   const profileId = typeof params.profile === "string" ? params.profile : undefined;
   const range = parseDateRange(params);
 
-  const [kpi, funnel, pipeline, agents, profiles, allAgents, allProfiles, recentJobs] = await Promise.all([
+  const [kpi, funnel, pipeline, agents, profiles, avgResponseTime, slowJobs, allAgents, allProfiles, recentJobs] = await Promise.all([
     getKPIMetricsWithDeltas(range, agentId, profileId),
     getConversionFunnel(range, agentId, profileId),
     getPipelineNow(agentId, profileId),
     getEnhancedAgentStats(range, agentId, profileId),
     getEnhancedProfileStats(range, agentId, profileId),
+    getAvgResponseTime(range, agentId, profileId),
+    getSlowResponseJobs(15, agentId, profileId),
     getAllAgents(),
     getAllProfiles(),
     getJobs({ agent_id: agentId, profile_id: profileId, limit: 10, sortBy: "received_at", sortDir: "desc" }),
@@ -48,6 +53,14 @@ export default async function DashboardPage({
 
   const fmt = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 
+  function formatAvgTime(hours: number | null) {
+    if (hours === null) return "—";
+    if (hours < 1) return `${Math.round(hours * 60)}m`;
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  }
+
   return (
     <>
       <Header
@@ -56,7 +69,7 @@ export default async function DashboardPage({
           profiles={allProfiles}
         />
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
-        <StatRow className="mb-5">
+        <StatRow className="mb-5 lg:!grid-cols-6">
           <StatCard
             label="Jobs Received"
             value={kpi.totalJobs}
@@ -91,7 +104,15 @@ export default async function DashboardPage({
             delta={`${fmt(kpi.deltaWinRate)}% vs last period`}
             deltaDown={kpi.deltaWinRate < 0}
           />
+          <StatCard
+            label="Avg Time to Apply"
+            value={formatAvgTime(avgResponseTime)}
+            variant={avgResponseTime !== null && avgResponseTime <= 0.25 ? "green" : avgResponseTime !== null && avgResponseTime <= 1 ? "warn" : "danger"}
+            delta="Proposal response time"
+          />
         </StatRow>
+
+        <SlowResponseAlert jobs={slowJobs} />
 
         <div className="mb-5 grid gap-4 lg:grid-cols-[2fr_1fr]">
           <ConversionFunnel steps={funnel} />

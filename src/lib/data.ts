@@ -1615,3 +1615,54 @@ export async function getOverdueItems(): Promise<PipelineJob[]> {
     };
   });
 }
+
+// Avg response time (hours) across all proposals in the period
+export async function getAvgResponseTime(
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string
+): Promise<number | null> {
+  const { startDate, endDate } = range ?? {};
+
+  const result = await sql`
+    SELECT AVG(EXTRACT(EPOCH FROM (proposal_sent_at - received_at)) / 3600) AS avg_hours
+    FROM jobs
+    WHERE proposal_sent_at IS NOT NULL
+      AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
+  `;
+
+  const val = result.rows[0]?.avg_hours;
+  return val ? parseFloat(parseFloat(val).toFixed(2)) : null;
+}
+
+// Jobs still in pre-sent status where wait time > threshold (15 min default)
+export async function getSlowResponseJobs(
+  thresholdMinutes: number = 15,
+  agentId?: string,
+  profileId?: string
+): Promise<(Job & { agent_name: string | null; profile_name: string | null; response_minutes: number })[]> {
+  const result = await sql`
+    SELECT j.*,
+      a.name AS agent_name,
+      p.profile_name,
+      EXTRACT(EPOCH FROM (NOW() - j.received_at)) / 60 AS response_minutes
+    FROM jobs j
+    LEFT JOIN agents a ON a.id = j.agent_id
+    LEFT JOIN profiles p ON p.profile_id = j.profile_id
+    WHERE j.clickup_status IN ('To Do', 'New', 'Proposal Ready')
+      AND EXTRACT(EPOCH FROM (NOW() - j.received_at)) / 60 > ${thresholdMinutes}
+      AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
+    ORDER BY j.received_at ASC
+    LIMIT 20
+  `;
+
+  return result.rows.map((row) => ({
+    ...row,
+    skills: row.skills ?? null,
+    response_minutes: Math.round(parseFloat(row.response_minutes) || 0),
+  })) as (Job & { agent_name: string | null; profile_name: string | null; response_minutes: number })[];
+}

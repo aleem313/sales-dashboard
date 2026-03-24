@@ -88,9 +88,17 @@ async function processEvent(data: Record<string, unknown>) {
     const newOutcome = mapStatusToOutcome(newStatus);
     const job = jobResult.rows[0];
 
+    // Statuses that mean a proposal hasn't been sent yet
+    const preSentStatuses = ['To Do', 'New', 'Proposal Ready', 'Rejected', 'Filtered Out', 'On Hold'];
+    const isNowSent = !preSentStatuses.includes(newStatus);
+
     await sql`
       UPDATE jobs SET
         clickup_status = ${newStatus},
+        proposal_sent_at = CASE
+          WHEN proposal_sent_at IS NULL AND ${isNowSent}::boolean THEN NOW()
+          ELSE proposal_sent_at
+        END,
         outcome = COALESCE(${newOutcome}, outcome),
         outcome_at = CASE
           WHEN ${newOutcome}::text IS NOT NULL AND ${job.outcome}::text IS NULL THEN NOW()
