@@ -3,6 +3,7 @@ import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { AgentDetailCard } from "@/components/agents/agent-detail-card";
 import {
   getEnhancedAgentStats,
+  getKPIMetricsWithDeltas,
   getAgentWeeklyActivity,
   getAllAgents,
   getAllProfiles,
@@ -21,8 +22,9 @@ export default async function AgentsPage({
   const profileId = typeof params.profile === "string" ? params.profile : undefined;
   const range = parseDateRange(params);
 
-  const [agents, allAgents, allProfiles] = await Promise.all([
+  const [agents, kpi, allAgents, allProfiles] = await Promise.all([
     getEnhancedAgentStats(range, agentId, profileId),
+    getKPIMetricsWithDeltas(range, agentId, profileId),
     getAllAgents(),
     getAllProfiles(),
   ]);
@@ -32,22 +34,22 @@ export default async function AgentsPage({
     agents.map((a) => getAgentWeeklyActivity(a.id))
   );
 
-  const totalProposals = agents.reduce((s, a) => s + a.proposals_sent, 0);
-  const totalMeetings = agents.reduce((s, a) => s + a.meetings_done, 0);
-  const totalWins = agents.reduce((s, a) => s + a.won, 0);
-  const avgHours = agents.length > 0
-    ? agents.reduce((s, a) => s + (a.avg_response_hours ?? 0), 0) / agents.length
-    : 0;
-  const negotiationRate = totalMeetings > 0
-    ? Math.round((agents.reduce((s, a) => s + a.won, 0) / totalMeetings) * 100)
+  // Compute weighted avg response time from agents with data
+  const agentsWithTime = agents.filter((a) => a.avg_response_hours !== null);
+  const totalProposalsWithTime = agentsWithTime.reduce((s, a) => s + a.proposals_sent, 0);
+  const weightedHours = totalProposalsWithTime > 0
+    ? agentsWithTime.reduce((s, a) => s + (a.avg_response_hours ?? 0) * a.proposals_sent, 0) / totalProposalsWithTime
     : 0;
 
   function formatAvgTime(hours: number) {
+    if (hours === 0) return "—";
     if (hours < 1) return `${Math.round(hours * 60)}m`;
     const h = Math.floor(hours);
     const m = Math.round((hours - h) * 60);
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
   }
+
+  const fmt = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 
   return (
     <>
@@ -60,26 +62,35 @@ export default async function AgentsPage({
         <StatRow className="mb-5">
           <StatCard
             label="Avg Time to Apply"
-            value={formatAvgTime(avgHours)}
+            value={formatAvgTime(weightedHours)}
             variant="accent"
           />
-          <StatCard label="Total Proposals" value={totalProposals} delta="This period" />
+          <StatCard
+            label="Proposals Sent"
+            value={kpi.proposalsSent}
+            delta={`${fmt(kpi.deltaProposals)} vs last period`}
+            deltaDown={kpi.deltaProposals < 0}
+          />
           <StatCard
             label="Meetings Booked"
-            value={totalMeetings}
+            value={kpi.meetingsBooked}
             variant="warn"
-            delta={`${totalProposals > 0 ? Math.round((totalMeetings / totalProposals) * 100) : 0}% booking rate`}
+            delta={`${fmt(kpi.deltaMeetings)} vs last period`}
+            deltaDown={kpi.deltaMeetings < 0}
           />
           <StatCard
-            label="Total Wins"
-            value={totalWins}
+            label="Jobs Won"
+            value={kpi.won}
             variant="green"
-            delta={`${negotiationRate}% close rate`}
+            delta={`${fmt(kpi.deltaWon)} vs last period`}
+            deltaDown={kpi.deltaWon < 0}
           />
           <StatCard
-            label="Negotiation Rate"
-            value={`${negotiationRate}%`}
-            delta="Meetings → won"
+            label="Win Rate"
+            value={`${kpi.winRate}%`}
+            variant="accent"
+            delta={`${fmt(kpi.deltaWinRate)}% vs last period`}
+            deltaDown={kpi.deltaWinRate < 0}
           />
         </StatRow>
 
