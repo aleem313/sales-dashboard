@@ -24,10 +24,8 @@ export function CredentialsForm({ callbackUrl }: { callbackUrl?: string }) {
       redirect: false,
     });
 
-    console.log("[login] signIn result:", JSON.stringify(result));
-
-    if (result?.error || result?.code) {
-      setError(`Login failed: ${result?.error || result?.code || "unknown"}`);
+    if (result?.error) {
+      setError("Invalid email or password.");
       setLoading(false);
     } else {
       // Fetch session to determine role-based redirect

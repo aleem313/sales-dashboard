@@ -24,43 +24,13 @@ declare module "@auth/core/jwt" {
   }
 }
 
-function hexToBuffer(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-  }
-  return bytes;
-}
-
-function bufferToHex(buffer: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
+// Verify PBKDF2-hashed password using Node.js crypto (dynamic import for Edge compat)
 async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
   const [salt, hash] = storedHash.split(":");
   if (!salt || !hash) return false;
-
-  const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"]
-  );
-  const derived = await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      salt: hexToBuffer(salt) as BufferSource,
-      iterations: 100000,
-      hash: "SHA-256",
-    },
-    keyMaterial,
-    512
-  );
-  return bufferToHex(derived) === hash;
+  const { pbkdf2Sync } = await import("crypto");
+  const derived = pbkdf2Sync(password, Buffer.from(salt, "hex"), 100000, 64, "sha256").toString("hex");
+  return derived === hash;
 }
 
 function parseAdminCredentials(): { email: string; password: string }[] {
@@ -87,11 +57,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         try {
           // 1. Check agents table first (agent login)
           const agent = await getAgentByEmail(email);
-          console.log("[auth] agent lookup:", email, agent ? `found (id=${agent.id})` : "not found");
-
           if (agent) {
             const valid = await verifyPassword(password, agent.password_hash);
-            console.log("[auth] password verify:", valid);
             if (valid) {
               return {
                 id: agent.id,
