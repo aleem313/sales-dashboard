@@ -50,23 +50,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
+        console.error("[auth] === AUTHORIZE CALLED ===");
         if (!credentials?.email || !credentials?.password) return null;
         const email = (credentials.email as string).toLowerCase();
         const password = credentials.password as string;
+        console.error("[auth] email:", email);
 
         // 1. Check agents table (agent login)
         let agent: Awaited<ReturnType<typeof getAgentByEmail>> = null;
         try {
           agent = await getAgentByEmail(email);
-          console.log("[auth] lookup result for", email, ":", agent ? `found id=${agent.id}` : "NOT FOUND");
+          console.error("[auth] agent found:", agent ? `YES id=${agent.id}` : "NO");
         } catch (err) {
-          console.error("[auth] DB error in getAgentByEmail:", err);
+          console.error("[auth] DB error:", err);
         }
 
         if (agent) {
           try {
             const valid = await verifyPassword(password, agent.password_hash);
-            console.log("[auth] password valid:", valid);
+            console.error("[auth] password valid:", valid);
             if (valid) {
               return {
                 id: agent.id,
