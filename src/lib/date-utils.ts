@@ -3,90 +3,103 @@
  * Supports both preset ranges (range=7d, range=today, etc.)
  * and custom date ranges (from=2024-01-01&to=2024-01-31).
  *
- * All date calculations use Pakistan Standard Time (UTC+5)
- * so "today" matches the user's local day, not UTC.
+ * Supports timezone selection via `tz` URL param:
+ *   - "pkt" (default) = Pakistan Standard Time (UTC+5)
+ *   - "et" = US Eastern Time (UTC-4)
  */
 
 import type { DateRange } from "./types";
 
-const PKT_OFFSET_MS = 5 * 60 * 60 * 1000; // UTC+5
+export type TZKey = "pkt" | "et";
 
-/** Return a Date representing "now" in PKT as if it were UTC. */
-function nowInPKT(): Date {
+const TZ_OFFSETS: Record<TZKey, { ms: number; utc: string }> = {
+  pkt: { ms: 5 * 60 * 60 * 1000, utc: "+05:00" },
+  et:  { ms: -4 * 60 * 60 * 1000, utc: "-04:00" },
+};
+
+function resolveTZ(tz?: string): TZKey {
+  if (tz === "et") return "et";
+  return "pkt";
+}
+
+/** Return a Date representing "now" in the selected timezone as if it were UTC. */
+function nowInTZ(tz: TZKey): Date {
   const utc = new Date();
-  return new Date(utc.getTime() + PKT_OFFSET_MS);
+  return new Date(utc.getTime() + TZ_OFFSETS[tz].ms);
 }
 
-/** Given a PKT-shifted Date, return start-of-day as a real UTC ISO string. */
-function startOfDayPKT(d: Date): string {
-  const iso = d.toISOString().slice(0, 10); // YYYY-MM-DD in PKT
-  return new Date(`${iso}T00:00:00+05:00`).toISOString();
+/** Given a TZ-shifted Date, return start-of-day as a real UTC ISO string. */
+function startOfDay(d: Date, tz: TZKey): string {
+  const iso = d.toISOString().slice(0, 10);
+  return new Date(`${iso}T00:00:00${TZ_OFFSETS[tz].utc}`).toISOString();
 }
 
-/** Given a PKT-shifted Date, return end-of-day as a real UTC ISO string. */
-function endOfDayPKT(d: Date): string {
-  const iso = d.toISOString().slice(0, 10); // YYYY-MM-DD in PKT
-  return new Date(`${iso}T23:59:59.999+05:00`).toISOString();
+/** Given a TZ-shifted Date, return end-of-day as a real UTC ISO string. */
+function endOfDay(d: Date, tz: TZKey): string {
+  const iso = d.toISOString().slice(0, 10);
+  return new Date(`${iso}T23:59:59.999${TZ_OFFSETS[tz].utc}`).toISOString();
 }
 
 export function parseDateRange(params: {
   range?: string;
   from?: string;
   to?: string;
+  tz?: string;
 }): DateRange {
+  const tz = resolveTZ(params.tz);
+
   // Custom date range takes priority
   if (params.from && params.to) {
-    // Treat custom dates as PKT dates
-    const startDate = new Date(`${params.from}T00:00:00+05:00`).toISOString();
-    const endDate = new Date(`${params.to}T23:59:59.999+05:00`).toISOString();
+    const startDate = new Date(`${params.from}T00:00:00${TZ_OFFSETS[tz].utc}`).toISOString();
+    const endDate = new Date(`${params.to}T23:59:59.999${TZ_OFFSETS[tz].utc}`).toISOString();
     return { startDate, endDate };
   }
 
-  const pkt = nowInPKT();
-  const startDate = startOfDayPKT(pkt);
-  const endDate = endOfDayPKT(pkt);
+  const now = nowInTZ(tz);
+  const startDate = startOfDay(now, tz);
+  const endDate = endOfDay(now, tz);
 
   switch (params.range) {
     case "today":
       return { startDate, endDate };
     case "yesterday": {
-      const y = new Date(pkt.getTime() - 24 * 60 * 60 * 1000);
-      return { startDate: startOfDayPKT(y), endDate: endOfDayPKT(y) };
+      const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      return { startDate: startOfDay(y, tz), endDate: endOfDay(y, tz) };
     }
     case "14d": {
-      const d = new Date(pkt.getTime() - 13 * 24 * 60 * 60 * 1000);
-      return { startDate: startOfDayPKT(d), endDate };
+      const d = new Date(now.getTime() - 13 * 24 * 60 * 60 * 1000);
+      return { startDate: startOfDay(d, tz), endDate };
     }
     case "30d": {
-      const d = new Date(pkt.getTime() - 29 * 24 * 60 * 60 * 1000);
-      return { startDate: startOfDayPKT(d), endDate };
+      const d = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000);
+      return { startDate: startOfDay(d, tz), endDate };
     }
     case "this_month": {
-      const iso = pkt.toISOString().slice(0, 7); // YYYY-MM
-      const ms = new Date(`${iso}-01T00:00:00+05:00`).toISOString();
+      const iso = now.toISOString().slice(0, 7);
+      const ms = new Date(`${iso}-01T00:00:00${TZ_OFFSETS[tz].utc}`).toISOString();
       return { startDate: ms, endDate };
     }
     case "last_month": {
-      const lm = new Date(pkt);
-      lm.setUTCDate(0); // last day of previous month
-      const lmIso = lm.toISOString().slice(0, 7); // YYYY-MM of previous month
-      const lmStart = new Date(`${lmIso}-01T00:00:00+05:00`).toISOString();
-      const lmEnd = endOfDayPKT(lm);
+      const lm = new Date(now);
+      lm.setUTCDate(0);
+      const lmIso = lm.toISOString().slice(0, 7);
+      const lmStart = new Date(`${lmIso}-01T00:00:00${TZ_OFFSETS[tz].utc}`).toISOString();
+      const lmEnd = endOfDay(lm, tz);
       return { startDate: lmStart, endDate: lmEnd };
     }
     case "6m": {
-      const d = new Date(pkt);
+      const d = new Date(now);
       d.setUTCMonth(d.getUTCMonth() - 6);
-      return { startDate: startOfDayPKT(d), endDate };
+      return { startDate: startOfDay(d, tz), endDate };
     }
     case "1y": {
-      const d = new Date(pkt.getTime() - 364 * 24 * 60 * 60 * 1000);
-      return { startDate: startOfDayPKT(d), endDate };
+      const d = new Date(now.getTime() - 364 * 24 * 60 * 60 * 1000);
+      return { startDate: startOfDay(d, tz), endDate };
     }
     case "7d":
     default: {
-      const d = new Date(pkt.getTime() - 6 * 24 * 60 * 60 * 1000);
-      return { startDate: startOfDayPKT(d), endDate };
+      const d = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+      return { startDate: startOfDay(d, tz), endDate };
     }
   }
 }
@@ -99,6 +112,7 @@ export function rangeToDays(params: {
   range?: string;
   from?: string;
   to?: string;
+  tz?: string;
 }): number {
   if (params.from && params.to) {
     const from = new Date(params.from);
@@ -112,12 +126,12 @@ export function rangeToDays(params: {
     case "14d": return 14;
     case "30d": return 30;
     case "this_month": {
-      const pkt = nowInPKT();
-      return pkt.getUTCDate();
+      const n = nowInTZ(resolveTZ(params.tz));
+      return n.getUTCDate();
     }
     case "last_month": {
-      const pkt = nowInPKT();
-      return new Date(Date.UTC(pkt.getUTCFullYear(), pkt.getUTCMonth(), 0)).getUTCDate();
+      const n = nowInTZ(resolveTZ(params.tz));
+      return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 0)).getUTCDate();
     }
     case "6m": return 180;
     case "1y": return 365;

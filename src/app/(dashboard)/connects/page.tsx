@@ -17,7 +17,7 @@ export const revalidate = 300;
 export default async function ConnectsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string; from?: string; to?: string; agent?: string; profile?: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string; agent?: string; profile?: string; tz?: string }>;
 }) {
   const params = await searchParams;
   const agentId = typeof params.agent === "string" ? params.agent : undefined;

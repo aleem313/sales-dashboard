@@ -5,7 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { DateRangePicker } from "@/components/date-range-picker";
-import { Users, Briefcase, LogOut } from "lucide-react";
+import { Users, Briefcase, Globe, LogOut } from "lucide-react";
 import type { Agent, Profile } from "@/lib/types";
 
 interface HeaderControlsProps {
@@ -17,11 +17,13 @@ export function HeaderControls({ agents, profiles }: HeaderControlsProps) {
   const { data: session } = useSession();
   const [agentValue, setAgentValue] = useState("");
   const [profileValue, setProfileValue] = useState("");
+  const [tzValue, setTzValue] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setAgentValue(params.get("agent") || "");
     setProfileValue(params.get("profile") || "");
+    setTzValue(params.get("tz") || "");
   }, []);
 
   function handleSelectChange(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -77,6 +79,23 @@ export function HeaderControls({ agents, profiles }: HeaderControlsProps) {
               {p.profile_name}
             </option>
           ))}
+        </select>
+        <span className="pointer-events-none absolute right-2 text-[12px] text-muted-foreground">
+          ▾
+        </span>
+      </div>
+
+      {/* Timezone filter */}
+      <div className="relative inline-flex items-center">
+        <Globe className="pointer-events-none absolute left-2.5 z-10 h-3.5 w-3.5 text-muted-foreground" />
+        <select
+          name="tz"
+          value={tzValue}
+          onChange={handleSelectChange}
+          className="appearance-none cursor-pointer rounded-[7px] border border-border bg-transparent py-1.5 pr-7 pl-8 text-[13.5px] font-semibold text-muted-foreground transition-all hover:border-[var(--primary)] hover:text-foreground focus:border-[var(--primary)] focus:text-foreground focus:outline-none min-w-[100px]"
+        >
+          <option value="">PKT</option>
+          <option value="et">Eastern</option>
         </select>
         <span className="pointer-events-none absolute right-2 text-[12px] text-muted-foreground">
           ▾

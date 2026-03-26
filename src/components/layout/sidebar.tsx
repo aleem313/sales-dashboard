@@ -75,7 +75,7 @@ const agentNavSections: NavSection[] = [
 ];
 
 // Global filter params to preserve across page navigation
-const PERSISTENT_PARAMS = ["range", "from", "to", "agent", "profile"];
+const PERSISTENT_PARAMS = ["range", "from", "to", "agent", "profile", "tz"];
 
 function buildHrefWithParams(basePath: string, searchParams: URLSearchParams): string {
   const preserved = new URLSearchParams();
