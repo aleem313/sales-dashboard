@@ -89,8 +89,8 @@ async function processEvent(data: Record<string, unknown>) {
     const job = jobResult.rows[0];
 
     // Statuses that mean a proposal hasn't been sent yet
-    const preSentStatuses = ['To Do', 'New', 'Proposal Ready', 'Rejected', 'Filtered Out', 'On Hold'];
-    const isNowSent = !preSentStatuses.includes(newStatus);
+    const preSentStatuses = ['to do', 'todo', 'new', 'proposal ready', 'n/a', 'rejected', 'filtered out', 'on hold'];
+    const isNowSent = !preSentStatuses.includes(newStatus.toLowerCase());
 
     await sql`
       UPDATE jobs SET
