@@ -54,26 +54,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const email = (credentials.email as string).toLowerCase();
         const password = credentials.password as string;
 
-        try {
-          // 1. Check agents table first (agent login)
-          const agent = await getAgentByEmail(email);
-          if (agent) {
-            const valid = await verifyPassword(password, agent.password_hash);
-            if (valid) {
-              return {
-                id: agent.id,
-                email: email,
-                name: agent.name,
-                role: "agent",
-                agentId: agent.id,
-              };
-            }
-          }
-        } catch (err) {
-          console.error("[auth] agent login error:", err);
+        // TEST: hardcoded agent login to isolate the issue
+        if (email === "mubashir.ahmed@ikonicsolution.com" && password === "cSLbU#NVcCWx") {
+          return {
+            id: "test-mubashir",
+            email: email,
+            name: "Mubashir",
+          };
         }
 
-        // 2. Fallback to admin credentials from env
+        // Admin credentials from env
         const admins = parseAdminCredentials();
         const match = admins.find(
           (u) => u.email === email && u.password === password
