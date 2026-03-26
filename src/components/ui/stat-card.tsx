@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 interface StatCardProps {
   label: string;
   value: string | number;
+  subtitle?: string;
   delta?: string;
   deltaDown?: boolean;
   variant?: "accent" | "green" | "warn" | "danger" | "default";
@@ -20,6 +21,7 @@ const variantColors: Record<string, string> = {
 export function StatCard({
   label,
   value,
+  subtitle,
   delta,
   deltaDown,
   variant = "default",
@@ -36,13 +38,20 @@ export function StatCard({
       <div className="text-[13.5px] uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </div>
-      <div
-        className={cn(
-          "mt-2 font-mono-data text-[28px] font-bold leading-none",
-          variantColors[variant]
+      <div className="mt-2 flex items-baseline gap-2">
+        <span
+          className={cn(
+            "font-mono-data text-[28px] font-bold leading-none",
+            variantColors[variant]
+          )}
+        >
+          {value}
+        </span>
+        {subtitle && (
+          <span className="text-[13.5px] font-medium text-muted-foreground/50">
+            {subtitle}
+          </span>
         )}
-      >
-        {value}
       </div>
       {delta && (
         <div
