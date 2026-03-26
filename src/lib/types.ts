@@ -100,6 +100,7 @@ export interface KPIMetrics {
   lost: number;
   winRate: number;
   totalRevenue: number;
+  badLeads: number;
 }
 
 export interface AgentStats {
@@ -270,6 +271,7 @@ export interface KPIMetricsWithDeltas extends KPIMetrics {
   deltaMeetings: number;
   deltaWon: number;
   deltaWinRate: number;
+  deltaBadLeads: number;
 }
 
 export interface FunnelStep {

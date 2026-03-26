@@ -69,7 +69,7 @@ export default async function DashboardPage({
           profiles={allProfiles}
         />
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
-        <StatRow className="mb-5 lg:!grid-cols-6">
+        <StatRow className="mb-5 lg:!grid-cols-7">
           <StatCard
             label="Jobs Received"
             value={kpi.totalJobs}
@@ -109,6 +109,13 @@ export default async function DashboardPage({
             value={formatAvgTime(avgResponseTime)}
             variant={avgResponseTime !== null && avgResponseTime <= 0.25 ? "green" : avgResponseTime !== null && avgResponseTime <= 1 ? "warn" : "danger"}
             delta="Proposal response time"
+          />
+          <StatCard
+            label="Bad Leads"
+            value={kpi.badLeads}
+            variant="danger"
+            delta={`${fmt(kpi.deltaBadLeads)} vs last period`}
+            deltaDown={kpi.deltaBadLeads < 0}
           />
         </StatRow>
 

@@ -53,7 +53,8 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
         COUNT(CASE WHEN LOWER(clickup_status) = 'won' THEN 1 END)::DECIMAL /
         NULLIF(COUNT(CASE WHEN LOWER(clickup_status) IN ('won', 'lost') THEN 1 END), 0) * 100, 1
       ) AS win_rate,
-      COALESCE(SUM(CASE WHEN LOWER(clickup_status) = 'won' THEN won_value END), 0) AS total_revenue
+      COALESCE(SUM(CASE WHEN LOWER(clickup_status) = 'won' THEN won_value END), 0) AS total_revenue,
+      COUNT(CASE WHEN LOWER(clickup_status) = 'n/a' THEN 1 END) AS bad_leads
     FROM jobs
     WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
@@ -70,6 +71,7 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
     lost: parseInt(row.lost) || 0,
     winRate: parseFloat(row.win_rate) || 0,
     totalRevenue: parseFloat(row.total_revenue) || 0,
+    badLeads: parseInt(row.bad_leads) || 0,
   };
 }
 
@@ -1076,7 +1078,8 @@ export async function getAgentKPIMetrics(
         COUNT(CASE WHEN LOWER(clickup_status) = 'won' THEN 1 END)::DECIMAL /
         NULLIF(COUNT(CASE WHEN LOWER(clickup_status) IN ('won', 'lost') THEN 1 END), 0) * 100, 1
       ) AS win_rate,
-      COALESCE(SUM(CASE WHEN LOWER(clickup_status) = 'won' THEN won_value END), 0) AS total_revenue
+      COALESCE(SUM(CASE WHEN LOWER(clickup_status) = 'won' THEN won_value END), 0) AS total_revenue,
+      COUNT(CASE WHEN LOWER(clickup_status) = 'n/a' THEN 1 END) AS bad_leads
     FROM jobs
     WHERE agent_id = ${agentId}
       AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
@@ -1091,6 +1094,7 @@ export async function getAgentKPIMetrics(
     lost: parseInt(row.lost) || 0,
     winRate: parseFloat(row.win_rate) || 0,
     totalRevenue: parseFloat(row.total_revenue) || 0,
+    badLeads: parseInt(row.bad_leads) || 0,
   };
 }
 
@@ -1126,6 +1130,7 @@ export async function getKPIMetricsWithDeltas(
     deltaMeetings: current.meetingsBooked - prev.meetingsBooked,
     deltaWon: current.won - prev.won,
     deltaWinRate: current.winRate - prev.winRate,
+    deltaBadLeads: current.badLeads - prev.badLeads,
   };
 }
 
