@@ -45,7 +45,7 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
   const result = await sql`
     SELECT
       COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN clickup_status NOT IN ('To Do', 'New', 'Proposal Ready', 'Rejected', 'Filtered Out', 'On Hold') THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN clickup_status IN ('Sent', 'Submitted', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won', 'Lost') THEN 1 END) AS proposals_sent,
       COUNT(CASE WHEN clickup_status IN ('Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS meetings_booked,
       COUNT(CASE WHEN clickup_status = 'Won' THEN 1 END) AS won,
       COUNT(CASE WHEN clickup_status = 'Lost' THEN 1 END) AS lost,
@@ -114,7 +114,7 @@ export async function getAgentStats(
       a.name,
       a.clickup_user_id,
       COUNT(j.id) AS total_jobs,
-      COUNT(CASE WHEN j.clickup_status NOT IN ('To Do', 'New', 'Proposal Ready', 'Rejected', 'Filtered Out', 'On Hold') THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN j.clickup_status IN ('Sent', 'Submitted', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won', 'Lost') THEN 1 END) AS proposals_sent,
       COUNT(CASE WHEN j.clickup_status = 'Won' THEN 1 END) AS won,
       COUNT(CASE WHEN j.clickup_status = 'Lost' THEN 1 END) AS lost,
       ROUND(
@@ -1068,7 +1068,7 @@ export async function getAgentKPIMetrics(
   const result = await sql`
     SELECT
       COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN clickup_status NOT IN ('To Do', 'New', 'Proposal Ready', 'Rejected', 'Filtered Out', 'On Hold') THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN clickup_status IN ('Sent', 'Submitted', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won', 'Lost') THEN 1 END) AS proposals_sent,
       COUNT(CASE WHEN clickup_status IN ('Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS meetings_booked,
       COUNT(CASE WHEN clickup_status = 'Won' THEN 1 END) AS won,
       COUNT(CASE WHEN clickup_status = 'Lost' THEN 1 END) AS lost,
@@ -1139,7 +1139,7 @@ export async function getConversionFunnel(
     SELECT
       COUNT(*) AS total_jobs,
       COUNT(CASE WHEN clickup_status NOT IN ('Rejected', 'Filtered Out') OR clickup_status IS NULL THEN 1 END) AS passed_filter,
-      COUNT(CASE WHEN clickup_status NOT IN ('To Do', 'New', 'Proposal Ready', 'Rejected', 'Filtered Out', 'On Hold') THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN clickup_status IN ('Sent', 'Submitted', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won', 'Lost') THEN 1 END) AS proposals_sent,
       COUNT(CASE WHEN clickup_status IN ('Sent', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS responses,
       COUNT(CASE WHEN clickup_status IN ('Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS meetings,
       COUNT(CASE WHEN clickup_status IN ('Negotiation', 'Won') THEN 1 END) AS negotiation,
@@ -1313,7 +1313,7 @@ export async function getEnhancedAgentStats(
       a.name,
       a.clickup_user_id,
       COUNT(j.id) AS total_jobs,
-      COUNT(CASE WHEN j.clickup_status NOT IN ('To Do', 'New', 'Proposal Ready', 'Rejected', 'Filtered Out', 'On Hold') THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN j.clickup_status IN ('Sent', 'Submitted', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won', 'Lost') THEN 1 END) AS proposals_sent,
       COUNT(CASE WHEN j.clickup_status = 'Won' THEN 1 END) AS won,
       COUNT(CASE WHEN j.clickup_status = 'Lost' THEN 1 END) AS lost,
       ROUND(
@@ -1413,8 +1413,8 @@ export async function getEnhancedProfileStats(
       ) AS win_rate_pct,
       AVG(CASE WHEN j.clickup_status = 'Won' THEN j.won_value END) AS avg_won_value,
       COALESCE(SUM(CASE WHEN j.clickup_status = 'Won' THEN j.won_value END), 0) AS total_revenue,
-      COUNT(CASE WHEN j.clickup_status NOT IN ('To Do', 'New', 'Rejected', 'Filtered Out', 'Proposal Ready', 'On Hold') THEN 1 END) AS moved_past_submitted,
-      COUNT(CASE WHEN j.clickup_status NOT IN ('To Do', 'New', 'Proposal Ready', 'Rejected', 'Filtered Out', 'On Hold') THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN j.clickup_status IN ('Sent', 'Submitted', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won', 'Lost') THEN 1 END) AS moved_past_submitted,
+      COUNT(CASE WHEN j.clickup_status IN ('Sent', 'Submitted', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won', 'Lost') THEN 1 END) AS proposals_sent,
       COUNT(CASE WHEN j.clickup_status IN ('Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won') THEN 1 END) AS reached_meeting
     FROM profiles p
     LEFT JOIN jobs j ON j.profile_id = p.profile_id
@@ -1464,7 +1464,7 @@ export async function getConnectsUsageByProfile(
     SELECT
       p.profile_name,
       p.stack,
-      COUNT(CASE WHEN j.clickup_status NOT IN ('To Do', 'New', 'Proposal Ready', 'Rejected', 'Filtered Out', 'On Hold') THEN 1 END) * 6 AS connects_used
+      COUNT(CASE WHEN j.clickup_status IN ('Sent', 'Submitted', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won', 'Lost') THEN 1 END) * 6 AS connects_used
     FROM profiles p
     LEFT JOIN jobs j ON j.profile_id = p.profile_id
       AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
@@ -1495,7 +1495,7 @@ export async function getConnectROIByNiche(
   const result = await sql`
     SELECT
       COALESCE(p.stack, 'Unknown') AS niche,
-      COUNT(CASE WHEN j.clickup_status NOT IN ('To Do', 'New', 'Proposal Ready', 'Rejected', 'Filtered Out', 'On Hold') THEN 1 END) * 6 AS connects_spent,
+      COUNT(CASE WHEN j.clickup_status IN ('Sent', 'Submitted', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won', 'Lost') THEN 1 END) * 6 AS connects_spent,
       COUNT(CASE WHEN j.clickup_status = 'Won' THEN 1 END) AS wins
     FROM jobs j
     JOIN profiles p ON p.profile_id = j.profile_id
@@ -1504,7 +1504,7 @@ export async function getConnectROIByNiche(
       AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
     GROUP BY COALESCE(p.stack, 'Unknown')
-    HAVING COUNT(CASE WHEN j.clickup_status NOT IN ('To Do', 'New', 'Proposal Ready', 'Rejected', 'Filtered Out', 'On Hold') THEN 1 END) > 0
+    HAVING COUNT(CASE WHEN j.clickup_status IN ('Sent', 'Submitted', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won', 'Lost') THEN 1 END) > 0
     ORDER BY connects_spent DESC
   `;
 
