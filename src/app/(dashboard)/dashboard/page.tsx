@@ -64,7 +64,9 @@ export default async function DashboardPage({
     "6m": "vs prev 6m",
     "1y": "vs prev year",
   };
-  const vsLabel = comparisonLabels[params.range ?? "7d"] ?? "vs prev period";
+  const vsLabel = params.from && params.to
+    ? "vs prev period"
+    : comparisonLabels[params.range ?? "7d"] ?? "vs prev period";
 
   function formatAvgTime(hours: number | null) {
     if (hours === null) return "—";
