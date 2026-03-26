@@ -70,8 +70,6 @@ const agentNavSections: NavSection[] = [
     label: "Overview",
     items: [
       { href: "/my-dashboard", label: "My Dashboard", icon: Gauge },
-      { href: "/my-jobs", label: "My Jobs", icon: Briefcase },
-      { href: "/my-performance", label: "My Performance", icon: TrendingUp },
     ],
   },
 ];

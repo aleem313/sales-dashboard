@@ -1,11 +1,19 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Toaster } from "sonner";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await auth();
+  if (!session) redirect("/login");
+
+  // Agents can only access /my-* routes
+  if (session.user.role === "agent") redirect("/my-dashboard");
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,8 +12,6 @@ export function CredentialsForm({ callbackUrl }: { callbackUrl?: string }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // Test commit
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,7 +28,13 @@ export function CredentialsForm({ callbackUrl }: { callbackUrl?: string }) {
       setError("Invalid email or password.");
       setLoading(false);
     } else {
-      window.location.href = callbackUrl ?? "/dashboard";
+      // Fetch session to determine role-based redirect
+      const session = await getSession();
+      if (session?.user?.role === "agent") {
+        window.location.href = "/my-dashboard";
+      } else {
+        window.location.href = callbackUrl ?? "/dashboard";
+      }
     }
   }
 

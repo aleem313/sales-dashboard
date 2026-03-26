@@ -19,6 +19,7 @@ export interface Agent {
   active: boolean;
   role: string;
   github_email: string | null;
+  password_hash: string | null;
   created_at: string;
 }
 

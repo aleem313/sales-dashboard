@@ -2,7 +2,8 @@ import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
 import Credentials from "next-auth/providers/credentials";
 import { NextResponse } from "next/server";
-import { getAgentByGithubEmail } from "./data";
+import crypto from "crypto";
+import { getAgentByGithubEmail, getAgentByEmail } from "./data";
 
 declare module "next-auth" {
   interface Session {
@@ -24,6 +25,13 @@ declare module "@auth/core/jwt" {
   }
 }
 
+function verifyPassword(password: string, storedHash: string): boolean {
+  const [salt, hash] = storedHash.split(":");
+  if (!salt || !hash) return false;
+  const derived = crypto.scryptSync(password, salt, 64).toString("hex");
+  return derived === hash;
+}
+
 function parseAdminCredentials(): { email: string; password: string }[] {
   const raw = process.env.ADMIN_CREDENTIALS;
   if (!raw) return [];
@@ -40,13 +48,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      authorize(credentials) {
+      async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
-        const users = parseAdminCredentials();
-        const match = users.find(
-          (u) =>
-            u.email === (credentials.email as string).toLowerCase() &&
-            u.password === credentials.password
+        const email = (credentials.email as string).toLowerCase();
+        const password = credentials.password as string;
+
+        // 1. Check agents table first (agent login)
+        const agent = await getAgentByEmail(email);
+        if (agent && verifyPassword(password, agent.password_hash)) {
+          return {
+            id: agent.id,
+            email: email,
+            name: agent.name,
+            role: "agent",
+            agentId: agent.id,
+          };
+        }
+
+        // 2. Fallback to admin credentials from env
+        const admins = parseAdminCredentials();
+        const match = admins.find(
+          (u) => u.email === email && u.password === password
         );
         if (!match) return null;
         return {
@@ -73,7 +95,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const email = profile?.email?.toLowerCase();
       return email ? allowed.includes(email) : false;
     },
-    async jwt({ token, profile, user }) {
+    async jwt({ token, user, profile }) {
+      // On initial sign-in, user object has our custom fields from authorize()
+      const u = user as Record<string, unknown> | undefined;
+      if (u?.role === "agent" && u?.agentId) {
+        token.role = "agent";
+        token.agentId = u.agentId as string;
+        return token;
+      }
+
+      // GitHub/admin flow: check agent table by email
       const email = profile?.email ?? user?.email;
       if (email && token.role === undefined) {
         const agent = await getAgentByGithubEmail(email);

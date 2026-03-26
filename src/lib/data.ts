@@ -167,7 +167,8 @@ export async function getAgentById(
   id: string
 ): Promise<(Agent & { profiles: Profile[] }) | null> {
   const agentResult = await sql`
-    SELECT * FROM agents WHERE id = ${id}
+    SELECT id, clickup_user_id, name, email, avatar_url, active, role, github_email, created_at
+    FROM agents WHERE id = ${id}
   `;
   if (agentResult.rows.length === 0) return null;
 
@@ -185,6 +186,7 @@ export async function getAgentById(
     active: row.active,
     role: row.role ?? "agent",
     github_email: row.github_email ?? null,
+    password_hash: null,
     created_at: row.created_at,
     profiles: profilesResult.rows as Profile[],
   };
@@ -256,7 +258,7 @@ export async function getProfileById(
   const row = profileResult.rows[0];
   let agent: Agent | null = null;
   if (row.agent_id) {
-    const agentResult = await sql`SELECT * FROM agents WHERE id = ${row.agent_id}`;
+    const agentResult = await sql`SELECT id, clickup_user_id, name, email, avatar_url, active, role, github_email, created_at FROM agents WHERE id = ${row.agent_id}`;
     agent = agentResult.rows[0] as Agent ?? null;
   }
 
@@ -439,7 +441,8 @@ export async function getSyncLogs(limit: number = 20) {
 
 export async function getAllAgents(): Promise<Agent[]> {
   const result = await sql`
-    SELECT * FROM agents ORDER BY name
+    SELECT id, clickup_user_id, name, email, avatar_url, active, role, github_email, created_at
+    FROM agents ORDER BY name
   `;
   return result.rows as Agent[];
 }
@@ -1028,6 +1031,23 @@ export async function getAgentByGithubEmail(
   `;
   if (result.rows.length === 0) return null;
   return { id: result.rows[0].id, role: result.rows[0].role };
+}
+
+export async function getAgentByEmail(
+  email: string
+): Promise<{ id: string; name: string; role: string; password_hash: string } | null> {
+  const result = await sql`
+    SELECT id, name, role, password_hash FROM agents
+    WHERE LOWER(email) = LOWER(${email}) AND active = true AND password_hash IS NOT NULL
+    LIMIT 1
+  `;
+  if (result.rows.length === 0) return null;
+  return {
+    id: result.rows[0].id,
+    name: result.rows[0].name,
+    role: result.rows[0].role,
+    password_hash: result.rows[0].password_hash,
+  };
 }
 
 export async function markJobAsSent(jobId: string): Promise<void> {

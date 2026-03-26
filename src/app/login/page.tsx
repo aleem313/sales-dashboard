@@ -25,7 +25,9 @@ export default async function LoginPage({
   searchParams: Promise<{ callbackUrl?: string; error?: string }>;
 }) {
   const session = await auth();
-  if (session) redirect("/dashboard");
+  if (session) {
+    redirect(session.user.role === "agent" ? "/my-dashboard" : "/dashboard");
+  }
 
   const { callbackUrl, error } = await searchParams;
 
