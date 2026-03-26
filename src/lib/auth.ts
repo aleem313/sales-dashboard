@@ -58,6 +58,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         let agent: Awaited<ReturnType<typeof getAgentByEmail>> = null;
         try {
           agent = await getAgentByEmail(email);
+          console.log("[auth] lookup result for", email, ":", agent ? `found id=${agent.id}` : "NOT FOUND");
         } catch (err) {
           console.error("[auth] DB error in getAgentByEmail:", err);
         }
@@ -65,6 +66,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (agent) {
           try {
             const valid = await verifyPassword(password, agent.password_hash);
+            console.log("[auth] password valid:", valid);
             if (valid) {
               return {
                 id: agent.id,
