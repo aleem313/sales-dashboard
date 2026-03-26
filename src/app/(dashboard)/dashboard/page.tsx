@@ -114,6 +114,7 @@ export default async function DashboardPage({
           <StatCard
             label="Bad Leads"
             value={kpi.badLeads}
+            subtitle={kpi.totalJobs > 0 ? `${Math.round((kpi.badLeads / kpi.totalJobs) * 100)}%` : undefined}
             variant="danger"
             delta={`${fmt(kpi.deltaBadLeads)} vs last period`}
             deltaDown={kpi.deltaBadLeads < 0}
