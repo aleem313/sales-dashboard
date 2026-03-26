@@ -1,8 +1,8 @@
 -- Add password_hash column to agents table for credential-based login
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS password_hash TEXT;
 
--- Set agent emails and password hashes
-UPDATE agents SET email = 'mubashir.ahmed@ikonicsolution.com', password_hash = '5fc425b675bbaafbf6e282d3cb4e2ce0:ccf89c54c884ff9bb9d53f221a1f518806f2447de169def63976e5c34134c4879bbe6e91fe3080d98bc5facf29dd4269bbdbb48d5882305a5bd83481199d5edb' WHERE LOWER(name) = LOWER('Mubashir');
-UPDATE agents SET email = 'shayanjaved@ikonicsolution.com', password_hash = '7fee033b66f5613589ad552e35582fe2:184d5950359e4036bc989c601a27aa8a0b2d54da68d7719a1c983545949590399d8be196f9ef78585280ea57cd5c4c6428a8a8b5d6d368ae82dfda80f7e76915' WHERE LOWER(name) = LOWER('Shayan');
-UPDATE agents SET email = 'muqadass@ikonicsolution.com', password_hash = '70893eae7a426d7a5fa7d6caab5607ec:f6156e303bc80a8e67efda6840d3917575f0b2ce86f4dff6c61ec1bff14ba5ab28d745a6b5cda7e7bf826e05d91c9f41b60b667caf3a006c6ec5f3d80e2a4c25' WHERE LOWER(name) = LOWER('Muqadass');
-UPDATE agents SET email = 'abubakarali@ikonicsolution.com', password_hash = '2eb2a59b0311bbc5c214757eb0231186:28bc67ae28ba412d7cae33e2531a1bba8508836b2310c1b100996ca5c8708722232c3299749c6515a3f29cfdc27f8267c347188f8b08ba8e555c3293036c5a80' WHERE LOWER(name) = LOWER('Abu Bakher');
+-- Set agent emails and password hashes (PBKDF2-SHA256, 100k iterations)
+UPDATE agents SET email = 'mubashir.ahmed@ikonicsolution.com', password_hash = '4ab1e9f80b51337a6b62aeef9f411374:b7ac01c9f6f51d88bc849f69171b2724e7e815bab32bb136e087a09db768a1723823d2c90891c0b24fd47426a0da7c912dabc6537cabbf29b2704add32737dc5' WHERE LOWER(name) = LOWER('Mubashir');
+UPDATE agents SET email = 'shayanjaved@ikonicsolution.com', password_hash = 'ab010a8b39a052c7fe67a6e075f14629:7fb6ff5842c32e785f3aa6037374b48f341e2d5ba7904b74d4ced733cc60cf9ffe5646851d75442caffe2bd632739e069395c759b25ba0a37a4be50a93c74108' WHERE LOWER(name) = LOWER('Shayan');
+UPDATE agents SET email = 'muqadass@ikonicsolution.com', password_hash = 'faca8fe3e956d792807ce28d0d147fef:a2d766eb9105822f2baedf9bceffdf16f6e2ed09b61a4f2a6f773a5cfe8499ca3a2f85faf3ae0ea82bb23704a1a1fd2ebdaeca2fec5646e89ebe5ba9f12ec7a6' WHERE LOWER(name) = LOWER('Muqadass');
+UPDATE agents SET email = 'abubakarali@ikonicsolution.com', password_hash = '1657f4cb50df3d3e233fa2b8f6f7f9b2:e6bd33a20ca854826a64a8d3d596ebb15d336bd3d75ecb0b952da15e2168ab363a984a92ac187c01969b4df07aeeef4908d4a92fc8cde84ede3d50e05cd7ad7b' WHERE LOWER(name) = LOWER('Abu Bakher');

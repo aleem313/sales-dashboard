@@ -2,7 +2,6 @@ import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
 import Credentials from "next-auth/providers/credentials";
 import { NextResponse } from "next/server";
-import crypto from "crypto";
 import { getAgentByGithubEmail, getAgentByEmail } from "./data";
 
 declare module "next-auth" {
@@ -25,11 +24,43 @@ declare module "@auth/core/jwt" {
   }
 }
 
-function verifyPassword(password: string, storedHash: string): boolean {
+function hexToBuffer(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
+
+function bufferToHex(buffer: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
   const [salt, hash] = storedHash.split(":");
   if (!salt || !hash) return false;
-  const derived = crypto.scryptSync(password, salt, 64).toString("hex");
-  return derived === hash;
+
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+  const derived = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt: hexToBuffer(salt) as BufferSource,
+      iterations: 100000,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    512
+  );
+  return bufferToHex(derived) === hash;
 }
 
 function parseAdminCredentials(): { email: string; password: string }[] {
@@ -55,7 +86,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // 1. Check agents table first (agent login)
         const agent = await getAgentByEmail(email);
-        if (agent && verifyPassword(password, agent.password_hash)) {
+        if (agent && (await verifyPassword(password, agent.password_hash))) {
           return {
             id: agent.id,
             email: email,
