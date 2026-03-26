@@ -30,6 +30,10 @@ async function verifyPassword(password: string, storedHash: string): Promise<boo
   if (!salt || !hash) return false;
   const { pbkdf2Sync } = await import("crypto");
   const derived = pbkdf2Sync(password, Buffer.from(salt, "hex"), 100000, 64, "sha256").toString("hex");
+  console.error("[auth] derived hash:", derived.substring(0, 20) + "...");
+  console.error("[auth] stored  hash:", hash.substring(0, 20) + "...");
+  console.error("[auth] salt:", salt);
+  console.error("[auth] hash lengths:", derived.length, hash.length);
   return derived === hash;
 }
 
