@@ -51,6 +51,19 @@ export default async function AgentsPage({
 
   const fmt = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 
+  const comparisonLabels: Record<string, string> = {
+    today: "vs yesterday",
+    yesterday: "vs day before",
+    "7d": "vs prev 7d",
+    "14d": "vs prev 14d",
+    "30d": "vs prev 30d",
+    this_month: "vs last month",
+    last_month: "vs month before",
+    "6m": "vs prev 6m",
+    "1y": "vs prev year",
+  };
+  const vsLabel = comparisonLabels[params.range ?? "7d"] ?? "vs prev period";
+
   return (
     <>
       <Header
@@ -68,28 +81,28 @@ export default async function AgentsPage({
           <StatCard
             label="Proposals Sent"
             value={kpi.proposalsSent}
-            delta={`${fmt(kpi.deltaProposals)} vs last period`}
+            delta={`${fmt(kpi.deltaProposals)} ${vsLabel}`}
             deltaDown={kpi.deltaProposals < 0}
           />
           <StatCard
             label="Meetings Booked"
             value={kpi.meetingsBooked}
             variant="warn"
-            delta={`${fmt(kpi.deltaMeetings)} vs last period`}
+            delta={`${fmt(kpi.deltaMeetings)} ${vsLabel}`}
             deltaDown={kpi.deltaMeetings < 0}
           />
           <StatCard
             label="Jobs Won"
             value={kpi.won}
             variant="green"
-            delta={`${fmt(kpi.deltaWon)} vs last period`}
+            delta={`${fmt(kpi.deltaWon)} ${vsLabel}`}
             deltaDown={kpi.deltaWon < 0}
           />
           <StatCard
             label="Win Rate"
             value={`${kpi.winRate}%`}
             variant="accent"
-            delta={`${fmt(kpi.deltaWinRate)}% vs last period`}
+            delta={`${fmt(kpi.deltaWinRate)}% ${vsLabel}`}
             deltaDown={kpi.deltaWinRate < 0}
           />
         </StatRow>
