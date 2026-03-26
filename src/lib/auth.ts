@@ -30,10 +30,6 @@ async function verifyPassword(password: string, storedHash: string): Promise<boo
   if (!salt || !hash) return false;
   const { pbkdf2Sync } = await import("crypto");
   const derived = pbkdf2Sync(password, Buffer.from(salt, "hex"), 100000, 64, "sha256").toString("hex");
-  console.error("[auth] derived hash:", derived.substring(0, 20) + "...");
-  console.error("[auth] stored  hash:", hash.substring(0, 20) + "...");
-  console.error("[auth] salt:", salt);
-  console.error("[auth] hash lengths:", derived.length, hash.length);
   return derived === hash;
 }
 
@@ -54,37 +50,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        console.error("[auth] === AUTHORIZE CALLED ===");
         if (!credentials?.email || !credentials?.password) return null;
         const email = (credentials.email as string).toLowerCase();
         const password = credentials.password as string;
-        console.error("[auth] email:", email);
 
-        // 1. Check agents table (agent login)
-        let agent: Awaited<ReturnType<typeof getAgentByEmail>> = null;
+        // 1. Check agents table first (agent login)
         try {
-          agent = await getAgentByEmail(email);
-          console.error("[auth] agent found:", agent ? `YES id=${agent.id}` : "NO");
-        } catch (err) {
-          console.error("[auth] DB error:", err);
-        }
-
-        if (agent) {
-          try {
-            const valid = await verifyPassword(password, agent.password_hash);
-            console.error("[auth] password valid:", valid);
-            if (valid) {
-              return {
-                id: agent.id,
-                email: email,
-                name: agent.name,
-                role: "agent",
-                agentId: agent.id,
-              };
-            }
-          } catch (err) {
-            console.error("[auth] verifyPassword error:", err);
+          const agent = await getAgentByEmail(email);
+          if (agent && (await verifyPassword(password, agent.password_hash))) {
+            return {
+              id: agent.id,
+              email: email,
+              name: agent.name,
+              role: "agent",
+              agentId: agent.id,
+            };
           }
+        } catch {
+          // DB or crypto error — fall through to admin check
         }
 
         // 2. Fallback to admin credentials from env
