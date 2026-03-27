@@ -1,13 +1,14 @@
 import { redirect } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { auth } from "@/lib/auth";
-import { KPICards } from "@/components/kpi-cards";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { ConversionFunnel } from "@/components/overview/conversion-funnel";
 import { PipelineNow } from "@/components/overview/pipeline-now";
 import { WinRateTrend } from "@/components/charts";
 import { AlertsBanner } from "@/components/alerts-banner";
 import {
-  getAgentKPIMetrics,
+  getKPIMetricsWithDeltas,
+  getAvgResponseTime,
   getConversionFunnel,
   getPipelineNow,
   getAgentWinRateTrend,
@@ -39,14 +40,39 @@ export default async function MyDashboardPage({
   const params = await searchParams;
   const range = parseDateRange(params);
 
-  const [kpi, funnel, pipeline, winRateTrend, recentJobs, alerts] = await Promise.all([
-    getAgentKPIMetrics(agentId, range),
+  const [kpi, avgResponseTime, funnel, pipeline, winRateTrend, recentJobs, alerts] = await Promise.all([
+    getKPIMetricsWithDeltas(range, agentId),
+    getAvgResponseTime(range, agentId),
     getConversionFunnel(range, agentId),
     getPipelineNow(agentId),
     getAgentWinRateTrend(agentId),
     getJobs({ agent_id: agentId, startDate: range.startDate, endDate: range.endDate, limit: 10, sortBy: "received_at", sortDir: "desc" }),
     getActiveAlerts(),
   ]);
+
+  const fmt = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+  const comparisonLabels: Record<string, string> = {
+    today: "vs yesterday",
+    yesterday: "vs day before",
+    "7d": "vs prev 7d",
+    "14d": "vs prev 14d",
+    "30d": "vs prev 30d",
+    this_month: "vs last month",
+    last_month: "vs month before",
+    "6m": "vs prev 6m",
+    "1y": "vs prev year",
+  };
+  const vsLabel = params.from && params.to
+    ? "vs prev period"
+    : comparisonLabels[params.range ?? "7d"] ?? "vs prev period";
+
+  function formatAvgTime(hours: number | null) {
+    if (hours === null) return "—";
+    if (hours < 1) return `${Math.round(hours * 60)}m`;
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  }
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
@@ -61,7 +87,57 @@ export default async function MyDashboardPage({
 
       <AlertsBanner alerts={alerts} />
 
-      <KPICards metrics={kpi} />
+      <StatRow className="lg:!grid-cols-7">
+        <StatCard
+          label="Jobs Received"
+          value={kpi.totalJobs}
+          variant="accent"
+          delta={`${fmt(kpi.deltaJobs)} ${vsLabel}`}
+          deltaDown={kpi.deltaJobs < 0}
+        />
+        <StatCard
+          label="Proposals Sent"
+          value={kpi.proposalsSent}
+          subtitle={kpi.totalJobs > 0 ? `${Math.round((kpi.proposalsSent / kpi.totalJobs) * 100)}%` : undefined}
+          delta={`${fmt(kpi.deltaProposals)} ${vsLabel}`}
+          deltaDown={kpi.deltaProposals < 0}
+        />
+        <StatCard
+          label="Meetings Booked"
+          value={kpi.meetingsBooked}
+          variant="warn"
+          delta={`${fmt(kpi.deltaMeetings)} ${vsLabel}`}
+          deltaDown={kpi.deltaMeetings < 0}
+        />
+        <StatCard
+          label="Jobs Won"
+          value={kpi.won}
+          variant="green"
+          delta={`${fmt(kpi.deltaWon)} ${vsLabel}`}
+          deltaDown={kpi.deltaWon < 0}
+        />
+        <StatCard
+          label="Win Rate"
+          value={`${kpi.winRate}%`}
+          variant="accent"
+          delta={`${fmt(kpi.deltaWinRate)}% ${vsLabel}`}
+          deltaDown={kpi.deltaWinRate < 0}
+        />
+        <StatCard
+          label="Avg Time to Apply"
+          value={formatAvgTime(avgResponseTime)}
+          variant={avgResponseTime !== null && avgResponseTime <= 0.25 ? "green" : avgResponseTime !== null && avgResponseTime <= 1 ? "warn" : "danger"}
+          delta="Proposal response time"
+        />
+        <StatCard
+          label="Bad Leads"
+          value={kpi.badLeads}
+          subtitle={kpi.totalJobs > 0 ? `${Math.round((kpi.badLeads / kpi.totalJobs) * 100)}%` : undefined}
+          variant="danger"
+          delta={`${fmt(kpi.deltaBadLeads)} ${vsLabel}`}
+          deltaDown={kpi.deltaBadLeads < 0}
+        />
+      </StatRow>
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <ConversionFunnel steps={funnel} />
