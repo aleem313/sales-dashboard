@@ -2,14 +2,19 @@ import { redirect } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { auth } from "@/lib/auth";
 import { KPICards } from "@/components/kpi-cards";
+import { ConversionFunnel } from "@/components/overview/conversion-funnel";
+import { PipelineNow } from "@/components/overview/pipeline-now";
 import { WinRateTrend } from "@/components/charts";
 import { AlertsBanner } from "@/components/alerts-banner";
 import {
   getAgentKPIMetrics,
+  getConversionFunnel,
+  getPipelineNow,
   getAgentWinRateTrend,
   getJobs,
   getActiveAlerts,
 } from "@/lib/data";
+import { parseDateRange } from "@/lib/date-utils";
 import {
   Table,
   TableBody,
@@ -22,16 +27,24 @@ import { Badge } from "@/components/ui/badge";
 
 export const revalidate = 300;
 
-export default async function MyDashboardPage() {
+export default async function MyDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: string; from?: string; to?: string; tz?: string }>;
+}) {
   const session = await auth();
   if (!session?.user?.agentId) redirect("/dashboard");
 
   const agentId = session.user.agentId;
+  const params = await searchParams;
+  const range = parseDateRange(params);
 
-  const [kpi, winRateTrend, recentJobs, alerts] = await Promise.all([
-    getAgentKPIMetrics(agentId),
+  const [kpi, funnel, pipeline, winRateTrend, recentJobs, alerts] = await Promise.all([
+    getAgentKPIMetrics(agentId, range),
+    getConversionFunnel(range, agentId),
+    getPipelineNow(agentId),
     getAgentWinRateTrend(agentId),
-    getJobs({ agent_id: agentId, limit: 10, sortBy: "received_at", sortDir: "desc" }),
+    getJobs({ agent_id: agentId, startDate: range.startDate, endDate: range.endDate, limit: 10, sortBy: "received_at", sortDir: "desc" }),
     getActiveAlerts(),
   ]);
 
@@ -49,6 +62,11 @@ export default async function MyDashboardPage() {
       <AlertsBanner alerts={alerts} />
 
       <KPICards metrics={kpi} />
+
+      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+        <ConversionFunnel steps={funnel} />
+        <PipelineNow stages={pipeline} />
+      </div>
 
       <WinRateTrend data={winRateTrend} />
 
