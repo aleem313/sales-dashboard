@@ -97,6 +97,26 @@ export async function markProposalSentAction(jobId: string, clickupTaskId?: stri
   revalidatePath("/dashboard");
 }
 
+export async function triggerClickUpFullSync() {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000";
+
+  const res = await fetch(`${baseUrl}/api/sync/clickup`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.CRON_SECRET ?? ""}`,
+    },
+  });
+
+  const result = await res.json();
+  revalidatePath("/settings");
+  revalidatePath("/dashboard");
+  revalidatePath("/pipeline");
+  revalidatePath("/jobs");
+  return result;
+}
+
 export async function triggerSheetsSync() {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`

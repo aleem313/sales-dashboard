@@ -1179,7 +1179,7 @@ export async function getPipelineNow(agentId?: string, profileId?: string): Prom
 > {
   const result = await sql`
     SELECT
-      COUNT(CASE WHEN LOWER(clickup_status) IN ('to do', 'todo', 'new', 'proposal ready', 'n/a') THEN 1 END) AS todo,
+      COUNT(CASE WHEN LOWER(clickup_status) IN ('to do', 'todo', 'new', 'proposal ready', 'n/a', 'on hold') THEN 1 END) AS todo,
       COUNT(CASE WHEN LOWER(clickup_status) IN ('proposal submitted', 'sent', 'submitted', 'following up', 'prototype required', 'prototype done', 'prototype sent') THEN 1 END) AS in_progress,
       COUNT(CASE WHEN LOWER(clickup_status) IN ('meeting scheduled', 'meeting done') THEN 1 END) AS meetings,
       COUNT(CASE WHEN LOWER(clickup_status) = 'negotiation' THEN 1 END) AS negotiation

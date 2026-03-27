@@ -199,15 +199,6 @@ async function normalizePayload(data: Record<string, unknown>) {
   };
 }
 
-// n8n outcomes that should NOT create/update a job record
-const SKIP_OUTCOMES = new Set([
-  "no_profile",
-  "duplicate",
-  "rejected",
-  "weekend",
-  "inactive",
-]);
-
 // Map n8n outcome to the appropriate clickup_status
 function outcomeToClickupStatus(outcome: string | undefined): string | undefined {
   switch (outcome) {
@@ -215,6 +206,11 @@ function outcomeToClickupStatus(outcome: string | undefined): string | undefined
       return "Proposal Ready";
     case "gpt_error":
       return "New";
+    case "rejected":
+    case "no_profile":
+    case "weekend":
+    case "inactive":
+      return "N/A";
     default:
       return undefined;
   }
@@ -225,21 +221,6 @@ async function processWebhook(data: Record<string, unknown>) {
   const n8nOutcome = data.outcome as string | undefined;
 
   try {
-    // Skip non-job events — these are informational only
-    if (n8nOutcome && SKIP_OUTCOMES.has(n8nOutcome)) {
-      await completeSyncLog(syncLog.id, {
-        records_synced: 0,
-        records_updated: 0,
-        status: "success",
-      });
-      return NextResponse.json({
-        ok: true,
-        skipped: true,
-        outcome: n8nOutcome,
-        reason: (data.reason as string) || "Non-job event",
-      });
-    }
-
     const normalized = await normalizePayload(data);
 
     if (!normalized.job_id) {

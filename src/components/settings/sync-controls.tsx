@@ -4,12 +4,13 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { triggerClickUpSync, triggerSheetsSync } from "@/lib/actions";
+import { triggerClickUpSync, triggerClickUpFullSync, triggerSheetsSync } from "@/lib/actions";
 import { toast } from "sonner";
 import { RefreshCw, Link } from "lucide-react";
 
 export function SyncControls() {
   const [clickupLoading, setClickupLoading] = useState(false);
+  const [fullSyncLoading, setFullSyncLoading] = useState(false);
   const [sheetsLoading, setSheetsLoading] = useState(false);
   const searchParams = useSearchParams();
 
@@ -78,6 +79,32 @@ export function SyncControls() {
             className={`mr-2 h-4 w-4 ${clickupLoading ? "animate-spin" : ""}`}
           />
           {clickupLoading ? "Syncing..." : "Sync ClickUp"}
+        </Button>
+        <Button
+          onClick={async () => {
+            setFullSyncLoading(true);
+            try {
+              const result = await triggerClickUpFullSync();
+              if (result.error) {
+                toast.error(`Full sync failed: ${result.error}`);
+              } else {
+                toast.success(
+                  `Full sync complete: ${result.created ?? 0} created, ${result.updated ?? 0} updated, ${result.skipped ?? 0} unchanged`
+                );
+              }
+            } catch {
+              toast.error("Full sync failed");
+            } finally {
+              setFullSyncLoading(false);
+            }
+          }}
+          disabled={fullSyncLoading}
+          variant="outline"
+        >
+          <RefreshCw
+            className={`mr-2 h-4 w-4 ${fullSyncLoading ? "animate-spin" : ""}`}
+          />
+          {fullSyncLoading ? "Full Syncing..." : "Full Sync ClickUp"}
         </Button>
         <Button
           onClick={handleSheetsSync}

@@ -25,10 +25,19 @@ export async function fetchTask(
   return res.json();
 }
 
+export interface ClickUpTask {
+  id: string;
+  status: { status: string };
+  name: string;
+  date_created?: string;
+  url?: string;
+  assignees?: { id: number; username: string }[];
+}
+
 export async function fetchTasks(
   listId: string,
   page: number = 0
-): Promise<{ tasks: { id: string; status: { status: string }; name: string }[] }> {
+): Promise<{ tasks: ClickUpTask[] }> {
   if (!CLICKUP_API_KEY) return { tasks: [] };
 
   const res = await fetch(
@@ -41,6 +50,19 @@ export async function fetchTasks(
 
   if (!res.ok) throw new Error(`ClickUp API error: ${res.status}`);
   return res.json();
+}
+
+/** Fetch ALL tasks from a list, paginating automatically. */
+export async function fetchAllTasks(listId: string): Promise<ClickUpTask[]> {
+  const all: ClickUpTask[] = [];
+  let page = 0;
+  while (true) {
+    const { tasks } = await fetchTasks(listId, page);
+    if (tasks.length === 0) break;
+    all.push(...tasks);
+    page++;
+  }
+  return all;
 }
 
 export async function updateTaskStatus(
