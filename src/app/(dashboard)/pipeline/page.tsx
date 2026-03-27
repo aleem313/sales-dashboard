@@ -35,7 +35,6 @@ export default async function PipelinePage({
     "todo": "todo",
     "new": "todo",
     "proposal ready": "todo",
-    "on hold": "todo",
     "proposal submitted": "submitted",
     "submitted": "submitted",
     "sent": "submitted",
