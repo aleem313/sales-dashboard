@@ -1,13 +1,9 @@
 import { Header } from "@/components/layout/header";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
-import { ConversionFunnel } from "@/components/overview/conversion-funnel";
-import { PipelineNow } from "@/components/overview/pipeline-now";
 import { AgentDetailCard } from "@/components/agents/agent-detail-card";
 import {
   getEnhancedAgentStats,
   getKPIMetricsWithDeltas,
-  getConversionFunnel,
-  getPipelineNow,
   getAgentWeeklyActivity,
   getAllAgents,
   getAllProfiles,
@@ -26,11 +22,9 @@ export default async function AgentsPage({
   const profileId = typeof params.profile === "string" ? params.profile : undefined;
   const range = parseDateRange(params);
 
-  const [agents, kpi, funnel, pipeline, allAgents, allProfiles] = await Promise.all([
+  const [agents, kpi, allAgents, allProfiles] = await Promise.all([
     getEnhancedAgentStats(range, agentId, profileId),
     getKPIMetricsWithDeltas(range, agentId, profileId),
-    getConversionFunnel(range, agentId, profileId),
-    getPipelineNow(agentId, profileId),
     getAllAgents(),
     getAllProfiles(),
   ]);
@@ -80,18 +74,15 @@ export default async function AgentsPage({
           profiles={allProfiles}
         />
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
-        <StatRow className="mb-5 lg:!grid-cols-7">
+        <StatRow className="mb-5">
           <StatCard
-            label="Jobs Received"
-            value={kpi.totalJobs}
+            label="Avg Time to Apply"
+            value={formatAvgTime(weightedHours)}
             variant="accent"
-            delta={`${fmt(kpi.deltaJobs)} ${vsLabel}`}
-            deltaDown={kpi.deltaJobs < 0}
           />
           <StatCard
             label="Proposals Sent"
             value={kpi.proposalsSent}
-            subtitle={kpi.totalJobs > 0 ? `${Math.round((kpi.proposalsSent / kpi.totalJobs) * 100)}%` : undefined}
             delta={`${fmt(kpi.deltaProposals)} ${vsLabel}`}
             deltaDown={kpi.deltaProposals < 0}
           />
@@ -116,26 +107,7 @@ export default async function AgentsPage({
             delta={`${fmt(kpi.deltaWinRate)}% ${vsLabel}`}
             deltaDown={kpi.deltaWinRate < 0}
           />
-          <StatCard
-            label="Avg Time to Apply"
-            value={formatAvgTime(weightedHours)}
-            variant={weightedHours === 0 ? "accent" : weightedHours <= 0.25 ? "green" : weightedHours <= 1 ? "warn" : "danger"}
-            delta="Proposal response time"
-          />
-          <StatCard
-            label="Bad Leads"
-            value={kpi.badLeads}
-            subtitle={kpi.totalJobs > 0 ? `${Math.round((kpi.badLeads / kpi.totalJobs) * 100)}%` : undefined}
-            variant="danger"
-            delta={`${fmt(kpi.deltaBadLeads)} ${vsLabel}`}
-            deltaDown={kpi.deltaBadLeads < 0}
-          />
         </StatRow>
-
-        <div className="mb-5 grid gap-4 lg:grid-cols-[2fr_1fr]">
-          <ConversionFunnel steps={funnel} />
-          <PipelineNow stages={pipeline} />
-        </div>
 
         {agents.length === 0 ? (
           <p className="text-muted-foreground">No agents found.</p>
