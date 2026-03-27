@@ -14,22 +14,24 @@ import {
   getAllAgents,
   getAllProfiles,
 } from "@/lib/data";
+import { parseDateRange } from "@/lib/date-utils";
 
 export const revalidate = 300;
 
 export default async function AnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string; agent?: string; profile?: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string; agent?: string; profile?: string; tz?: string }>;
 }) {
   const params = await searchParams;
   const agentId = typeof params.agent === "string" ? params.agent : undefined;
   const profileId = typeof params.profile === "string" ? params.profile : undefined;
+  const range = parseDateRange(params);
 
   const [modelData, countryData, timeData, budgetData, allAgents, allProfiles] = await Promise.all([
-    getProposalAnalytics(),
-    getCountryStats(),
-    getBestTimeToApply(),
+    getProposalAnalytics(range),
+    getCountryStats(range),
+    getBestTimeToApply(range),
     getBudgetWinRate(profileId),
     getAllAgents(),
     getAllProfiles(),

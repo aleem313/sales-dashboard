@@ -4,6 +4,7 @@ import { getJobs, getAllAgents, getAllProfiles } from "@/lib/data";
 import { JobFilters } from "@/components/job-filters";
 import { JobTable } from "@/components/job-table";
 import { JobPagination } from "@/components/job-pagination";
+import { parseDateRange } from "@/lib/date-utils";
 
 export const revalidate = 60;
 
@@ -21,6 +22,11 @@ export default async function JobsPage({
   const outcome = typeof params.outcome === "string" ? params.outcome : undefined;
   const budgetType = typeof params.budget_type === "string" ? params.budget_type : undefined;
   const search = typeof params.search === "string" ? params.search : undefined;
+  const rangeStr = typeof params.range === "string" ? params.range : undefined;
+  const fromStr = typeof params.from === "string" ? params.from : undefined;
+  const toStr = typeof params.to === "string" ? params.to : undefined;
+  const tzStr = typeof params.tz === "string" ? params.tz : undefined;
+  const range = parseDateRange({ range: rangeStr, from: fromStr, to: toStr, tz: tzStr });
 
   const [jobsResult, agents, profiles] = await Promise.all([
     getJobs({
@@ -30,6 +36,8 @@ export default async function JobsPage({
       outcome,
       budget_type: budgetType,
       search,
+      startDate: range.startDate,
+      endDate: range.endDate,
       page,
       limit: 25,
     }),
