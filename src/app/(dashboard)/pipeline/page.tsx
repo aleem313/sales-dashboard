@@ -29,16 +29,32 @@ export default async function PipelinePage({
     getAllProfiles(),
   ]);
 
-  const countFor = (keys: string[]) =>
-    stages
-      .filter((s) => keys.some((k) => s.key.toLowerCase().includes(k.toLowerCase())))
-      .reduce((sum, s) => sum + s.count, 0);
+  // Map each clickup_status to a stat card bucket
+  const cardBuckets: Record<string, string> = {
+    "to do": "todo",
+    "todo": "todo",
+    "new": "todo",
+    "proposal ready": "todo",
+    "on hold": "todo",
+    "proposal submitted": "submitted",
+    "submitted": "submitted",
+    "sent": "submitted",
+    "following up": "submitted",
+    "prototype required": "proto",
+    "prototype done": "proto",
+    "prototype sent": "proto",
+    "meeting scheduled": "meeting",
+    "meeting done": "meeting",
+    "negotiation": "negotiation",
+  };
 
-  const todo = countFor(["To Do", "New", "Proposal Ready"]);
-  const submitted = countFor(["Submitted", "Sent"]);
-  const proto = countFor(["Prototype"]);
-  const meeting = countFor(["Meeting"]);
-  const negotiation = countFor(["Negotiation"]);
+  const counts: Record<string, number> = { todo: 0, submitted: 0, proto: 0, meeting: 0, negotiation: 0 };
+  for (const s of stages) {
+    const bucket = cardBuckets[s.key.toLowerCase()];
+    if (bucket) counts[bucket] += s.count;
+  }
+
+  const { todo, submitted, proto, meeting, negotiation } = counts;
 
   return (
     <>
