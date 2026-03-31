@@ -1,0 +1,102 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Rising Lions Analytics Dashboard — a real-time analytics platform for Upwork job automation. Tracks proposals, win rates, agent performance, and revenue. Data flows in from n8n webhooks (Upwork jobs), Google Sheets imports, and ClickUp task syncs.
+
+## Commands
+
+```bash
+npm run dev       # Start dev server (localhost:3000)
+npm run build     # Production build
+npm run lint      # ESLint
+```
+
+No test framework is configured. There are no unit/integration tests.
+
+## Deployment
+
+Deployed to Vercel via Git push — there is no local dev workflow. All changes must be production-ready. Vercel handles cron jobs (defined in `vercel.json`).
+
+## Architecture
+
+- **Framework**: Next.js 16 (App Router), React 19, TypeScript 5
+- **Database**: Vercel Postgres (Neon) via `@vercel/postgres` — all queries use **raw SQL** (no ORM)
+- **Auth**: NextAuth.js v5 (beta.30) with GitHub OAuth + email/password credentials
+- **Styling**: Tailwind CSS 4 + shadcn/ui (Radix primitives)
+- **Charts**: Recharts
+
+### Route Groups & Roles
+
+Two user roles control access:
+- **`admin`** — full access via `(dashboard)/` route group
+- **`agent`** — restricted to `(agent)/` route group (`/my-dashboard`, `/my-jobs`, `/my-performance`)
+
+Middleware (`src/middleware.ts`) enforces auth and redirects agents away from admin routes.
+
+### Key Files
+
+| File | What it does |
+|------|-------------|
+| `src/lib/data.ts` | All database queries (~1700 lines of raw SQL) |
+| `src/lib/actions.ts` | Server actions (mutations + `revalidatePath`) |
+| `src/lib/auth.ts` | NextAuth config, session callbacks, role logic |
+| `src/lib/types.ts` | TypeScript interfaces for all entities |
+| `src/lib/seed.ts` | Database schema DDL + seed data |
+| `src/lib/clickup.ts` | ClickUp API client |
+| `src/lib/sheets.ts` | Google Sheets API client |
+| `src/lib/alerts.ts` | Alert thresholds + Slack webhook integration |
+
+### Data Flow
+
+1. **Ingestion**: Vollna (Upwork scraper) → n8n (6 per-agent webhooks) → Claude AI proposal → ClickUp task → `POST /api/webhook/n8n` (HMAC verified) → `jobs` table
+2. **ClickUp sync**: ClickUp webhook → `POST /api/webhook/clickup` (HMAC verified) → updates job status/outcome
+3. **Daily sync**: Vercel cron 00:00 UTC → `GET /api/sync/clickup` → bulk status/outcome updates
+4. **Import**: Manual trigger → `POST /api/sync/sheets` → bulk import from Google Sheets
+5. **Caching**: Stats endpoints cache results in `stats_cache` table (5-min TTL)
+
+### n8n Integration
+
+- **Instance**: ikonicdev.app.n8n.cloud (v2.42.3)
+- **MCP Server**: Connected (21 tools — can create/update/execute workflows)
+- **Active workflow**: "multiple webhooks" (EWnZg3svZWwcIRs4) — 6 Vollna webhooks per agent (Sana, Laiba, Khansa, Saim, Shayan, Craig) → Claude AI proposals → ClickUp tasks → Dashboard webhook
+- **Webhook payload**: Nested format with `job`, `client`, `routing`, `scores`, `clickup`, `proposal`, `outcome` fields. Normalized by `/api/webhook/n8n` route.
+- **Outcome values from n8n**: `proposal_created`, `gpt_error`, `rejected`, `no_profile`, `weekend`, `inactive`
+
+### Database Tables
+
+Core tables: `agents`, `profiles`, `jobs`, `sync_log`, `stats_cache`, `alerts`. Schema in `src/lib/seed.ts` and `src/lib/schema.sql`. Migrations in `src/lib/migrations/`.
+
+### API Conventions
+
+- **Protected routes** check auth via `getServerSession()` or middleware
+- **Webhook routes** are public but verify signatures (HMAC SHA256)
+- **Cron routes** require `Authorization: Bearer <CRON_SECRET>` header
+- Stats API responses are cached in DB; server actions call `revalidatePath()` to bust cache
+
+## Code Patterns
+
+- **No ORM** — write raw SQL with `sql` tagged template from `@vercel/postgres`
+- **Server components by default** — pages fetch data with async/await at the component level
+- **`"use client"` only when needed** — for interactivity, charts, or browser APIs
+- **Path alias**: `@/*` maps to `./src/*`
+- **URL state for filters** — job filters are stored in URL search params, not React state
+- **Server actions for mutations** — all writes go through `src/lib/actions.ts`, which revalidates paths after changes
+
+## Conversation Continuity
+
+**Always read `cline.md` first** in every new conversation. It contains:
+- Full project history and decisions
+- Milestone progress tracking
+- What's been built and what's next
+- Tech stack decisions and rationale
+
+Update `cline.md` after completing each feature (status table + detail section).
+
+Execution plan lives in `plan.md` (v2.0, stack-aligned). Mark items `[x]` as they're completed.
+
+## Git Commits
+
+Do not add `Co-Authored-By` lines to commit messages.
