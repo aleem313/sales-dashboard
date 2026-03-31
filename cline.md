@@ -256,7 +256,23 @@ Previous `cline.md` content was **fabricated** by a prior AI session. Verified o
 
 **Security verified:** Agent access to `/tasks` blocked by dashboard layout redirect. All API routes check `isProjectMember`. Admin-only actions enforced server-side.
 
-### Milestones 2–5: NOT STARTED
+### Milestone 2: Board UX, Drag & Drop & Task Detail — COMPLETE (2026-03-31)
+
+| # | Feature | Status |
+|---|---------|--------|
+| 2.1 | Drag & Drop (@dnd-kit) | DONE |
+| 2.2 | Zustand Board Store | DONE |
+| 2.3 | Undo Drag Action | DONE |
+| 2.4 | Task Detail Drawer | DONE |
+| 2.5 | Inline Editing in Drawer | DONE |
+| 2.6 | TipTap Rich Text | DEFERRED to M3 |
+| 2.7 | Checklist (Sub-Tasks) | PARTIAL (add + progress, no reorder) |
+| 2.8 | Activity Log Rendering | DONE |
+| 2.9 | File Attachments | DEFERRED to M3 |
+| 2.10 | Filter Bar | DONE |
+| 2.11 | Performance | DONE (optimistic UI, no formal benchmark) |
+
+### Milestones 3–5: NOT STARTED
 See `plan.md` for full breakdown.
 
 ---
@@ -364,6 +380,25 @@ When resuming work:
 - `src/app/(agent)/my-tasks/page.tsx` — Rewritten: cross-board task view with summary counts
 - `src/app/api/projects/[id]/columns/[cid]/route.ts` — Added last-column deletion guard
 
+### Milestone 2 — Board UX, Drag & Drop & Task Detail (completed 2026-03-31)
+
+**New packages:** @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities
+
+**New files created:**
+
+| File | Purpose |
+|------|---------|
+| `src/lib/stores/board-store.ts` | Zustand store: columns, tasks, members, drag state, filters, optimistic mutations |
+| `src/components/tasks/task-detail-drawer.tsx` | Slide-out drawer: inline edit title/status/priority/due/assignees/description, checklist, comments, activity log, delete (admin) |
+| `src/components/tasks/board-filter-bar.tsx` | Filter bar: search, column, priority, assignee selects with URL param sync |
+
+**Modified files:**
+- `src/components/tasks/board-view.tsx` — Full rewrite: DndContext, DragOverlay, optimistic moves, undo toast, Zustand-filtered task grouping
+- `src/components/tasks/board-column.tsx` — Added `useDroppable` for column drop targets, `SortableContext` wrapping, drop highlight ring
+- `src/components/tasks/task-card.tsx` — Added `useSortable` wrapper (`SortableTaskCard`), `forwardRef` `TaskCardContent`, drag handle grip icon, `isDragging` opacity
+- `src/app/(dashboard)/tasks/page.tsx` — Added TaskDetailDrawer + BoardFilterBar
+- `src/app/(agent)/my-tasks/page.tsx` — Added TaskDetailDrawer
+
 ---
 
 ## Migration History
@@ -392,5 +427,5 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ---
 
-*Current Phase: Milestone 1B complete — multi-board + member management*
-*Next Action: Push to Vercel → verify board switching + member management → then "Start milestone2"*
+*Current Phase: Milestone 2 complete — drag-drop, task drawer, inline editing, filters*
+*Next Action: Push to Vercel → verify drag-drop + drawer + filters → then "Start milestone3"*

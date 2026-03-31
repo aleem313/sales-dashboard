@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { BoardView } from "@/components/tasks/board-view";
 import { BoardHeader } from "@/components/tasks/board-header";
 import { BoardSelectorWrapper } from "@/components/tasks/board-selector-wrapper";
+import { TaskDetailDrawer } from "@/components/tasks/task-detail-drawer";
+import { BoardFilterBar } from "@/components/tasks/board-filter-bar";
 import {
   getDefaultProject,
   getProjectById,
@@ -83,7 +85,9 @@ async function BoardContent({ searchParams }: Props) {
         availableAgents={available}
         isAdmin={isAdmin}
       />
+      <BoardFilterBar columns={columns} members={members} />
       <BoardView columns={columns} tasks={tasks} projectId={project.id} members={members} />
+      <TaskDetailDrawer columns={columns} isAdmin={isAdmin} />
     </>
   );
 }
