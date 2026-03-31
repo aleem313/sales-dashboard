@@ -611,6 +611,26 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
                   </div>
                 </div>
               </FieldRow>
+
+              {/* Connects Used */}
+              <FieldRow icon={<span className="h-4 w-4 flex items-center justify-center text-xs font-bold text-muted-foreground">#</span>} label="Connects Used">
+                <Input
+                  type="number"
+                  min={0}
+                  value={((task.custom_fields as Record<string, unknown>)?._connects_used as number) ?? ""}
+                  onChange={(e) => {
+                    const val = e.target.value === "" ? undefined : parseInt(e.target.value);
+                    const cf = { ...(task.custom_fields ?? {}), _connects_used: val };
+                    setTask((prev) => prev ? { ...prev, custom_fields: cf } : prev);
+                  }}
+                  onBlur={() => {
+                    const cf = { ...(task.custom_fields ?? {}) };
+                    updateField("custom_fields", cf);
+                  }}
+                  placeholder="0"
+                  className="h-7 text-xs w-[80px] border-0 bg-transparent hover:bg-muted/50 px-2"
+                />
+              </FieldRow>
             </div>
 
             <Separator />
