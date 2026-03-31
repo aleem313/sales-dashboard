@@ -408,6 +408,48 @@ When resuming work:
 | 004 | pre-existing | — | Cyberpunk schema: connects_used, priority, niche, bonus_earned |
 | 005 | pre-existing | — | Agent password_hash column + 4 PBKDF2 passwords |
 | **006** | **2026-03-31** | **M1** | **Task management: 18 tables, 14 indexes, 3 triggers + default seed** |
+| **007** | **pending** | **M2B** | **Fix activity_log trigger: allow DELETE, block only UPDATE** |
+
+### Analysis Session — 2026-03-31 (Post-M2 Deployment)
+
+**Bugs identified:**
+1. **Board/task deletion failing** — ROOT CAUSE: `trg_activity_log_append_only` trigger raises EXCEPTION on DELETE, blocking CASCADE deletes. Fix: migration 007 (allow DELETE, block only UPDATE).
+2. **Admin restriction issue** — System admin (env-var login) has no `agents` row, so can't be in `project_members`. When all project members demoted to "member", operations relying on project-level admin role fail. Fix: always check `session.user.role === "admin"` as universal override.
+3. **Drag handle limitation** — Only grip icon triggers drag, not full card. Fix: apply dnd-kit listeners to entire card div.
+4. **Assignee dropdown not ClickUp-like** — Using flat chip toggles instead of searchable popover. Fix: new `AssigneePopover` component with avatar list + search.
+
+**Documents produced:**
+- `task_board_cases.md` — Rewritten v2.0 with 10 sections, 4 levels deep, ClickUp-parity coverage
+- `plan.md` — Upgraded to v3.0 with 8 milestones (M2B urgent fixes, M3–M7 new features)
+- `task_board_fixes.md` — Technical fix guide with code samples for all 5 bugs + UI/UX improvement suggestions
+
+**Next action:** Execute Milestone 3 (ClickUp Card UI & Column Management)
+
+### Milestone 2B — Critical Bug Fixes (completed 2026-03-31)
+
+**New files created:**
+
+| File | Purpose |
+|------|---------|
+| `src/lib/migrations/007_fix_activity_log_trigger.sql` | Fix trigger: allow DELETE (CASCADE), block only UPDATE |
+
+**Modified files:**
+
+| File | Change |
+|------|--------|
+| `src/app/api/migrate/route.ts` | Added v=007 support with `run007()` function |
+| `src/lib/task-data.ts` | `deleteProject()`: explicit activity_log cleanup before CASCADE; `deleteTask()`: same; `createProject()` + `ensureDefaultProject()`: 13 Upwork statuses instead of 4; removed unused `conditions` variable; max columns → 20 |
+| `src/lib/task-actions.ts` | `deleteBoardAction()` + `deleteTaskAction()`: return meaningful error messages |
+| `src/components/tasks/task-card.tsx` | Removed GripVertical drag handle; entire card is now draggable via dnd-kit listeners; tags show 3 before overflow |
+| `src/components/tasks/task-detail-drawer.tsx` | Added confirmation dialog for task deletion; improved error messages |
+| `src/components/tasks/board-header.tsx` | Improved delete error toast with server error message |
+| `src/components/tasks/board-members-panel.tsx` | Added "no admin members" warning banner |
+| `src/app/api/projects/[id]/columns/route.ts` | Max columns raised from 15 to 20 |
+
+**Deployment note:** After deploying, run migration 007:
+```
+https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=007&secret=YOUR_CRON_SECRET
+```
 
 ### Migration 006 Details
 

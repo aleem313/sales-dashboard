@@ -218,12 +218,21 @@ async function ensureDefaultProject(): Promise<Project | null> {
     `;
   }
 
-  // Create default columns
+  // Create default columns (13 Upwork workflow statuses)
   const defaultColumns = [
-    { name: 'To Do', position: 1000, color: '#6b7280', is_done: false },
-    { name: 'In Progress', position: 2000, color: '#3b82f6', is_done: false },
-    { name: 'In Review', position: 3000, color: '#f59e0b', is_done: false },
-    { name: 'Done', position: 4000, color: '#22c55e', is_done: true },
+    { name: 'Todo', position: 1000, color: '#6b7280', is_done: false },
+    { name: 'Proposal Submitted', position: 2000, color: '#3b82f6', is_done: false },
+    { name: 'Prototype Required', position: 3000, color: '#eab308', is_done: false },
+    { name: 'Prototype Done', position: 4000, color: '#22c55e', is_done: false },
+    { name: 'Prototype Submitted', position: 5000, color: '#14b8a6', is_done: false },
+    { name: 'In Chat', position: 6000, color: '#8b5cf6', is_done: false },
+    { name: 'Meeting Scheduled', position: 7000, color: '#6366f1', is_done: false },
+    { name: 'Meeting Done', position: 8000, color: '#06b6d4', is_done: false },
+    { name: 'Negotiation', position: 9000, color: '#f97316', is_done: false },
+    { name: 'Lost', position: 10000, color: '#ef4444', is_done: false },
+    { name: 'On Hold', position: 11000, color: '#f59e0b', is_done: false },
+    { name: 'N/A', position: 12000, color: '#9ca3af', is_done: false },
+    { name: 'Won', position: 13000, color: '#10b981', is_done: true },
   ];
   for (const col of defaultColumns) {
     await sql`
@@ -332,12 +341,21 @@ export async function createProject(data: {
     ON CONFLICT (project_id, agent_id) DO NOTHING
   `;
 
-  // Create default columns
+  // Create default columns (13 Upwork workflow statuses)
   const defaultColumns = [
-    { name: 'To Do', position: 1000, color: '#6b7280', is_done: false },
-    { name: 'In Progress', position: 2000, color: '#3b82f6', is_done: false },
-    { name: 'In Review', position: 3000, color: '#f59e0b', is_done: false },
-    { name: 'Done', position: 4000, color: '#22c55e', is_done: true },
+    { name: 'Todo', position: 1000, color: '#6b7280', is_done: false },
+    { name: 'Proposal Submitted', position: 2000, color: '#3b82f6', is_done: false },
+    { name: 'Prototype Required', position: 3000, color: '#eab308', is_done: false },
+    { name: 'Prototype Done', position: 4000, color: '#22c55e', is_done: false },
+    { name: 'Prototype Submitted', position: 5000, color: '#14b8a6', is_done: false },
+    { name: 'In Chat', position: 6000, color: '#8b5cf6', is_done: false },
+    { name: 'Meeting Scheduled', position: 7000, color: '#6366f1', is_done: false },
+    { name: 'Meeting Done', position: 8000, color: '#06b6d4', is_done: false },
+    { name: 'Negotiation', position: 9000, color: '#f97316', is_done: false },
+    { name: 'Lost', position: 10000, color: '#ef4444', is_done: false },
+    { name: 'On Hold', position: 11000, color: '#f59e0b', is_done: false },
+    { name: 'N/A', position: 12000, color: '#9ca3af', is_done: false },
+    { name: 'Won', position: 13000, color: '#10b981', is_done: true },
   ];
   for (const col of defaultColumns) {
     await sql`
@@ -364,7 +382,12 @@ export async function updateProject(
 }
 
 export async function deleteProject(projectId: string): Promise<boolean> {
-  // CASCADE handles tasks, columns, members, etc.
+  // Delete activity_log entries first (trigger blocks CASCADE deletes before migration 007)
+  await sql`
+    DELETE FROM activity_log
+    WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ${projectId})
+  `;
+  // CASCADE handles tasks, columns, members, tags, etc.
   const result = await sql`DELETE FROM projects WHERE id = ${projectId}`;
   return (result.rowCount ?? 0) > 0;
 }
@@ -645,9 +668,6 @@ export async function getProjectTasks(
   projectId: string,
   filters: TaskFilters = {}
 ): Promise<Task[]> {
-  // Build WHERE clauses
-  const conditions: string[] = [`t.project_id = '${projectId}'`];
-
   // We'll use parameterized queries via a single query with COALESCE patterns
   // to avoid SQL injection while keeping the query flexible
   const result = await sql`
@@ -952,11 +972,13 @@ export async function moveTask(
   return result.rows[0] as Task;
 }
 
-export async function deleteTask(taskId: string, actorId?: string | null): Promise<boolean> {
+export async function deleteTask(taskId: string, _actorId?: string | null): Promise<boolean> {
   const task = await sql`SELECT title FROM tasks WHERE id = ${taskId}`;
   if (task.rows.length === 0) return false;
 
-  // Activity log will be cascade-deleted, but we could log to a separate audit table if needed
+  // Delete activity_log entries first (trigger blocks CASCADE deletes before migration 007)
+  await sql`DELETE FROM activity_log WHERE task_id = ${taskId}`;
+  // CASCADE handles assignees, tags, comments, checklist, attachments
   await sql`DELETE FROM tasks WHERE id = ${taskId}`;
   return true;
 }

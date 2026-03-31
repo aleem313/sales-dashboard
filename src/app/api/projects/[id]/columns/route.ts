@@ -49,10 +49,10 @@ export async function POST(
     return NextResponse.json({ error: "Column name must be 50 characters or less" }, { status: 422 });
   }
 
-  // Enforce max 15 columns
+  // Enforce max 20 columns
   const existing = await getProjectColumns(projectId);
-  if (existing.length >= 15) {
-    return NextResponse.json({ error: "Maximum 15 columns per project" }, { status: 422 });
+  if (existing.length >= 20) {
+    return NextResponse.json({ error: "Maximum 20 columns per project" }, { status: 422 });
   }
 
   const column = await createColumn(

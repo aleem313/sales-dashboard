@@ -70,6 +70,7 @@ export function BoardColumnComponent({ column, tasks, onTaskClick, onAddTask }: 
               <SortableTaskCard
                 key={task.id}
                 task={task}
+                columnColor={column.color}
                 onClick={() => onTaskClick?.(task.id)}
               />
             ))

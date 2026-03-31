@@ -44,3 +44,7 @@ next-env.d.ts
 
 # reference/design files
 agency-dashboard*.html
+
+
+#claude
+/.claude

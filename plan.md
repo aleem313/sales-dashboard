@@ -1,15 +1,16 @@
 # Rising Lion — Task Management Module
-## Execution Plan v2.0 (Stack-Aligned)
+## Execution Plan v3.0 (ClickUp-Parity Restructure)
 
 > **Stack:** Next.js 16 (App Router) + React 19 + TypeScript 5 · next-auth v5 (beta.30) · @vercel/postgres (raw SQL, no ORM) · Recharts · Radix UI · shadcn/ui · Tailwind CSS v4 · lucide-react · date-fns · react-day-picker · sonner · next-themes · clsx · tailwind-merge · ESLint 9
 > **Deployment:** Vercel (serverless) — no local dev workflow; all changes must be production-ready
 > **Realtime:** Server-Sent Events (SSE) — Vercel does not support persistent WebSocket connections
 > **Background Jobs:** Vercel Cron + QStash (Upstash) for async job processing
 > **File Storage:** Vercel Blob for attachments
-> **State Management:** Zustand (to be installed)
-> **Drag & Drop:** @dnd-kit (to be installed)
+> **State Management:** Zustand (installed)
+> **Drag & Drop:** @dnd-kit (installed)
 > **Rich Text:** TipTap (to be installed)
-> **Timeline:** 5 milestones
+> **Timeline:** 8 milestones (M1–M2 complete, M2B–M7 new)
+> **Cases & Edge Cases:** `task_board_cases.md` v2.0
 
 ---
 
@@ -405,292 +406,336 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ---
 
-## Milestone 3: Custom Fields & n8n Automation (Sprint 3)
-> Theme: 6-type custom field system, bidirectional n8n integration, outbound webhooks.
+## Milestone 2B: Critical Bug Fixes & Foundation Repair (Sprint 2B — URGENT)
+> Theme: Fix all broken functionality before adding new features. Must be done first.
+> **Ref:** `task_board_cases.md` v2.0 — Edge Cases §10
 
-### 3.1 Custom Field Backend
+### 2B.1 Fix Activity Log Append-Only Trigger Blocking Deletes
+
+> **ROOT CAUSE:** `trg_activity_log_append_only` raises EXCEPTION on DELETE, blocking CASCADE deletes for tasks and boards.
+
+- [x] Create migration `007_fix_activity_log_trigger.sql`:
+  - Replace trigger function `prevent_activity_log_mutation()` to ONLY block UPDATE (not DELETE)
+  - Allow DELETE on activity_log rows (needed for CASCADE from tasks and projects)
+  - Keep UPDATE blocked (append-only semantics preserved for audit integrity)
+- [ ] Run migration via browser URL `/api/migrate?v=007`
+- [ ] Verify: delete a test task → succeeds without error
+- [ ] Verify: delete a board with tasks → full cascade works
+
+### 2B.2 Fix Board Deletion (API + Frontend)
+
+- [x] Update `deleteProject()` in `task-data.ts` — add explicit pre-delete of activity_log entries via tasks in project (defense-in-depth)
+- [x] Update `deleteBoardAction()` — return meaningful error
+- [x] Frontend: board header delete flow shows error messages from server
+- [ ] Test: delete board with 0 tasks → succeeds
+- [ ] Test: delete board with N tasks → confirmation modal → succeeds
+
+### 2B.3 Fix Task Deletion (API + Frontend)
+
+- [x] Update `deleteTask()` in `task-data.ts` — explicitly delete activity_log WHERE task_id before deleting task (defense-in-depth)
+- [x] Update `deleteTaskAction()` — return error message on failure
+- [x] Frontend: task detail drawer delete button → confirmation dialog + proper error toast on failure
+- [ ] Test: delete task from drawer → succeeds, card removed from board
+
+### 2B.4 Fix Admin Role Logic (System Admin vs Project Admin)
+
+- [x] Verified: system admin (env-var login, `session.user.role === "admin"`) bypasses project_members checks (agentId is null → membership check skipped in all API routes)
+- [x] `updateMemberRole()` last-admin guard already prevents demoting last admin
+- [x] Added warning banner in members panel: "This board has no admin members"
+- [ ] Test: demote all project members to "member" → system admin can still manage board
+
+### 2B.5 Update Default Columns to Upwork Statuses
+
+- [x] Update `createProject()` in `task-data.ts` — changed from 4 to 13 default columns
+- [x] Update `ensureDefaultProject()` with same 13 columns
+- [x] Existing boards unaffected — only new boards get new defaults
+- [x] Max columns raised from 15 to 20 in API route validation
+
+### 2B.6 Fix Drag — Make Entire Card Draggable
+
+- [x] Modified `SortableTaskCard` — dnd-kit `listeners` and `attributes` applied to entire card div
+- [x] Removed `GripVertical` drag handle icon and `dragHandleProps` pattern
+- [x] 8px activation distance preserved (PointerSensor config in board-view.tsx)
+- [x] Tags now show 3 (up from 2) before overflow count
+
+---
+
+## Milestone 3: ClickUp Card UI & Column Management (Sprint 3)
+> Theme: Redesign task cards to match card.png, add column CRUD UI, fix assignee dropdown.
+> **Ref:** `task_board_cases.md` v2.0 — §4 (Tasks), §9.1 (Card UI)
+
+### 3.1 Task Card Redesign (Match card.png)
+
+- [ ] Redesign `TaskCardContent` in `task-card.tsx` to match ClickUp card layout:
+  - Row 1: Status color bar (left border, 3px, column color)
+  - Row 2: Priority flag icon (colored) + Task title (2-line clamp)
+  - Row 3: Labels/tags as colored rounded chips (max 3 + "+N")
+  - Row 4: Custom field values (max 2, if `show_on_card` enabled) — e.g., "Connects Used: 5"
+  - Row 5: Metadata icons row — due date, start date, time estimate, subtask count
+  - Row 6: Bottom bar — assignee avatars (left, max 3 + overflow), comment + attachment counts (right)
+- [ ] Remove drag grip icon (card is fully draggable per 2B.6)
+- [ ] Add "..." context menu button on hover (top-right)
+- [ ] Card hover: elevated shadow + border highlight
+- [ ] Card colors: subtle priority-based left border OR status color bar
+
+### 3.2 Card Context Menu
+
+- [ ] Use Radix `DropdownMenu` on "..." button (not ContextMenu — more mobile-friendly)
+- [ ] Options: Edit (opens drawer), Move to → (submenu with columns), Copy Link, Assign →, Delete (admin only, red)
+- [ ] "Copy Link" copies `{domain}/tasks?board={id}&task={taskId}` to clipboard + toast
+- [ ] "Delete" shows confirmation dialog
+
+### 3.3 Column Management UI (Admin)
+
+- [ ] Column header "..." menu (admin only): Rename, Change Color, Set WIP Limit, Mark as Done, Delete
+- [ ] Inline rename: double-click column name → inline input → Enter/blur to save
+- [ ] Color picker: 12 preset colors + custom hex input → updates column dot + card left border
+- [ ] WIP limit input: number field; 0 = no limit; badge on column header shows "5/10"
+- [ ] Delete column: if has tasks → modal with "Move N tasks to:" dropdown → bulk move → delete
+- [ ] "Add Status" button: "+" at end of column row → inline name input → creates new column at end
+- [ ] Column reorder: admin can drag column headers to reorder (dnd-kit column-level context)
+
+### 3.4 Fix Assignee Dropdown (ClickUp-Style)
+
+- [ ] Redesign assignee selection in task drawer and task create modal:
+  - Trigger: click "+" button next to assignee avatars
+  - Dropdown: search input + scrollable member list with avatars + names
+  - Checkmark on assigned members; click to toggle
+  - Close on outside click
+- [ ] Use Radix `Popover` + custom content (not shadcn Select)
+- [ ] Keyboard navigation: arrow keys + Enter to toggle + Escape to close
+- [ ] Show in both task create modal AND task detail drawer
+
+### 3.5 Labels (Tags) Enhancement
+
+- [ ] Label management in project settings (or inline from task drawer):
+  - Create label: name + color picker (12 presets + custom hex)
+  - Edit label: change name/color → reflected across all tasks
+  - Delete label: confirmation + cascade remove from tasks
+- [ ] Task drawer: "Add Label" → dropdown with existing labels + "Create new" option at bottom
+- [ ] Card: show label chips (max 3 + "+N") — colored background, white/dark text
+- [ ] Filter bar: add "Label" filter dropdown
+- [ ] API: `GET/POST /api/projects/[id]/labels`, `PATCH/DELETE /api/projects/[id]/labels/[lid]`
+
+### 3.6 Start Date Field
+
+- [ ] Add start_date to task create modal (calendar picker, optional)
+- [ ] Show in task detail drawer next to due date
+- [ ] Show on card if set (small calendar icon + date)
+- [ ] Validation: start_date ≤ due_date (warn if violated, don't block)
+- [ ] DB: column already exists (`tasks.start_date`)
+
+### 3.7 Time Estimate & Time Tracking Fields
+
+- [ ] Time estimate: hours/minutes input in task drawer
+  - Stored in `tasks.custom_fields` as `{ "_time_estimate_minutes": number }`
+  - Card shows "Est: 2h 30m" if set and show_on_card
+- [ ] Time tracked: manual hours/minutes entry per session
+  - Stored in `tasks.custom_fields` as `{ "_time_tracked_minutes": number }`
+  - Card shows "1h 30m / 2h 30m" (tracked / estimate)
+- [ ] No live timer in v1 — manual entry only
+
+---
+
+## Milestone 4: Task Detail Drawer Enhancements (Sprint 4)
+> Theme: Subtasks, share task, checklist improvements, rich text.
+> **Ref:** `task_board_cases.md` v2.0 — §4.5 (Subtasks), §4.6 (Share), §8 (Comments)
+
+### 4.1 Subtasks / Checklist Enhancements
+
+- [ ] Display checklist items as toggleable checkboxes in drawer (currently only add + progress bar)
+- [ ] Each item: checkbox + title + delete (X) button
+- [ ] Toggle individual items via `toggleChecklistItemAction`
+- [ ] Drag-to-reorder items (dnd-kit nested sortable context within drawer)
+- [ ] Bulk add: paste multi-line text → each line becomes a checklist item
+- [ ] Card: show "3/5" subtask count with progress bar
+
+### 4.2 Share Task Dialog (Match share-task.png)
+
+- [ ] "Share" button in task drawer header (Share2 icon)
+- [ ] Dialog content:
+  - Task title with status color dot
+  - "Invite by name or email" input + "Invite" button (adds as board member if not already)
+  - "Share link with anyone" toggle (stores `is_public` flag on task)
+  - "Private link" with "Copy link" button
+  - "Default permission" dropdown: Full edit, Can comment, View only
+  - "Share with" section: board members list with toggles
+- [ ] "Copy link" → copies `{domain}/tasks?board={projectId}&task={taskId}`
+- [ ] DB: add `is_public BOOLEAN DEFAULT false` to tasks table (migration 008)
+
+### 4.3 Rich Text Description (TipTap)
+
+- [ ] Install `@tiptap/react @tiptap/starter-kit @tiptap/extension-link @tiptap/extension-underline @tiptap/extension-placeholder dompurify`
+- [ ] Replace description `<textarea>` with TipTap editor in task drawer
+- [ ] Toolbar: Bold, Italic, Underline, Link, Bullet List, Numbered List
+- [ ] Sanitize HTML with DOMPurify before storing
+- [ ] Render HTML safely in activity log previews
+
+### 4.4 File Attachments
+
+- [ ] Install `@vercel/blob`
+- [ ] Upload button in task drawer → select file → upload to Vercel Blob
+- [ ] Store metadata in `file_attachments` table (filename, url, size, mime_type, uploader)
+- [ ] Display: file list with icons, download links, delete (uploader or admin)
+- [ ] Max file size: 10MB; allowed types: images, PDFs, docs, spreadsheets
+- [ ] Attachment count shown on card
+
+### 4.5 Comment Improvements
+
+- [ ] Show individual comment bubbles (not just activity log entries)
+- [ ] Edit button (pencil icon, author only, 60min window)
+- [ ] Delete button (trash icon, author 60min or admin, soft delete)
+- [ ] Reply button → indented reply under parent comment
+- [ ] "(edited)" badge on edited comments
+- [ ] Rich text comments (TipTap, reusing 4.3 editor)
+
+---
+
+## Milestone 5: Custom Fields & Grouping (Sprint 5)
+> Theme: User-defined custom fields, board grouping views, advanced filtering.
+> **Ref:** `task_board_cases.md` v2.0 — §7 (Custom Fields), §9.2.3 (Groups)
+
+### 5.1 Custom Field Backend
 
 - [ ] `GET /api/projects/[id]/custom-fields` — list field definitions (ordered by position)
 - [ ] `POST /api/projects/[id]/custom-fields` — create field definition (admin only)
-- [ ] `PATCH /api/projects/[id]/custom-fields/[fid]` — update field (admin only); type cannot change after creation (return 400)
-- [ ] `DELETE /api/projects/[id]/custom-fields/[fid]` — archive (not delete); values preserved in task JSONB
-- [ ] Store task custom field values in `tasks.custom_fields` JSONB: `{ "field_id": value }`
-- [ ] JSONB queries: `WHERE custom_fields @> '{"field_id": "value"}'` (parameterized, no dynamic SQL)
+- [ ] `PATCH /api/projects/[id]/custom-fields/[fid]` — update (admin); type locked after creation
+- [ ] `DELETE /api/projects/[id]/custom-fields/[fid]` — archive (not delete); values preserved in JSONB
+- [ ] 6 types: Text, Number, Dropdown, Multi-select, Date, Boolean
+- [ ] Values stored in `tasks.custom_fields` JSONB: `{ "field_id": value }`
 
-### 3.2 Custom Field Types — All 6
+### 5.2 Custom Field Management UI (Admin)
 
-- [ ] **Text** — single-line input; max 1000 chars; HTML stripped; filters: Contains, Equals, Is empty
-- [ ] **Number** — numeric input + optional unit label; reject NaN/Infinity; filters: =, >, <, >=, <=, Between
-- [ ] **Dropdown** — single-select from admin-configured options; color per option; filters: Equals, Is any of
-- [ ] **Multi-select** — checkbox list; admin configures options; deleted options auto-removed from tasks; filters: Contains, Contains all, Contains none
-- [ ] **Date** — calendar picker (react-day-picker); stored as UTC ISO string; filters: Before, After, Between, Is empty
-- [ ] **Boolean** — toggle/checkbox; null treated as false; filters: Is true, Is false
+- [ ] Project Settings > Custom Fields tab
+- [ ] Create form: name, type (locked), options (dropdown/multi-select), required flag, show_on_card toggle
+- [ ] Edit: change name, options, required, show_on_card (type immutable)
+- [ ] Archive: hidden from UI, data preserved, restorable
+- [ ] Drag-to-reorder field position
 
-### 3.3 Custom Field Management UI (Admin)
+### 5.3 Custom Fields in Task UI
 
-- [ ] Field Manager in Project Settings > Custom Fields tab (`src/app/(dashboard)/tasks/settings/page.tsx`)
-- [ ] Create field form: name, type (locked after creation), options (for dropdown/multi-select), required flag, show on card toggle
-- [ ] Drag-to-reorder fields (dnd-kit); position saved via server action
-- [ ] Archive field: hidden from task UIs but data preserved; restore option
-- [ ] Removing a dropdown option: prompt to bulk-reassign orphaned values
+- [ ] Type-specific renderers in task drawer (text input, number input, select, checkboxes, date picker, toggle)
+- [ ] Show on card: max 3 fields controlled by `show_on_card` + position (compact "Label: Value" format)
+- [ ] Validation: required fields, number rejects NaN, etc.
+- [ ] Pre-built field: "Connects Used" (Number type) as first custom field example
 
-### 3.4 Custom Fields in Task UI
+### 5.4 Board Grouping / List View
 
-- [ ] Render configured custom fields on task cards (max 3, controlled by `show_on_card` flag)
-- [ ] Custom fields section in task detail drawer (below standard fields); inline editable
-- [ ] Type-specific renderers: text input, number input, select dropdown, multi-select checkboxes, date picker, boolean toggle
-- [ ] Validation: number rejects non-numeric; required fields show inline error on save
+- [ ] Group selector in board header: "Group by: Status (default) | Assignee | Priority | Label"
+- [ ] Group by Status = current board view (columns)
+- [ ] Group by Assignee = one column per assignee + "Unassigned" column
+- [ ] Group by Priority = columns: Urgent, High, Medium, Low, None
+- [ ] Group by Label = one column per label + "No label" column
+- [ ] Persisted in URL param: `?group=status|assignee|priority|label`
 
-### 3.5 Custom Field Filtering
+### 5.5 Advanced Filter System
 
-- [ ] Filter operators auto-generated per field type in filter bar UI
-- [ ] Server-side filtering for >500 tasks (JSONB query); client-side for ≤500
-- [ ] Validate filter type matches field type; return 422 on mismatch
+- [ ] Multi-condition filters: field → operator → value
+- [ ] Standard fields: Assignee, Status, Priority, Due Date, Labels, Created By
+- [ ] Custom field filters: type-specific operators
+- [ ] Server-side filtering for >500 tasks; client-side for ≤500
+- [ ] Filter state in URL params
 
-### 3.6 n8n Inbound Webhook (Full)
+### 5.6 Saved Views
 
-> **Integration:** Extends the webhook endpoint from Milestone 1.7.
+- [ ] Save current filter + sort + group as named view
+- [ ] `GET/POST/DELETE /api/projects/[id]/saved-views`
+- [ ] Sidebar section listing saved views
+- [ ] "Unsaved changes" indicator when view modified
 
-- [ ] Full payload support: `{ title, column_id, priority, assignee_ids[], due_date, tags[], custom_fields: {} }`
-- [ ] Field mapping: apply `webhook_configs.field_map` to transform incoming payload keys
+---
+
+## Milestone 6: n8n Automation & Webhooks (Sprint 6)
+> Theme: Bidirectional n8n integration, webhook management, outbound events.
+
+### 6.1 n8n Inbound Webhook (Full)
+
+- [ ] Full payload: `{ title, column_id, priority, assignee_ids[], due_date, tags[], custom_fields: {} }`
+- [ ] Field mapping via `webhook_configs.field_map`
+- [ ] Activity log: `actor_label = "Automation (n8n)"`
 - [ ] Unmapped keys silently ignored; logged in `webhook_event_log`
-- [ ] Activity log: webhook-created tasks show `actor_label = "Automation (n8n)"`
 
-### 3.7 n8n Field Mapping UI
+### 6.2 Webhook Field Mapping UI
 
-- [ ] Visual mapper in Project Settings > Webhooks tab
-- [ ] Left column: incoming payload keys (editable) → Right column: task field dropdown
-- [ ] Test payload: admin pastes sample JSON → preview how fields would map
-- [ ] Save mapping to `webhook_configs.field_map` JSONB via server action
+- [ ] Visual mapper in Project Settings > Webhooks
+- [ ] Test payload: paste JSON → preview mapped fields
+- [ ] Save to `webhook_configs.field_map` JSONB
 
-### 3.8 Webhook Event Logs (Admin)
+### 6.3 Webhook Event Logs
 
-- [ ] Admin page: `src/app/(dashboard)/tasks/settings/webhooks/page.tsx`
-- [ ] Table: last 100 inbound events per project; columns: timestamp, direction, status code, payload preview, result
-- [ ] Expandable row: full payload JSON viewer
-- [ ] Export to CSV
+- [ ] Admin page: last 100 events, expandable payload viewer, export CSV
 
-### 3.9 Outbound Webhooks (Rising Lion → n8n)
+### 6.4 Outbound Webhooks (via QStash)
 
-> **Pattern:** Use QStash (Upstash) for reliable async delivery from serverless. No BullMQ.
-
+- [ ] Install `@upstash/qstash`
 - [ ] 6 event types: `task.created`, `task.status_changed`, `task.completed`, `task.assigned`, `task.due_soon`, `comment.added`
-- [ ] On trigger: publish to QStash with target = outbound URL from `webhook_configs`
-- [ ] HMAC-SHA256 signature in `X-Rising-Lion-Signature` header on every outbound request
-- [ ] `X-Rising-Lion-Source` header: if inbound webhook contains this header, skip outbound fire (prevent loops)
-- [ ] Circuit breaker: if task modified >10 times in 60s via webhooks, pause automation + log warning
-- [ ] QStash handles retry (3 attempts, exponential backoff) and dead-letter
-- [ ] Log all outbound attempts in `webhook_event_log`
-
-### 3.10 Activity Log Backend (Complete)
-
-- [ ] Capture all field changes: title, description, status (column move), priority, assignees, due date, tags, custom fields, checklist items, attachments
-- [ ] Log entry fields: `{ id, task_id, actor_id, actor_label, action_type, field, old_value, new_value, metadata, created_at }`
-- [ ] Webhook-triggered changes: `actor_id = null`, `actor_label = "Automation (n8n)"`
-- [ ] Bulk operations: one log entry per task affected
-- [ ] All timestamps from DB `NOW()`, not application time
+- [ ] HMAC-SHA256 signature; loop prevention via `X-Rising-Lion-Source` header
+- [ ] Circuit breaker: 10+ modifications in 60s → pause automation
 
 ---
 
-## Milestone 4: Notifications, Permissions & Advanced Filtering (Sprint 4)
-> Theme: Full permission enforcement, notification system, advanced filtering, saved views.
+## Milestone 7: Notifications, Performance & Polish (Sprint 7)
+> Theme: Notification system, mobile UX, performance, security.
 
-### 4.1 Role-Based Permissions — Full Matrix
+### 7.1 Notification System
 
-| Action | Agent | Admin |
-|--------|-------|-------|
-| View board / tasks | ✅ Own projects | ✅ All projects |
-| Create task | ✅ | ✅ |
-| Edit task | ✅ Own + assigned | ✅ Any |
-| Delete task | ❌ | ✅ |
-| Move task (drag) | ✅ | ✅ |
-| Manage columns | ❌ | ✅ |
-| Custom field definitions | ❌ | ✅ |
-| Webhook config | ❌ | ✅ |
-| Saved views (own) | ✅ | ✅ |
-| Saved views (shared) | View only | Create/Delete |
+- [ ] 7 types: task_assigned, task_commented, task_mentioned, task_due_soon, task_overdue, task_status_changed, workspace_invite
+- [ ] In-app delivery via `notifications` table
+- [ ] Bell icon in header with unread count
+- [ ] Notification panel: click to navigate, mark read, mark all read
+- [ ] Cron routes: `/api/cron/due-soon` (hourly), `/api/cron/overdue` (daily 8am)
 
-- [ ] Backend middleware: enforce all agent vs admin rules on every API route
-- [ ] Frontend: conditionally hide (not just disable) unauthorized action buttons based on session role
-- [ ] Direct API attempt with wrong role returns 403 with `{ error, required_role }`
-- [ ] Workspace isolation: every DB query includes `workspace_id` or `project_id` filter
+### 7.2 Real-Time Updates (SSE)
 
-### 4.2 Notification System — 7 Types
+- [ ] `GET /api/notifications/stream` — SSE endpoint
+- [ ] Fallback: poll every 30s if SSE fails
+- [ ] Zustand store for notification state
 
-- [ ] **task_assigned** — trigger on assignee change; payload: task title, project, assigning user
-- [ ] **task_commented** — notify task creator + all assignees + previous commenters; mute-per-task option
-- [ ] **task_mentioned** — parse @mention nodes from TipTap; deduplicate with task_assigned
-- [ ] **task_due_soon** — Vercel cron every hour; send once per due-date cycle to assignees
-- [ ] **task_overdue** — Vercel cron daily at 8am; re-send daily until completed or date updated
-- [ ] **task_status_changed** — notify creator + assignees; exclude the actor who made the change
-- [ ] **workspace_invite** — in-app only (email delivery optional future enhancement)
-- [ ] In-app delivery: insert into `notifications` table; push to client via SSE or polling
-- [ ] Add cron routes to `vercel.json`: `/api/cron/due-soon` (hourly), `/api/cron/overdue` (daily 8am)
+### 7.3 Performance — Virtualization
 
-### 4.3 Real-Time Notifications (SSE)
+- [ ] Install `@tanstack/react-virtual`
+- [ ] Virtualize card lists within columns (handle 1000+ tasks)
+- [ ] Position rebalancing when gaps converge
 
-> **Pattern:** Server-Sent Events via Next.js Route Handler. Vercel supports SSE with streaming responses (up to 25s on Hobby, 300s on Pro).
+### 7.4 Mobile Responsive
 
-- [ ] `GET /api/notifications/stream` — SSE endpoint; streams `notification:new` events
-- [ ] Client: `EventSource` connection on board mount; reconnect with exponential backoff
-- [ ] Fallback: poll `GET /api/notifications?unread=true` every 30s if SSE fails
-- [ ] "Reconnecting…" banner on SSE disconnect
-- [ ] Zustand store for notification state: unread count, notification list
+- [ ] Horizontal snap-to-column scroll at <640px
+- [ ] Full-width slide-up drawer on mobile
+- [ ] Touch targets ≥ 44×44px
 
-### 4.4 User Notification Preferences
+### 7.5 Keyboard Navigation
 
-- [ ] Settings page: `src/app/(dashboard)/tasks/settings/notifications/page.tsx`
-- [ ] Toggle grid: In-App / Email per notification type; default all enabled
-- [ ] Store in `notification_preferences` table; server action to update
-- [ ] Preferences checked before creating notification records
+- [ ] Arrow keys between cards, Enter to open drawer
+- [ ] Escape to close drawer/modal
+- [ ] / to focus search filter
 
-### 4.5 Notification Panel UI
+### 7.6 Security Hardening
 
-- [ ] Bell icon in header with unread count badge (from Zustand store, updated via SSE)
-- [ ] Dropdown panel: most recent 50 notifications, paginated
-- [ ] Click notification → navigate to task + highlight change
-- [ ] "Mark as read" on click; "Mark all read" button
-- [ ] `PATCH /api/notifications/[id]/read` and `PATCH /api/notifications/read-all`
-
-### 4.6 Advanced Filter System
-
-- [ ] Multi-condition filter groups: AND within group, OR between groups (max 5 groups, 10 conditions each)
-- [ ] Condition builder UI: field selector → operator → value input
-- [ ] Standard fields: Assignee, Status (column), Priority, Due Date, Tags, Created By, Created At
-- [ ] Custom field filters added dynamically per project
-- [ ] Real-time preview: matching task count updates as conditions change
-- [ ] Server-side filtering for >500 tasks (SQL query builder with parameterized values); client-side for ≤500
-- [ ] Filter state stored in URL params for shareability
-
-### 4.7 Stacked Sorting
-
-- [ ] Primary + secondary sort in UI
-- [ ] Sortable fields: Due Date, Priority, Created At, Updated At, Assignee Name, Title
-- [ ] Priority order: Urgent=5, High=4, Medium=3, Low=2, None=1; NULL always last
-- [ ] Custom field sorting for number and date types
-
-### 4.8 Saved Views
-
-- [ ] `GET /api/projects/[id]/saved-views` — list views (own + shared)
-- [ ] `POST /api/projects/[id]/saved-views` — create view
-- [ ] `DELETE /api/projects/[id]/saved-views/[vid]` — delete (owner or admin)
-- [ ] View stores: `{ name, filters, sort, shared, owner_id }`
-- [ ] Sidebar section: list saved views per project; click to apply
-- [ ] "Unsaved changes" banner when active view is modified; "Save as new" or "Reset" actions
-
-### 4.9 Column Management (Admin)
-
-- [ ] Add column: "+" button at end of board; inline name input; max 15 columns enforced
-- [ ] Rename: double-click column header; Enter or blur to save; 1–50 chars
-- [ ] Delete: blocked if column has tasks (API returns 409 with task count); confirmation modal with bulk-move option
-- [ ] Reorder: drag column header (dnd-kit); position saved via server action
-- [ ] `is_done` flag: one per project; moving tasks to this column triggers `task.completed` event
-- [ ] WIP limit: admin sets optional integer cap; orange badge at limit, red when exceeded
-- [ ] Column color: pick from 12 preset colors; shown as dot in header
+- [ ] Webhook API key: bcrypt hash in DB
+- [ ] Rate limits: 1000 req/min session, 100/min API key
+- [ ] XSS: DOMPurify on all rich text
+- [ ] File upload: MIME validation, block dangerous extensions
 
 ---
 
-## Milestone 5: Polish, Performance & Production Hardening (Sprint 5)
-> Theme: Mobile responsive, virtualization, security, E2E tests, observability.
+## Quick Reference — API Endpoints (Updated v3.0)
 
-### 5.1 Performance — Virtualization
-
-- [ ] Install `@tanstack/react-virtual`; virtualize card lists within columns
-- [ ] Benchmark: board with 1000 tasks scrolls at 60fps
-- [ ] Column scroll position preserved across store updates
-
-### 5.2 Mobile Responsive
-
-- [ ] Board: horizontal scroll with snap-to-column at <640px viewport
-- [ ] Task drawer: full-width slide-up panel on mobile (not side sheet)
-- [ ] Touch targets: minimum 44×44px for all interactive elements (WCAG 2.5.5)
-- [ ] Touch sensor for drag-drop on mobile
-
-### 5.3 Visual Indicators & UX Polish
-
-- [ ] Due date: red if overdue, orange if within 48h; relative display ("Tomorrow", "Today", "Yesterday") via `date-fns`
-- [ ] Priority color chips: Low=blue, Medium=yellow, High=orange, Urgent=red; no chip for none
-- [ ] Board header: project name, member avatar cluster (up to 5 + overflow)
-- [ ] Column color dot (admin-assigned)
-- [ ] Keyboard navigation: arrow keys between cards, Enter to open drawer
-- [ ] Empty column state with subtle illustration
-
-### 5.4 Comment Threading
-
-- [ ] Top-level comments (`parent_id = null`); replies max 1 level deep
-- [ ] Thread collapsed by default; "N replies" button to expand
-- [ ] Comment body: TipTap rich text (same config as description minus headings)
-- [ ] Sorted chronologically; newest at bottom
-
-### 5.5 Task Permalink & Deep Linking
-
-- [ ] Task permalink route: `/tasks?task=:id` (opens drawer)
-- [ ] Middle-click / Ctrl+click on task card opens in new tab
-- [ ] Navigating to URL with `?task=:id` auto-opens drawer on page load
-
-### 5.6 Right-Click Context Menu
-
-- [ ] Radix UI `ContextMenu` on task cards
-- [ ] Options: Quick Edit, Copy Link, Move to Column (submenu), Delete (admin only)
-- [ ] Closes on Esc or outside click
-
-### 5.7 Security Hardening
-
-- [ ] API key for webhooks: bcrypt hash in DB; shown once at creation
-- [ ] Rate limits via Vercel Edge Config or middleware: 1000 req/min per session, 100/min per API key, 10 uploads/min per user; return 429 + Retry-After
-- [ ] SQL injection prevention: parameterized queries only (already enforced by `sql` tagged template)
-- [ ] File upload: MIME type validation from magic bytes; block dangerous extensions
-- [ ] XSS: DOMPurify sanitization on all rich text before storage
-- [ ] CSRF: SameSite cookie (already set by NextAuth) + origin header check on mutations
-
-### 5.8 Error Handling & Edge Cases
-
-- [ ] Concurrent drag-drop: if two users move the same task, last write wins; both get updated state via SSE/polling
-- [ ] Stale board detection: periodic poll every 60s to check for missed updates; reconcile Zustand store
-- [ ] Network failure: retry server actions with exponential backoff (1→2→4s, max 3 attempts); show persistent error banner after max retries
-- [ ] Position gaps: if gap-based positions get too close, run rebalance (set positions to 1000, 2000, 3000…)
-- [ ] Deleted user handling: preserve activity log entries; show "[Deleted User]" label
-
-### 5.9 Observability
-
-- [ ] Sentry integration for error tracking (if not already configured)
-- [ ] Log webhook processing results (already in `webhook_event_log`)
-- [ ] QStash delivery dashboard for outbound webhook monitoring
-- [ ] Vercel Analytics for page load performance
-
-### 5.10 Testing Strategy
-
-> **Note:** No test framework is currently configured. Tests are a future enhancement.
-
-- [ ] Evaluate adding Vitest for unit tests or Playwright for E2E
-- [ ] Priority test scenarios (if framework added):
-  - Task CRUD API routes (all status codes)
-  - Permission enforcement (agent vs admin)
-  - Drag-drop position calculation
-  - Custom field validation per type
-  - Webhook idempotency
-  - Filter/sort query builder
-
----
-
-## Quick Reference — API Endpoints (Updated)
-
-### Board & Member Management (Milestone 1B)
+### Board & Member Management (M1B)
 | Method | Endpoint | Access |
 |--------|----------|--------|
-| GET | `/api/projects` | Agent+ (filtered by membership) |
+| GET | `/api/projects` | Agent+ |
 | POST | `/api/projects` | Admin |
 | PATCH | `/api/projects/[id]` | Admin |
 | DELETE | `/api/projects/[id]` | Admin |
-| GET | `/api/projects/[id]/members` | Agent+ (board members) |
+| GET | `/api/projects/[id]/members` | Agent+ |
 | POST | `/api/projects/[id]/members` | Admin |
 | PATCH | `/api/projects/[id]/members/[agentId]` | Admin |
 | DELETE | `/api/projects/[id]/members/[agentId]` | Admin |
 
-### Tasks, Columns & Comments (Milestone 1)
+### Tasks, Columns & Comments (M1, M2)
 | Method | Endpoint | Access |
 |--------|----------|--------|
-| GET/POST | `/api/projects/[id]/tasks` | Agent+ (board member) |
+| GET/POST | `/api/projects/[id]/tasks` | Agent+ |
 | GET/PATCH/DELETE | `/api/tasks/[id]` | Agent+ / Admin |
 | PATCH | `/api/tasks/[id]/move` | Agent+ |
 | GET/POST | `/api/tasks/[id]/comments` | Agent+ |
@@ -703,18 +748,32 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 | PATCH | `/api/projects/[id]/columns/reorder` | Admin |
 | DELETE | `/api/projects/[id]/columns/[cid]` | Admin |
 
-### Custom Fields, Webhooks, Notifications (Milestones 3–4)
+### Labels (M3)
+| Method | Endpoint | Access |
+|--------|----------|--------|
+| GET/POST | `/api/projects/[id]/labels` | Agent+ / Admin |
+| PATCH/DELETE | `/api/projects/[id]/labels/[lid]` | Admin |
+
+### Custom Fields, Views (M5)
 | Method | Endpoint | Access |
 |--------|----------|--------|
 | GET/POST | `/api/projects/[id]/custom-fields` | Agent+ / Admin |
 | PATCH/DELETE | `/api/projects/[id]/custom-fields/[fid]` | Admin |
+| GET/POST/DELETE | `/api/projects/[id]/saved-views` | Agent+ |
+
+### Webhooks (M6)
+| Method | Endpoint | Access |
+|--------|----------|--------|
 | PATCH | `/api/projects/[id]/webhook-config` | Admin |
 | GET | `/api/projects/[id]/webhook-logs` | Admin |
+
+### Notifications (M7)
+| Method | Endpoint | Access |
+|--------|----------|--------|
 | GET | `/api/notifications/stream` | Agent+ (SSE) |
 | GET | `/api/notifications` | Agent+ |
 | PATCH | `/api/notifications/[id]/read` | Agent+ |
 | PATCH | `/api/notifications/read-all` | Agent+ |
-| GET/POST/DELETE | `/api/projects/[id]/saved-views` | Agent+ |
 | GET | `/api/cron/due-soon` | CRON_SECRET |
 | GET | `/api/cron/overdue` | CRON_SECRET |
 
@@ -739,9 +798,12 @@ When instructed to **"Start milestone N"**:
 3. Keep all code production-ready (deployed to Vercel)
 4. If stopped: resume from last incomplete `- [ ]` item
 
+**Priority order:** 2B (critical fixes) → 3 → 4 → 5 → 6 → 7
+
 **State tracking:**
 - `plan.md` → checklist progress (this file)
 - `cline.md` → execution history/logs
+- `task_board_cases.md` → cases/edge cases (v2.0)
 
 ---
 

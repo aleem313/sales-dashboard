@@ -2,7 +2,7 @@
 
 import { forwardRef } from "react";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -10,15 +10,17 @@ import {
   Paperclip,
   CheckSquare,
   Calendar,
-  GripVertical,
+  Flag,
+  Clock,
+  CalendarClock,
 } from "lucide-react";
 import type { Task } from "@/lib/task-data";
 
-const priorityColors: Record<string, string> = {
-  urgent: "bg-red-500/15 text-red-700 dark:text-red-400",
-  high: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-  medium: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400",
-  low: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+const priorityConfig: Record<string, { color: string; bg: string; label: string }> = {
+  urgent: { color: "text-red-600 dark:text-red-400", bg: "bg-red-500/15", label: "Urgent" },
+  high: { color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-500/15", label: "High" },
+  medium: { color: "text-yellow-600 dark:text-yellow-500", bg: "bg-yellow-500/15", label: "Medium" },
+  low: { color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-500/15", label: "Low" },
 };
 
 function getInitials(name: string): string {
@@ -40,19 +42,48 @@ function isDueWarning(dueDate: string): "overdue" | "soon" | null {
   return null;
 }
 
+function formatDueDate(dueDate: string): string {
+  const date = new Date(dueDate);
+  const now = new Date();
+  const diffMs = date.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays === -1) return "Yesterday";
+  if (diffDays < -1) return format(date, "MMM d");
+  if (diffDays <= 7) return format(date, "EEE");
+  return format(date, "MMM d");
+}
+
 interface TaskCardProps {
   task: Task;
+  columnColor?: string;
   onClick?: () => void;
   isDragging?: boolean;
 }
 
-export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { dragHandleProps?: Record<string, unknown>; style?: React.CSSProperties }>(
-  ({ task, onClick, isDragging, dragHandleProps, style, ...props }, ref) => {
+export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { style?: React.CSSProperties }>(
+  ({ task, columnColor, onClick, isDragging, style, ...props }, ref) => {
     const dueStatus = task.due_date ? isDueWarning(task.due_date) : null;
-    const checklistPct =
-      task.checklist_total && task.checklist_total > 0
-        ? Math.round(((task.checklist_done ?? 0) / task.checklist_total) * 100)
-        : null;
+    const assignees = task.assignees ?? [];
+    const tags = task.tags ?? [];
+    const checklistTotal = task.checklist_total ?? 0;
+    const checklistDone = task.checklist_done ?? 0;
+    const commentCount = task.comment_count ?? 0;
+    const attachmentCount = task.attachment_count ?? 0;
+    const timeEstimate = (task.custom_fields as Record<string, unknown>)?._time_estimate_minutes as number | undefined;
+    const timeTracked = (task.custom_fields as Record<string, unknown>)?._time_tracked_minutes as number | undefined;
+    const hasMetaRow = task.priority || task.due_date || task.start_date || timeEstimate;
+    const hasBottomRow = assignees.length > 0 || checklistTotal > 0 || commentCount > 0 || attachmentCount > 0;
+
+    function formatMinutes(mins: number): string {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      if (h === 0) return `${m}m`;
+      if (m === 0) return `${h}h`;
+      return `${h}h ${m}m`;
+    }
 
     return (
       <div
@@ -60,63 +91,165 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { drag
         style={style}
         onClick={onClick}
         className={cn(
-          "group cursor-pointer rounded-lg border bg-card p-3 shadow-sm transition-all",
+          "group cursor-pointer rounded-lg border bg-card shadow-sm transition-all touch-manipulation overflow-hidden",
           "hover:shadow-md hover:border-primary/30",
           isDragging && "opacity-50 shadow-lg ring-2 ring-primary/30"
         )}
         {...props}
       >
-        {/* Tags */}
-        {task.tags && task.tags.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1">
-            {task.tags.slice(0, 2).map((tag) => (
-              <span key={tag.id} className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ backgroundColor: tag.color + "20", color: tag.color }}>
-                {tag.name}
-              </span>
-            ))}
-            {task.tags.length > 2 && <span className="text-[10px] text-muted-foreground">+{task.tags.length - 2}</span>}
-          </div>
-        )}
+        {/* Status color bar (left border) */}
+        <div className="flex">
+          <div
+            className="w-1 shrink-0 rounded-l-lg"
+            style={{ backgroundColor: columnColor ?? "#6b7280" }}
+          />
 
-        {/* Title row with drag handle */}
-        <div className="flex items-start gap-1">
-          {dragHandleProps && (
-            <button {...dragHandleProps} className="mt-0.5 shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground" onClick={(e) => e.stopPropagation()}>
-              <GripVertical className="h-3.5 w-3.5" />
-            </button>
-          )}
-          <h4 className="text-sm font-medium leading-snug line-clamp-2 flex-1">{task.title}</h4>
-        </div>
-
-        {/* Meta row */}
-        <div className="mt-2 flex items-center gap-2 flex-wrap">
-          {task.priority && (
-            <span className={cn("inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase", priorityColors[task.priority])}>
-              {task.priority}
-            </span>
-          )}
-          {task.due_date && (
-            <span className={cn("inline-flex items-center gap-1 text-[11px]", dueStatus === "overdue" && "text-red-600 dark:text-red-400 font-medium", dueStatus === "soon" && "text-orange-600 dark:text-orange-400", !dueStatus && "text-muted-foreground")}>
-              <Calendar className="h-3 w-3" />
-              {formatDistanceToNow(new Date(task.due_date), { addSuffix: true })}
-            </span>
-          )}
-        </div>
-
-        {/* Bottom row */}
-        <div className="mt-2.5 flex items-center justify-between">
-          <div className="flex -space-x-1.5">
-            {(task.assignees ?? []).slice(0, 3).map((a) => (
-              <div key={a.agent_id} title={a.name} className={cn("flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold text-white ring-2 ring-card", hashColor(a.agent_id))}>
-                {a.avatar_url ? <img src={a.avatar_url} alt={a.name} className="h-full w-full rounded-full object-cover" /> : getInitials(a.name)}
+          <div className="flex-1 p-3 min-w-0">
+            {/* Tags/Labels */}
+            {tags.length > 0 && (
+              <div className="mb-1.5 flex flex-wrap gap-1">
+                {tags.slice(0, 3).map((tag) => (
+                  <span
+                    key={tag.id}
+                    className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight"
+                    style={{ backgroundColor: tag.color + "22", color: tag.color }}
+                  >
+                    {tag.name}
+                  </span>
+                ))}
+                {tags.length > 3 && (
+                  <span className="text-[10px] text-muted-foreground self-center">
+                    +{tags.length - 3}
+                  </span>
+                )}
               </div>
-            ))}
-            {(task.assignees ?? []).length > 3 && <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-[9px] font-medium ring-2 ring-card">+{(task.assignees ?? []).length - 3}</div>}
-          </div>
-          <div className="flex items-center gap-2.5 text-muted-foreground">
-            {checklistPct !== null && <span className="flex items-center gap-0.5 text-[11px]"><CheckSquare className="h-3 w-3" />{checklistPct}%</span>}
-            {(task.comment_count ?? 0) > 0 && <span className="flex items-center gap-0.5 text-[11px]"><MessageSquare className="h-3 w-3" />{task.comment_count}</span>}
-            {(task.attachment_count ?? 0) > 0 && <span className="flex items-center gap-0.5 text-[11px]"><Paperclip className="h-3 w-3" />{task.attachment_count}</span>}
+            )}
+
+            {/* Title */}
+            <h4 className="text-sm font-medium leading-snug line-clamp-2 mb-1.5">
+              {task.title}
+            </h4>
+
+            {/* Meta fields row — ClickUp style icon+value pairs */}
+            {hasMetaRow && (
+              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                {/* Priority flag */}
+                {task.priority && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-0.5 text-[11px] font-medium",
+                      priorityConfig[task.priority]?.color
+                    )}
+                    title={`Priority: ${priorityConfig[task.priority]?.label}`}
+                  >
+                    <Flag className="h-3 w-3" />
+                    <span className="hidden sm:inline">{priorityConfig[task.priority]?.label}</span>
+                  </span>
+                )}
+
+                {/* Due date */}
+                {task.due_date && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-0.5 text-[11px]",
+                      dueStatus === "overdue" && "text-red-600 dark:text-red-400 font-medium",
+                      dueStatus === "soon" && "text-orange-600 dark:text-orange-400 font-medium",
+                      !dueStatus && "text-muted-foreground"
+                    )}
+                    title={`Due: ${format(new Date(task.due_date), "MMM d, yyyy")}`}
+                  >
+                    <Calendar className="h-3 w-3" />
+                    {formatDueDate(task.due_date)}
+                  </span>
+                )}
+
+                {/* Start date */}
+                {task.start_date && (
+                  <span
+                    className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground"
+                    title={`Start: ${format(new Date(task.start_date), "MMM d, yyyy")}`}
+                  >
+                    <CalendarClock className="h-3 w-3" />
+                    {format(new Date(task.start_date), "MMM d")}
+                  </span>
+                )}
+
+                {/* Time estimate */}
+                {timeEstimate && timeEstimate > 0 && (
+                  <span
+                    className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground"
+                    title={`Estimate: ${formatMinutes(timeEstimate)}${timeTracked ? ` / Tracked: ${formatMinutes(timeTracked)}` : ""}`}
+                  >
+                    <Clock className="h-3 w-3" />
+                    {timeTracked && timeTracked > 0
+                      ? `${formatMinutes(timeTracked)}/${formatMinutes(timeEstimate)}`
+                      : formatMinutes(timeEstimate)}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Bottom row: assignees + counts */}
+            {hasBottomRow && (
+              <div className="flex items-center justify-between mt-1">
+                {/* Assignee avatars */}
+                <div className="flex -space-x-1.5">
+                  {assignees.slice(0, 3).map((a) => (
+                    <div
+                      key={a.agent_id}
+                      title={a.name}
+                      className={cn(
+                        "flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold text-white ring-2 ring-card",
+                        hashColor(a.agent_id)
+                      )}
+                    >
+                      {a.avatar_url ? (
+                        <img
+                          src={a.avatar_url}
+                          alt={a.name}
+                          className="h-full w-full rounded-full object-cover"
+                        />
+                      ) : (
+                        getInitials(a.name)
+                      )}
+                    </div>
+                  ))}
+                  {assignees.length > 3 && (
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-[9px] font-medium ring-2 ring-card">
+                      +{assignees.length - 3}
+                    </div>
+                  )}
+                </div>
+
+                {/* Counts: checklist, comments, attachments */}
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  {checklistTotal > 0 && (
+                    <span
+                      className={cn(
+                        "flex items-center gap-0.5 text-[11px]",
+                        checklistDone === checklistTotal && checklistTotal > 0 && "text-green-600 dark:text-green-400"
+                      )}
+                      title={`Subtasks: ${checklistDone}/${checklistTotal}`}
+                    >
+                      <CheckSquare className="h-3 w-3" />
+                      {checklistDone}/{checklistTotal}
+                    </span>
+                  )}
+                  {commentCount > 0 && (
+                    <span className="flex items-center gap-0.5 text-[11px]" title={`${commentCount} comments`}>
+                      <MessageSquare className="h-3 w-3" />
+                      {commentCount}
+                    </span>
+                  )}
+                  {attachmentCount > 0 && (
+                    <span className="flex items-center gap-0.5 text-[11px]" title={`${attachmentCount} attachments`}>
+                      <Paperclip className="h-3 w-3" />
+                      {attachmentCount}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -125,8 +258,8 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { drag
 );
 TaskCardContent.displayName = "TaskCardContent";
 
-/** Sortable wrapper for dnd-kit */
-export function SortableTaskCard({ task, onClick }: TaskCardProps) {
+/** Sortable wrapper for dnd-kit — entire card is draggable */
+export function SortableTaskCard({ task, columnColor, onClick }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -146,14 +279,16 @@ export function SortableTaskCard({ task, onClick }: TaskCardProps) {
       ref={setNodeRef}
       style={style}
       task={task}
+      columnColor={columnColor}
       onClick={onClick}
       isDragging={isDragging}
-      dragHandleProps={{ ...attributes, ...listeners }}
+      {...attributes}
+      {...listeners}
     />
   );
 }
 
 /** Non-sortable version for use in overlay */
-export function TaskCard({ task, onClick }: TaskCardProps) {
-  return <TaskCardContent task={task} onClick={onClick} />;
+export function TaskCard({ task, columnColor, onClick }: TaskCardProps) {
+  return <TaskCardContent task={task} columnColor={columnColor} onClick={onClick} />;
 }

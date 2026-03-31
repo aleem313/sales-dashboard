@@ -102,8 +102,8 @@ export function BoardHeader({
         setDeleteOpen(false);
         setMenuOpen(false);
         router.push("/tasks");
-      } catch {
-        toast.error("Failed to delete board");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to delete board");
       }
     });
   }

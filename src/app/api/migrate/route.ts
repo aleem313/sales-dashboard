@@ -13,8 +13,12 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006") {
+  if (migration !== "006" && migration !== "007") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
+  }
+
+  if (migration === "007") {
+    return run007();
   }
 
   const results: string[] = [];
@@ -171,6 +175,51 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: false,
       migration: "006_task_management_schema",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run007() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 007: Fix activity_log trigger...");
+
+    // Replace the trigger function: allow DELETE, block only UPDATE
+    await sql`
+      CREATE OR REPLACE FUNCTION prevent_activity_log_mutation()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        IF TG_OP = 'UPDATE' THEN
+          RAISE EXCEPTION 'activity_log is append-only: UPDATE operations are not allowed';
+        END IF;
+        RETURN OLD;
+      END;
+      $$ LANGUAGE plpgsql
+    `;
+    results.push("✓ Updated prevent_activity_log_mutation() — allows DELETE, blocks UPDATE");
+
+    // Re-create trigger
+    await sql`DROP TRIGGER IF EXISTS trg_activity_log_append_only ON activity_log`;
+    await sql`
+      CREATE TRIGGER trg_activity_log_append_only
+        BEFORE UPDATE OR DELETE ON activity_log
+        FOR EACH ROW
+        EXECUTE FUNCTION prevent_activity_log_mutation()
+    `;
+    results.push("✓ Re-created trg_activity_log_append_only trigger");
+
+    return NextResponse.json({
+      success: true,
+      migration: "007_fix_activity_log_trigger",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "007_fix_activity_log_trigger",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });

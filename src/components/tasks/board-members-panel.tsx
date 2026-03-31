@@ -139,6 +139,16 @@ export function BoardMembersPanel({
             <p className="text-xs text-muted-foreground mt-4 mb-3">All agents are already members of this board.</p>
           )}
 
+          {/* Warning: no admin members */}
+          {members.filter((m) => m.role === "admin").length === 0 && (
+            <div className="flex items-center gap-2 rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 mt-3 mb-2">
+              <Shield className="h-4 w-4 text-amber-600 shrink-0" />
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                This board has no admin members. The system admin can still manage it, but consider promoting a member to admin.
+              </p>
+            </div>
+          )}
+
           {/* Member list */}
           <div className="space-y-1 mt-2">
             {members.map((m) => (

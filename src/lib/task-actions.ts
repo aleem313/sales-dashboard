@@ -87,7 +87,8 @@ export async function deleteTaskAction(taskId: string) {
   if (!session?.user) throw new Error("Unauthorized");
   if (session.user.role !== "admin") throw new Error("Admin only");
 
-  await deleteTask(taskId, session.user.agentId ?? null);
+  const deleted = await deleteTask(taskId, session.user.agentId ?? null);
+  if (!deleted) throw new Error("Task not found or already deleted");
   revalidateBoard();
 }
 
@@ -184,7 +185,8 @@ export async function deleteBoardAction(projectId: string) {
   if (!session?.user) throw new Error("Unauthorized");
   if (session.user.role !== "admin") throw new Error("Admin only");
 
-  await deleteProject(projectId);
+  const deleted = await deleteProject(projectId);
+  if (!deleted) throw new Error("Board not found or already deleted");
   revalidateBoard();
 }
 

@@ -222,7 +222,11 @@ export function BoardView({ columns, tasks, projectId, members }: BoardViewProps
         <DragOverlay dropAnimation={null}>
           {activeTask && (
             <div className="w-[264px] opacity-90 rotate-[2deg]">
-              <TaskCardContent task={activeTask} isDragging />
+              <TaskCardContent
+                task={activeTask}
+                columnColor={columns.find((c) => c.id === activeTask.column_id)?.color}
+                isDragging
+              />
             </div>
           )}
         </DragOverlay>
