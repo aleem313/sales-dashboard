@@ -279,10 +279,22 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 **No migration needed** — uses existing schema (workspaces, projects, project_members tables from M1).
 
+### UI Audit (2026-03-31) — see `task_board_ui_audit.md`
+
+**Must-fix before Milestone 2:**
+- [x] FN-1: Add board selector for agents on `/my-tasks` — agents with 2+ boards get dropdown, URL-based switching via `?board=` param with `/my-tasks` basePath
+- [x] FN-2: Add assignee picker to task create modal — multi-select from board members, chip display with remove
+- [x] FN-8: Fix per-column task creation modal — moved outside scroll container, rendered as sibling to board div
+- [x] SEC-2: Remove unused `isAdmin` prop from `board-column.tsx`
+- [x] UX-3: Clear board create dialog form on re-open — useEffect clears name/description when dialog opens
+- [x] UX-5: Replace browser `confirm()` in member removal with styled Dialog — shows name, warns about task unassignment, has Cancel/Remove buttons with loading spinner
+- [x] UX-6: Update `tasks/loading.tsx` skeleton — now shows board header bar (icon + selector + avatars) + 4 columns with varied card counts
+
 ---
 
 ## Milestone 2: Board UX, Drag & Drop & Task Detail (Sprint 2)
 > Theme: Interactive drag-drop board, task detail drawer, rich text, file attachments, checklist.
+> **Ref:** `task_board_ui_audit.md` — addresses FN-3, FN-4, FN-5, FN-6 from audit.
 
 ### 2.1 Drag & Drop System (@dnd-kit)
 

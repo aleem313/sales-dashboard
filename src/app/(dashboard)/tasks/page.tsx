@@ -2,9 +2,8 @@ import { Suspense } from "react";
 import { Header } from "@/components/layout/header";
 import { auth } from "@/lib/auth";
 import { BoardView } from "@/components/tasks/board-view";
-import { TaskCreateModal } from "@/components/tasks/task-create-modal";
+import { BoardHeader } from "@/components/tasks/board-header";
 import { BoardSelectorWrapper } from "@/components/tasks/board-selector-wrapper";
-import { BoardMembersPanel } from "@/components/tasks/board-members-panel";
 import {
   getDefaultProject,
   getProjectById,
@@ -34,27 +33,22 @@ async function BoardContent({ searchParams }: Props) {
 
   // Determine active board
   const params = await searchParams;
-  let boardId = params.board;
-
-  // Try localStorage-saved board, then first project, then auto-create
-  let project = boardId ? await getProjectById(boardId) : null;
+  let project = params.board ? await getProjectById(params.board) : null;
   if (!project && projects.length > 0) {
     project = projects[0];
-    boardId = project.id;
   }
   if (!project) {
     project = await getDefaultProject();
-    if (project) boardId = project.id;
   }
 
   if (!project) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <div className="text-center">
+        <div className="text-center space-y-3">
           <h2 className="text-lg font-semibold">No boards yet</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground max-w-xs mx-auto">
             {isAdmin
-              ? "Create your first board to get started."
+              ? "Create your first task board to start managing work."
               : "No boards have been assigned to you. Contact your admin."}
           </p>
           {isAdmin && (
@@ -70,7 +64,6 @@ async function BoardContent({ searchParams }: Props) {
     );
   }
 
-  // Refresh projects list if auto-created
   const finalProjects = projects.length > 0 ? projects : await getAllProjects();
 
   const [columns, tasks, members, available] = await Promise.all([
@@ -82,23 +75,15 @@ async function BoardContent({ searchParams }: Props) {
 
   return (
     <>
-      <div className="flex items-center justify-between border-b px-6 py-2.5 gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <BoardSelectorWrapper
-            projects={finalProjects}
-            currentProjectId={project.id}
-            isAdmin={isAdmin}
-          />
-          <BoardMembersPanel
-            projectId={project.id}
-            members={members}
-            availableAgents={available}
-            isAdmin={isAdmin}
-          />
-        </div>
-        <TaskCreateModal projectId={project.id} columns={columns} />
-      </div>
-      <BoardView columns={columns} tasks={tasks} />
+      <BoardHeader
+        project={project}
+        projects={finalProjects}
+        columns={columns}
+        members={members}
+        availableAgents={available}
+        isAdmin={isAdmin}
+      />
+      <BoardView columns={columns} tasks={tasks} projectId={project.id} members={members} />
     </>
   );
 }
@@ -118,29 +103,41 @@ export default function TasksPage({ searchParams }: Props) {
 
 function BoardSkeleton() {
   return (
-    <div className="flex h-full gap-4 overflow-x-auto px-6 py-4">
-      {[1, 2, 3].map((col) => (
-        <div key={col} className="w-[280px] shrink-0">
-          <div className="mb-3 flex items-center gap-2">
-            <div className="h-2.5 w-2.5 rounded-full bg-muted animate-pulse" />
-            <div className="h-4 w-24 rounded bg-muted animate-pulse" />
-          </div>
-          <div className="space-y-2">
-            {[1, 2, 3].map((card) => (
-              <div key={card} className="rounded-lg border bg-card p-3">
-                <div className="h-4 w-full rounded bg-muted animate-pulse mb-2" />
-                <div className="h-4 w-2/3 rounded bg-muted animate-pulse mb-3" />
-                <div className="flex justify-between">
-                  <div className="flex -space-x-1">
-                    <div className="h-6 w-6 rounded-full bg-muted animate-pulse" />
-                  </div>
-                  <div className="h-4 w-12 rounded bg-muted animate-pulse" />
-                </div>
-              </div>
+    <>
+      <div className="flex items-center justify-between border-b px-4 py-2.5 gap-3 bg-card/50">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-[200px] rounded bg-muted animate-pulse" />
+          <div className="flex -space-x-1.5">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-6 w-6 rounded-full bg-muted animate-pulse ring-2 ring-card" />
             ))}
           </div>
         </div>
-      ))}
-    </div>
+        <div className="h-8 w-24 rounded bg-muted animate-pulse" />
+      </div>
+      <div className="flex h-full gap-4 overflow-x-auto px-6 py-4">
+        {[1, 2, 3, 4].map((col) => (
+          <div key={col} className="w-[280px] shrink-0">
+            <div className="mb-3 flex items-center gap-2">
+              <div className="h-2.5 w-2.5 rounded-full bg-muted animate-pulse" />
+              <div className="h-4 w-20 rounded bg-muted animate-pulse" />
+              <div className="ml-auto h-5 w-6 rounded-full bg-muted animate-pulse" />
+            </div>
+            <div className="space-y-2">
+              {[1, 2].map((card) => (
+                <div key={card} className="rounded-lg border bg-card p-3">
+                  <div className="h-4 w-full rounded bg-muted animate-pulse mb-2" />
+                  <div className="h-4 w-2/3 rounded bg-muted animate-pulse mb-3" />
+                  <div className="flex justify-between">
+                    <div className="h-6 w-6 rounded-full bg-muted animate-pulse" />
+                    <div className="h-4 w-10 rounded bg-muted animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }

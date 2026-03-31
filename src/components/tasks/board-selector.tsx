@@ -18,6 +18,8 @@ interface BoardSelectorProps {
   currentProjectId: string;
   isAdmin: boolean;
   onCreateBoard?: () => void;
+  /** Base path for board switching — defaults to /tasks, use /my-tasks for agents */
+  basePath?: string;
 }
 
 export function BoardSelector({
@@ -25,6 +27,7 @@ export function BoardSelector({
   currentProjectId,
   isAdmin,
   onCreateBoard,
+  basePath = "/tasks",
 }: BoardSelectorProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -36,8 +39,7 @@ export function BoardSelector({
     }
     const params = new URLSearchParams(searchParams.toString());
     params.set("board", projectId);
-    router.push(`/tasks?${params.toString()}`);
-    // Save to localStorage
+    router.push(`${basePath}?${params.toString()}`);
     try { localStorage.setItem("last_board_id", projectId); } catch {}
   }
 

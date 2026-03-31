@@ -132,18 +132,28 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 
 | File | What it does |
 |------|-------------|
-| `src/lib/task-data.ts` | All task management queries (~550 lines raw SQL). `getDefaultProject()` auto-creates workspace/project/columns if migration seed was skipped. |
-| `src/lib/task-actions.ts` | Server actions for task mutations + revalidatePath |
-| `src/components/tasks/` | Board view, task card, column, create modal |
-| `src/app/(dashboard)/tasks/` | Admin task board page |
-| `src/app/(agent)/my-tasks/` | Agent task board (filtered to assigned) |
+| `src/lib/task-data.ts` | All task management queries. `getDefaultProject()` auto-creates workspace/project/columns if seed was skipped. Board CRUD, member management, cross-board queries. |
+| `src/lib/task-actions.ts` | Server actions: task CRUD, board CRUD, member management + revalidatePath |
+| `src/components/tasks/board-header.tsx` | Board toolbar: selector, member avatars, members panel, new task button, rename/delete menu (admin) |
+| `src/components/tasks/board-view.tsx` | Horizontal scrolling kanban board; groups tasks by column; per-column "+" button |
+| `src/components/tasks/board-column.tsx` | Column with header (color dot, name, WIP count), task cards, empty state |
+| `src/components/tasks/task-card.tsx` | Task card: priority badge, assignee avatars, due date, tags, checklist %, counts |
+| `src/components/tasks/task-create-modal.tsx` | Task creation form (title, column, priority, due date, description); supports external trigger from column "+" |
+| `src/components/tasks/board-selector.tsx` | Board dropdown with task counts + "New Board" (admin) |
+| `src/components/tasks/board-create-dialog.tsx` | Create board dialog (name + description) |
+| `src/components/tasks/board-members-panel.tsx` | Slide-out sheet: member list, add/remove/role-change |
+| `src/app/(dashboard)/tasks/page.tsx` | Admin board page — loads board by `?board=` param, falls back to first/default |
+| `src/app/(agent)/my-tasks/page.tsx` | Agent board page — shows first assigned board + cross-board task summary |
 
 ### Known Patterns & Gotchas
 
 - **Admin auth**: Admins log in via `ADMIN_CREDENTIALS` env var — they do NOT have a row in `agents` table. Code that queries `agents WHERE role = 'admin'` may find nothing.
 - **Agent sidebar detection**: `useNavSections()` uses `pathname.startsWith("/my-")` to show agent nav. All agent routes MUST start with `/my-`.
-- **Agent layout**: `(agent)/layout.tsx` does NOT render a `<Header>` — each agent page provides its own inline `<h1>` title. Do not add `<Header>` to agent pages (it will duplicate).
-- **Auto-seed**: `getDefaultProject()` auto-creates default workspace + project + columns on first access if tables exist but are empty. No manual migration re-run needed.
+- **Agent layout**: `(agent)/layout.tsx` does NOT render a `<Header>` — each agent page provides its own inline header. Do not add `<Header>` to agent pages.
+- **Auto-seed**: `getDefaultProject()` auto-creates default workspace + project + columns on first access if tables exist but are empty.
+- **Board switching**: Admin uses `?board=<id>` URL param + localStorage; agent currently sees only first assigned board (FN-1 audit item).
+- **Task creation**: Modal supports external trigger via `triggerOpen` prop + `defaultColumnId` for per-column "+" buttons.
+- **Member removal**: Uses browser `confirm()` instead of styled dialog (UX-5 audit item); auto-unassigns from tasks.
 
 ## Key Reference Files
 
@@ -151,7 +161,8 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 |------|---------|
 | `plan.md` | Execution plan with milestones and checklists |
 | `cline.md` | Project history, progress tracking, resume instructions |
-| `task_board_cases.md` | All cases, subcases & edge cases for Task Board (3 levels deep) — used for dev scoping and QA |
+| `task_board_cases.md` | All cases, subcases & edge cases for Task Board (3 levels deep) — dev scoping and QA |
+| `task_board_ui_audit.md` | UI component audit: 12 components, issues (P0/P1/P2), role matrix, recommended fixes |
 
 ## Conversation Continuity
 

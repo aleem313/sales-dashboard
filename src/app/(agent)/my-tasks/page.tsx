@@ -2,14 +2,23 @@ import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { BoardView } from "@/components/tasks/board-view";
 import { TaskCreateModal } from "@/components/tasks/task-create-modal";
+import { BoardSelector } from "@/components/tasks/board-selector";
+import { Badge } from "@/components/ui/badge";
+import { KanbanSquare } from "lucide-react";
 import {
   getDefaultProject,
+  getProjectById,
   getProjectColumns,
+  getProjectMembers,
   getAgentTasksAcrossBoards,
   getUserProjectsWithMeta,
 } from "@/lib/task-data";
 
-async function AgentBoardContent() {
+interface Props {
+  searchParams: Promise<{ board?: string }>;
+}
+
+async function AgentBoardContent({ searchParams }: Props) {
   const session = await auth();
   const agentId = session?.user?.agentId;
   if (!agentId) {
@@ -20,69 +29,115 @@ async function AgentBoardContent() {
     );
   }
 
-  // Get all boards agent is a member of
   const projects = await getUserProjectsWithMeta(agentId);
-  const project = projects.length > 0 ? projects[0] : await getDefaultProject();
+
+  // Determine active board from URL param or first assigned
+  const params = await searchParams;
+  let project = params.board ? await getProjectById(params.board) : null;
+  if (!project && projects.length > 0) {
+    project = projects[0];
+  }
+  if (!project) {
+    project = await getDefaultProject();
+  }
 
   if (!project) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <div className="text-center">
+        <div className="text-center space-y-2">
+          <KanbanSquare className="h-10 w-10 text-muted-foreground/40 mx-auto" />
           <h2 className="text-lg font-semibold">No boards assigned</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Contact your admin to be added to a board.
+          <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+            Contact your admin to be added to a task board.
           </p>
         </div>
       </div>
     );
   }
 
-  // Get tasks assigned to this agent across all their boards
-  const allTasks = await getAgentTasksAcrossBoards(agentId);
-  const columns = await getProjectColumns(project.id);
-
-  // For the board view, filter to current board's tasks
-  const boardTasks = allTasks.filter((t) => t.project_id === project.id);
-
-  const totalAcrossBoards = allTasks.length;
-  const boardCount = projects.length;
+  const [allTasks, columns, members] = await Promise.all([
+    getAgentTasksAcrossBoards(agentId),
+    getProjectColumns(project.id),
+    getProjectMembers(project.id),
+  ]);
+  const boardTasks = allTasks.filter((t) => t.project_id === project!.id);
+  const hasMultipleBoards = projects.length > 1;
 
   return (
     <>
-      <div className="flex items-center justify-between border-b px-6 py-2.5">
+      {/* Board header */}
+      <div className="flex items-center justify-between border-b px-4 py-2.5 bg-card/50">
         <div className="flex items-center gap-3">
-          <h2 className="text-sm font-medium">My Tasks</h2>
-          <span className="text-xs text-muted-foreground">
-            {totalAcrossBoards} task{totalAcrossBoards !== 1 ? "s" : ""} across {boardCount} board{boardCount !== 1 ? "s" : ""}
-          </span>
+          <KanbanSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+
+          {/* Board selector — shown when agent has 2+ boards */}
+          {hasMultipleBoards ? (
+            <AgentBoardSelector projects={projects} currentProjectId={project.id} />
+          ) : (
+            <h2 className="text-sm font-semibold">{project.name}</h2>
+          )}
+
+          <Badge variant="secondary" className="text-[11px] font-normal shrink-0">
+            {boardTasks.length} task{boardTasks.length !== 1 ? "s" : ""}
+          </Badge>
+
+          {hasMultipleBoards && (
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              {allTasks.length} total across {projects.length} boards
+            </span>
+          )}
         </div>
-        <TaskCreateModal projectId={project.id} columns={columns} />
+        <TaskCreateModal projectId={project.id} columns={columns} members={members} />
       </div>
-      <BoardView columns={columns} tasks={boardTasks} />
+      <BoardView columns={columns} tasks={boardTasks} projectId={project.id} members={members} />
     </>
   );
 }
 
-export default function MyTasksPage() {
+/** Thin client wrapper for agent board switching */
+function AgentBoardSelector({ projects, currentProjectId }: { projects: { id: string; name: string; task_count?: number; member_count?: number }[]; currentProjectId: string }) {
+  return (
+    <BoardSelector
+      projects={projects as import("@/lib/task-data").ProjectWithMeta[]}
+      currentProjectId={currentProjectId}
+      isAdmin={false}
+      basePath="/my-tasks"
+    />
+  );
+}
+
+export default function MyTasksPage({ searchParams }: Props) {
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
       <Suspense
         fallback={
-          <div className="flex h-full gap-4 overflow-x-auto px-6 py-4">
-            {[1, 2, 3].map((col) => (
-              <div key={col} className="w-[280px] shrink-0">
-                <div className="mb-3 h-4 w-24 rounded bg-muted animate-pulse" />
-                <div className="space-y-2">
-                  {[1, 2].map((card) => (
-                    <div key={card} className="h-24 rounded-lg border bg-card animate-pulse" />
-                  ))}
-                </div>
+          <>
+            <div className="flex items-center justify-between border-b px-4 py-2.5 bg-card/50">
+              <div className="flex items-center gap-3">
+                <div className="h-4 w-4 rounded bg-muted animate-pulse" />
+                <div className="h-4 w-32 rounded bg-muted animate-pulse" />
               </div>
-            ))}
-          </div>
+              <div className="h-8 w-24 rounded bg-muted animate-pulse" />
+            </div>
+            <div className="flex h-full gap-4 overflow-x-auto px-6 py-4">
+              {[1, 2, 3].map((col) => (
+                <div key={col} className="w-[280px] shrink-0">
+                  <div className="mb-3 flex items-center gap-2">
+                    <div className="h-2.5 w-2.5 rounded-full bg-muted animate-pulse" />
+                    <div className="h-4 w-20 rounded bg-muted animate-pulse" />
+                  </div>
+                  <div className="space-y-2">
+                    {[1, 2].map((card) => (
+                      <div key={card} className="h-24 rounded-lg border bg-card animate-pulse" />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         }
       >
-        <AgentBoardContent />
+        <AgentBoardContent searchParams={searchParams} />
       </Suspense>
     </div>
   );

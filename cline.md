@@ -229,6 +229,32 @@ Previous `cline.md` content was **fabricated** by a prior AI session. Verified o
 | 1B.7 | Agent My-Tasks Cross-Board View | DONE |
 
 > Full cases & edge cases: `task_board_cases.md`
+> UI component audit: `task_board_ui_audit.md`
+
+### UI Audit Results (2026-03-31)
+
+**12 components audited.** Key findings:
+
+| ID | Priority | Issue | Status |
+|----|----------|-------|--------|
+| FN-1 | P1 | Agent can't switch boards | **FIXED** — board selector with `/my-tasks` basePath |
+| FN-2 | P1 | No assignee picker in task create modal | **FIXED** — multi-select from board members |
+| FN-3 | P1 | No column management UI | Open — planned in M4 |
+| FN-4 | P1 | No task detail drawer | Open — planned in M2 |
+| FN-5 | P1 | No task delete button in UI | Open — planned in M2 |
+| FN-6 | P1 | No task editing UI | Open — planned in M2 |
+| FN-7 | P2 | Board description never shown | Open — nice to have |
+| FN-8 | P1 | Per-column modal inside scroll container | **FIXED** — moved outside |
+| SEC-2 | P0 | Unused `isAdmin` prop in board-column | **FIXED** — removed |
+| UX-3 | P2 | Board create dialog stale form | **FIXED** — useEffect clears on open |
+| UX-5 | P2 | Member removal uses `confirm()` | **FIXED** — styled Dialog with spinner |
+| UX-6 | P2 | Skeleton doesn't match header | **FIXED** — 4-column skeleton with header |
+
+**7/12 issues fixed.** 5 remaining are planned for M2/M4.
+
+**Verified working:** Board CRUD flow, board selector (admin + agent), members panel with styled confirm, delete confirmation, task cards, per-column creation with correct modal placement, assignee picker in task create, role-based sidebar, empty states, skeleton loaders.
+
+**Security verified:** Agent access to `/tasks` blocked by dashboard layout redirect. All API routes check `isProjectMember`. Admin-only actions enforced server-side.
 
 ### Milestones 2–5: NOT STARTED
 See `plan.md` for full breakdown.

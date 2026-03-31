@@ -11,13 +11,20 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, UserPlus, X, Shield, User } from "lucide-react";
+import { Users, UserPlus, X, Shield, User, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   addBoardMembersAction,
@@ -47,6 +54,7 @@ export function BoardMembersPanel({
   const [available, setAvailable] = useState(initialAvailable);
   const [isPending, startTransition] = useTransition();
   const [selectedAgent, setSelectedAgent] = useState<string>("");
+  const [removeTarget, setRemoveTarget] = useState<ProjectMember | null>(null);
 
   useEffect(() => {
     setMembers(initialMembers);
@@ -77,12 +85,13 @@ export function BoardMembersPanel({
     });
   }
 
-  function handleRemove(agentId: string, name: string) {
-    if (!confirm(`Remove ${name} from this board? They will be unassigned from all tasks.`)) return;
+  function handleConfirmRemove() {
+    if (!removeTarget) return;
     startTransition(async () => {
       try {
-        await removeBoardMemberAction(projectId, agentId, true);
-        toast.success(`${name} removed`);
+        await removeBoardMemberAction(projectId, removeTarget.agent_id, true);
+        toast.success(`${removeTarget.name} removed from board`);
+        setRemoveTarget(null);
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed to remove member");
       }
@@ -90,95 +99,130 @@ export function BoardMembersPanel({
   }
 
   return (
-    <Sheet>
-      <SheetTrigger asChild>
-        <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
-          <Users className="h-4 w-4" />
-          <span className="text-xs">{members.length}</span>
-        </Button>
-      </SheetTrigger>
-      <SheetContent className="w-[360px] sm:w-[400px]">
-        <SheetHeader>
-          <SheetTitle>Board Members</SheetTitle>
-        </SheetHeader>
+    <>
+      <Sheet>
+        <SheetTrigger asChild>
+          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
+            <Users className="h-4 w-4" />
+            <span className="text-xs">{members.length}</span>
+          </Button>
+        </SheetTrigger>
+        <SheetContent className="w-[360px] sm:w-[400px]">
+          <SheetHeader>
+            <SheetTitle>Board Members ({members.length})</SheetTitle>
+          </SheetHeader>
 
-        {/* Add member */}
-        {isAdmin && available.length > 0 && (
-          <div className="flex gap-2 mt-4 mb-4">
-            <Select value={selectedAgent} onValueChange={setSelectedAgent}>
-              <SelectTrigger className="flex-1 h-8 text-sm">
-                <SelectValue placeholder="Add agent..." />
-              </SelectTrigger>
-              <SelectContent>
-                {available.map((a) => (
-                  <SelectItem key={a.agent_id} value={a.agent_id}>
-                    {a.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button size="sm" onClick={handleAddMember} disabled={!selectedAgent || isPending}>
-              <UserPlus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        )}
+          {/* Add member */}
+          {isAdmin && available.length > 0 && (
+            <div className="flex gap-2 mt-4 mb-4">
+              <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+                <SelectTrigger className="flex-1 h-9 text-sm">
+                  <SelectValue placeholder="Add agent to board..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {available.map((a) => (
+                    <SelectItem key={a.agent_id} value={a.agent_id}>
+                      <span className="flex items-center gap-2">
+                        {a.name}
+                        {a.email && <span className="text-muted-foreground text-xs">({a.email})</span>}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button size="sm" className="h-9 px-3" onClick={handleAddMember} disabled={!selectedAgent || isPending}>
+                {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
+          )}
+          {isAdmin && available.length === 0 && (
+            <p className="text-xs text-muted-foreground mt-4 mb-3">All agents are already members of this board.</p>
+          )}
 
-        {/* Member list */}
-        <div className="space-y-1 mt-2">
-          {members.map((m) => (
-            <div
-              key={m.agent_id}
-              className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted/50"
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary shrink-0">
-                {m.avatar_url ? (
-                  <img src={m.avatar_url} alt={m.name} className="h-full w-full rounded-full object-cover" />
+          {/* Member list */}
+          <div className="space-y-1 mt-2">
+            {members.map((m) => (
+              <div
+                key={m.agent_id}
+                className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted/50"
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary shrink-0">
+                  {m.avatar_url ? (
+                    <img src={m.avatar_url} alt={m.name} className="h-full w-full rounded-full object-cover" />
+                  ) : (
+                    getInitials(m.name)
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">
+                    {m.name}
+                    {!m.active && <span className="text-muted-foreground text-xs ml-1">(inactive)</span>}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">{m.email}</div>
+                </div>
+                {isAdmin ? (
+                  <Select
+                    value={m.role}
+                    onValueChange={(role) => handleRoleChange(m.agent_id, role as "admin" | "member")}
+                    disabled={isPending}
+                  >
+                    <SelectTrigger className="w-[95px] h-7 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">
+                        <span className="flex items-center gap-1"><Shield className="h-3 w-3" /> Admin</span>
+                      </SelectItem>
+                      <SelectItem value="member">
+                        <span className="flex items-center gap-1"><User className="h-3 w-3" /> Member</span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 ) : (
-                  getInitials(m.name)
+                  <Badge variant="secondary" className="text-xs shrink-0">
+                    {m.role === "admin" ? "Admin" : "Member"}
+                  </Badge>
+                )}
+                {isAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => setRemoveTarget(m)}
+                    disabled={isPending}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
                 )}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">{m.name}</div>
-                <div className="text-xs text-muted-foreground truncate">{m.email}</div>
-              </div>
-              {isAdmin ? (
-                <Select
-                  value={m.role}
-                  onValueChange={(role) => handleRoleChange(m.agent_id, role as "admin" | "member")}
-                  disabled={isPending}
-                >
-                  <SelectTrigger className="w-[90px] h-7 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">
-                      <span className="flex items-center gap-1"><Shield className="h-3 w-3" /> Admin</span>
-                    </SelectItem>
-                    <SelectItem value="member">
-                      <span className="flex items-center gap-1"><User className="h-3 w-3" /> Member</span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Remove member confirmation dialog */}
+      <Dialog open={!!removeTarget} onOpenChange={(open) => { if (!open) setRemoveTarget(null); }}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Remove Member</DialogTitle>
+            <DialogDescription>
+              Remove <strong>{removeTarget?.name}</strong> from this board? They will be unassigned from all tasks on this board.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setRemoveTarget(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmRemove} disabled={isPending}>
+              {isPending ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Removing...</>
               ) : (
-                <Badge variant="secondary" className="text-xs">
-                  {m.role === "admin" ? "Admin" : "Member"}
-                </Badge>
+                "Remove Member"
               )}
-              {isAdmin && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => handleRemove(m.agent_id, m.name)}
-                  disabled={isPending}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
-          ))}
-        </div>
-      </SheetContent>
-    </Sheet>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
