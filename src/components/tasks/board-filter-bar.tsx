@@ -13,14 +13,15 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, X } from "lucide-react";
 import { useBoardStore } from "@/lib/stores/board-store";
-import type { BoardColumn, ProjectMember } from "@/lib/task-data";
+import type { BoardColumn, ProjectMember, TaskTag } from "@/lib/task-data";
 
 interface BoardFilterBarProps {
   columns: BoardColumn[];
   members: ProjectMember[];
+  tags?: TaskTag[];
 }
 
-export function BoardFilterBar({ columns, members }: BoardFilterBarProps) {
+export function BoardFilterBar({ columns, members, tags }: BoardFilterBarProps) {
   const store = useBoardStore();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -31,8 +32,9 @@ export function BoardFilterBar({ columns, members }: BoardFilterBarProps) {
     const priority = searchParams.get("priority") ?? undefined;
     const column = searchParams.get("column") ?? undefined;
     const search = searchParams.get("search") ?? undefined;
-    if (assignee || priority || column || search) {
-      store.setFilters({ assignee, priority, column, search });
+    const tag = searchParams.get("tag") ?? undefined;
+    if (assignee || priority || column || search || tag) {
+      store.setFilters({ assignee, priority, column, search, tag });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -114,6 +116,26 @@ export function BoardFilterBar({ columns, members }: BoardFilterBarProps) {
         </SelectContent>
       </Select>
 
+      {/* Label filter */}
+      {tags && tags.length > 0 && (
+        <Select value={store.filters.tag ?? "all"} onValueChange={(v) => updateFilter("tag", v === "all" ? undefined : v)}>
+          <SelectTrigger className="h-8 w-[110px] text-xs">
+            <SelectValue placeholder="Label" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All labels</SelectItem>
+            {tags.map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                <span className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: t.color }} />
+                  {t.name}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
       {/* Clear filters */}
       {hasFilters && (
         <Button
@@ -123,7 +145,7 @@ export function BoardFilterBar({ columns, members }: BoardFilterBarProps) {
           onClick={() => {
             store.clearFilters();
             const params = new URLSearchParams(searchParams.toString());
-            ["search", "column", "priority", "assignee"].forEach((k) => params.delete(k));
+            ["search", "column", "priority", "assignee", "tag"].forEach((k) => params.delete(k));
             router.push(`?${params.toString()}`, { scroll: false });
           }}
         >

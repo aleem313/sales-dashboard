@@ -18,6 +18,7 @@ interface BoardState {
     priority?: string;
     column?: string;
     search?: string;
+    tag?: string;
   };
 
   // Actions
@@ -183,6 +184,11 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       if (
         filters.search &&
         !t.title.toLowerCase().includes(filters.search.toLowerCase())
+      )
+        return false;
+      if (
+        filters.tag &&
+        !(t.tags ?? []).some((tag) => tag.id === filters.tag)
       )
         return false;
       return true;

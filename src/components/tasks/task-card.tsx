@@ -1,10 +1,20 @@
 "use client";
 
-import { forwardRef } from "react";
+import { forwardRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   MessageSquare,
   Paperclip,
@@ -13,8 +23,13 @@ import {
   Flag,
   Clock,
   CalendarClock,
+  MoreHorizontal,
+  Pencil,
+  ArrowRight,
+  Link2,
+  Trash2,
 } from "lucide-react";
-import type { Task } from "@/lib/task-data";
+import type { Task, BoardColumn } from "@/lib/task-data";
 
 const priorityConfig: Record<string, { color: string; bg: string; label: string }> = {
   urgent: { color: "text-red-600 dark:text-red-400", bg: "bg-red-500/15", label: "Urgent" },
@@ -61,10 +76,15 @@ interface TaskCardProps {
   columnColor?: string;
   onClick?: () => void;
   isDragging?: boolean;
+  columns?: BoardColumn[];
+  isAdmin?: boolean;
+  onMoveTask?: (taskId: string, columnId: string) => void;
+  onDeleteTask?: (taskId: string) => void;
 }
 
 export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { style?: React.CSSProperties }>(
-  ({ task, columnColor, onClick, isDragging, style, ...props }, ref) => {
+  ({ task, columnColor, onClick, isDragging, style, columns, isAdmin, onMoveTask, onDeleteTask, ...props }, ref) => {
+    const [menuOpen, setMenuOpen] = useState(false);
     const dueStatus = task.due_date ? isDueWarning(task.due_date) : null;
     const assignees = task.assignees ?? [];
     const tags = task.tags ?? [];
@@ -85,18 +105,91 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
       return `${h}h ${m}m`;
     }
 
+    function handleCopyLink(e: React.MouseEvent) {
+      e.stopPropagation();
+      const url = `${window.location.origin}/tasks?task=${task.id}`;
+      navigator.clipboard.writeText(url);
+    }
+
     return (
       <div
         ref={ref}
         style={style}
         onClick={onClick}
         className={cn(
-          "group cursor-pointer rounded-lg border bg-card shadow-sm transition-all touch-manipulation overflow-hidden",
+          "group relative cursor-pointer rounded-lg border bg-card shadow-sm transition-all touch-manipulation overflow-hidden",
           "hover:shadow-md hover:border-primary/30",
           isDragging && "opacity-50 shadow-lg ring-2 ring-primary/30"
         )}
         {...props}
       >
+        {/* Context menu trigger — visible on hover */}
+        {columns && columns.length > 0 && (
+          <div
+            className={cn(
+              "absolute top-1.5 right-1.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity",
+              menuOpen && "opacity-100"
+            )}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <button className="flex h-6 w-6 items-center justify-center rounded-md bg-card border shadow-sm hover:bg-muted transition-colors">
+                  <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onClick?.(); setMenuOpen(false); }}>
+                  <Pencil className="h-3.5 w-3.5 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <ArrowRight className="h-3.5 w-3.5 mr-2" />
+                    Move to
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {columns.filter((c) => c.id !== task.column_id).map((c) => (
+                      <DropdownMenuItem
+                        key={c.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onMoveTask?.(task.id, c.id);
+                          setMenuOpen(false);
+                        }}
+                      >
+                        <span className="h-2 w-2 rounded-full mr-2 shrink-0" style={{ backgroundColor: c.color }} />
+                        {c.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuItem onClick={handleCopyLink}>
+                  <Link2 className="h-3.5 w-3.5 mr-2" />
+                  Copy Link
+                </DropdownMenuItem>
+                {isAdmin && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteTask?.(task.id);
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+
         {/* Status color bar (left border) */}
         <div className="flex">
           <div
@@ -259,7 +352,7 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
 TaskCardContent.displayName = "TaskCardContent";
 
 /** Sortable wrapper for dnd-kit — entire card is draggable */
-export function SortableTaskCard({ task, columnColor, onClick }: TaskCardProps) {
+export function SortableTaskCard({ task, columnColor, onClick, columns, isAdmin, onMoveTask, onDeleteTask }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -282,6 +375,10 @@ export function SortableTaskCard({ task, columnColor, onClick }: TaskCardProps) 
       columnColor={columnColor}
       onClick={onClick}
       isDragging={isDragging}
+      columns={columns}
+      isAdmin={isAdmin}
+      onMoveTask={onMoveTask}
+      onDeleteTask={onDeleteTask}
       {...attributes}
       {...listeners}
     />

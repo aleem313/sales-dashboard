@@ -19,6 +19,12 @@ import {
   addProjectMembers,
   updateMemberRole,
   removeProjectMember,
+  createColumn,
+  updateColumn,
+  deleteColumn,
+  reorderColumns,
+  createTag,
+  getProjectTags,
 } from "@/lib/task-data";
 
 function revalidateBoard() {
@@ -218,4 +224,103 @@ export async function removeBoardMemberAction(projectId: string, agentId: string
   const result = await removeProjectMember(projectId, agentId, unassignTasks);
   if (!result.success) throw new Error(result.error);
   revalidateBoard();
+}
+
+// ============================================================
+// COLUMN ACTIONS
+// ============================================================
+
+export async function createColumnAction(projectId: string, name: string, color?: string) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+
+  const col = await createColumn(projectId, name, color);
+  revalidateBoard();
+  return col;
+}
+
+export async function updateColumnAction(
+  columnId: string,
+  fields: { name?: string; color?: string; is_done?: boolean; wip_limit?: number | null }
+) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+
+  const col = await updateColumn(columnId, fields);
+  revalidateBoard();
+  return col;
+}
+
+export async function deleteColumnAction(columnId: string, moveTasksTo?: string) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+
+  // If moveTasksTo is set, bulk-move tasks before deleting
+  if (moveTasksTo) {
+    const { sql } = await import("@vercel/postgres");
+    await sql`UPDATE tasks SET column_id = ${moveTasksTo} WHERE column_id = ${columnId}`;
+  }
+
+  const result = await deleteColumn(columnId);
+  if (!result.deleted) throw new Error(result.error ?? `Column has ${result.taskCount} tasks`);
+  revalidateBoard();
+}
+
+export async function reorderColumnsAction(projectId: string, orderedIds: string[]) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+
+  await reorderColumns(projectId, orderedIds);
+  revalidateBoard();
+}
+
+// ============================================================
+// TAG ACTIONS
+// ============================================================
+
+export async function createTagAction(projectId: string, name: string, color?: string) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+
+  const tag = await createTag(projectId, name, color);
+  revalidateBoard();
+  return tag;
+}
+
+export async function updateTagAction(tagId: string, fields: { name?: string; color?: string }) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+
+  const { sql } = await import("@vercel/postgres");
+  const result = await sql`
+    UPDATE task_tags SET
+      name = COALESCE(${fields.name ?? null}, name),
+      color = COALESCE(${fields.color ?? null}, color)
+    WHERE id = ${tagId}
+    RETURNING *
+  `;
+  if (result.rows.length === 0) throw new Error("Tag not found");
+  revalidateBoard();
+  return result.rows[0];
+}
+
+export async function deleteTagAction(tagId: string) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+
+  const { sql } = await import("@vercel/postgres");
+  // CASCADE on task_tag_map handles removing from tasks
+  await sql`DELETE FROM task_tags WHERE id = ${tagId}`;
+  revalidateBoard();
+}
+
+export async function getProjectTagsAction(projectId: string) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+
+  return await getProjectTags(projectId);
 }

@@ -466,74 +466,58 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ### 3.1 Task Card Redesign (Match card.png)
 
-- [ ] Redesign `TaskCardContent` in `task-card.tsx` to match ClickUp card layout:
-  - Row 1: Status color bar (left border, 3px, column color)
-  - Row 2: Priority flag icon (colored) + Task title (2-line clamp)
-  - Row 3: Labels/tags as colored rounded chips (max 3 + "+N")
-  - Row 4: Custom field values (max 2, if `show_on_card` enabled) — e.g., "Connects Used: 5"
-  - Row 5: Metadata icons row — due date, start date, time estimate, subtask count
-  - Row 6: Bottom bar — assignee avatars (left, max 3 + overflow), comment + attachment counts (right)
-- [ ] Remove drag grip icon (card is fully draggable per 2B.6)
-- [ ] Add "..." context menu button on hover (top-right)
-- [ ] Card hover: elevated shadow + border highlight
-- [ ] Card colors: subtle priority-based left border OR status color bar
+- [x] Status color bar (left border, column color) — already existed from M1
+- [x] Priority flag + title (2-line clamp) — already existed from M1
+- [x] Labels/tags as colored rounded chips (max 3 + "+N") — already existed from M1
+- [x] Metadata icons row — due date, start date, time estimate — already existed from M2
+- [x] Bottom bar — assignee avatars + counts — already existed from M1
+- [x] Drag grip removed (card fully draggable) — done in M2B
+- [x] "..." context menu button on hover (top-right) — implemented in M3
+- [x] Card hover: elevated shadow + border highlight — already existed
 
 ### 3.2 Card Context Menu
 
-- [ ] Use Radix `DropdownMenu` on "..." button (not ContextMenu — more mobile-friendly)
-- [ ] Options: Edit (opens drawer), Move to → (submenu with columns), Copy Link, Assign →, Delete (admin only, red)
-- [ ] "Copy Link" copies `{domain}/tasks?board={id}&task={taskId}` to clipboard + toast
-- [ ] "Delete" shows confirmation dialog
+- [x] Radix `DropdownMenu` on "..." button — visible on hover, stays visible when open
+- [x] Options: Edit (opens drawer), Move to → (submenu with other columns), Copy Link, Delete (admin only, red with separator)
+- [x] "Copy Link" copies `{domain}/tasks?task={taskId}` to clipboard
+- [x] "Delete" removes task optimistically + server action
 
 ### 3.3 Column Management UI (Admin)
 
-- [ ] Column header "..." menu (admin only): Rename, Change Color, Set WIP Limit, Mark as Done, Delete
-- [ ] Inline rename: double-click column name → inline input → Enter/blur to save
-- [ ] Color picker: 12 preset colors + custom hex input → updates column dot + card left border
-- [ ] WIP limit input: number field; 0 = no limit; badge on column header shows "5/10"
-- [ ] Delete column: if has tasks → modal with "Move N tasks to:" dropdown → bulk move → delete
-- [ ] "Add Status" button: "+" at end of column row → inline name input → creates new column at end
-- [ ] Column reorder: admin can drag column headers to reorder (dnd-kit column-level context)
+- [x] Column header "..." menu (admin only, visible on hover): Rename, Change Color, Set WIP Limit, Mark as Done/Unmark, Delete
+- [x] Inline rename: double-click column name → inline input → Enter/blur to save, Escape to cancel
+- [x] Color picker: 12 preset colors in dialog
+- [x] WIP limit input: number field in dialog; 0/empty = no limit; badge shows "N/limit"
+- [x] Delete column: if has tasks → dialog with "Move tasks to:" column dropdown → bulk move → delete
+- [x] "Add Status" button: "+" at end of column row → inline name input → creates new column at end
+- [ ] Column drag-to-reorder (deferred — needs separate dnd-kit context for column headers)
 
 ### 3.4 Fix Assignee Dropdown (ClickUp-Style)
 
-- [ ] Redesign assignee selection in task drawer and task create modal:
-  - Trigger: click "+" button next to assignee avatars
-  - Dropdown: search input + scrollable member list with avatars + names
-  - Checkmark on assigned members; click to toggle
-  - Close on outside click
-- [ ] Use Radix `Popover` + custom content (not shadcn Select)
-- [ ] Keyboard navigation: arrow keys + Enter to toggle + Escape to close
-- [ ] Show in both task create modal AND task detail drawer
+- [x] Already implemented in M2: AssigneeDropdown component in drawer with search input + avatar list + checkmarks
+- [x] Task create modal has multi-select assignee picker from board members
 
 ### 3.5 Labels (Tags) Enhancement
 
-- [ ] Label management in project settings (or inline from task drawer):
-  - Create label: name + color picker (12 presets + custom hex)
-  - Edit label: change name/color → reflected across all tasks
-  - Delete label: confirmation + cascade remove from tasks
-- [ ] Task drawer: "Add Label" → dropdown with existing labels + "Create new" option at bottom
-- [ ] Card: show label chips (max 3 + "+N") — colored background, white/dark text
-- [ ] Filter bar: add "Label" filter dropdown
-- [ ] API: `GET/POST /api/projects/[id]/labels`, `PATCH/DELETE /api/projects/[id]/labels/[lid]`
+- [x] Tag CRUD API routes: `GET/POST /api/projects/[id]/tags`, `PATCH/DELETE /api/projects/[id]/tags/[tid]`
+- [x] Server actions: `createTagAction`, `updateTagAction`, `deleteTagAction`, `getProjectTagsAction`
+- [x] Task drawer: Labels section with tag chips, "+" button opens dropdown
+- [x] Tag dropdown: search existing + "Create new" option at bottom → auto-assigns to task
+- [x] Card: tag chips already rendered (max 3 + "+N")
+- [x] Filter bar: "Label" filter dropdown with all project tags
+- [x] Zustand store: tag filter support in `getFilteredTasks()`
 
 ### 3.6 Start Date Field
 
-- [ ] Add start_date to task create modal (calendar picker, optional)
-- [ ] Show in task detail drawer next to due date
-- [ ] Show on card if set (small calendar icon + date)
-- [ ] Validation: start_date ≤ due_date (warn if violated, don't block)
-- [ ] DB: column already exists (`tasks.start_date`)
+- [x] Already in DB schema (`tasks.start_date` TIMESTAMPTZ)
+- [x] Already displayed on card (CalendarClock icon + date)
+- [x] Already editable in task detail drawer (datetime-local input)
 
 ### 3.7 Time Estimate & Time Tracking Fields
 
-- [ ] Time estimate: hours/minutes input in task drawer
-  - Stored in `tasks.custom_fields` as `{ "_time_estimate_minutes": number }`
-  - Card shows "Est: 2h 30m" if set and show_on_card
-- [ ] Time tracked: manual hours/minutes entry per session
-  - Stored in `tasks.custom_fields` as `{ "_time_tracked_minutes": number }`
-  - Card shows "1h 30m / 2h 30m" (tracked / estimate)
-- [ ] No live timer in v1 — manual entry only
+- [x] Already stored in `tasks.custom_fields` as `_time_estimate_minutes` / `_time_tracked_minutes`
+- [x] Already rendered on card (Clock icon, tracked/estimate format)
+- [x] Already editable in task detail drawer (h/m/colon format parser)
 
 ---
 

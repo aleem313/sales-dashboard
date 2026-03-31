@@ -15,6 +15,7 @@ import {
   getUserProjectsWithMeta,
   getProjectMembers,
   getAvailableAgents,
+  getProjectTags,
 } from "@/lib/task-data";
 
 interface Props {
@@ -68,11 +69,12 @@ async function BoardContent({ searchParams }: Props) {
 
   const finalProjects = projects.length > 0 ? projects : await getAllProjects();
 
-  const [columns, tasks, members, available] = await Promise.all([
+  const [columns, tasks, members, available, tags] = await Promise.all([
     getProjectColumns(project.id),
     getProjectTasks(project.id),
     getProjectMembers(project.id),
     isAdmin ? getAvailableAgents(project.id) : Promise.resolve([]),
+    getProjectTags(project.id),
   ]);
 
   return (
@@ -85,8 +87,8 @@ async function BoardContent({ searchParams }: Props) {
         availableAgents={available}
         isAdmin={isAdmin}
       />
-      <BoardFilterBar columns={columns} members={members} />
-      <BoardView columns={columns} tasks={tasks} projectId={project.id} members={members} />
+      <BoardFilterBar columns={columns} members={members} tags={tags} />
+      <BoardView columns={columns} tasks={tasks} projectId={project.id} members={members} isAdmin={isAdmin} />
       <TaskDetailDrawer columns={columns} isAdmin={isAdmin} />
     </>
   );

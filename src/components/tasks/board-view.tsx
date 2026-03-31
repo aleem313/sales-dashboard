@@ -18,9 +18,10 @@ import { BoardColumnComponent } from "./board-column";
 import { TaskCardContent } from "./task-card";
 import { TaskCreateModal } from "./task-create-modal";
 import { useBoardStore } from "@/lib/stores/board-store";
-import { moveTaskAction } from "@/lib/task-actions";
+import { moveTaskAction, deleteTaskAction, updateColumnAction, deleteColumnAction, createColumnAction } from "@/lib/task-actions";
 import { toast } from "sonner";
-import { Undo2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Undo2, Plus } from "lucide-react";
 import type { BoardColumn, Task, ProjectMember } from "@/lib/task-data";
 
 interface BoardViewProps {
@@ -28,9 +29,10 @@ interface BoardViewProps {
   tasks: Task[];
   projectId?: string;
   members?: ProjectMember[];
+  isAdmin?: boolean;
 }
 
-export function BoardView({ columns, tasks, projectId, members }: BoardViewProps) {
+export function BoardView({ columns, tasks, projectId, members, isAdmin }: BoardViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [addToColumn, setAddToColumn] = useState<string | null>(null);
@@ -180,6 +182,66 @@ export function BoardView({ columns, tasks, projectId, members }: BoardViewProps
     router.push(`?${params.toString()}`, { scroll: false });
   }
 
+  // Context menu: move task to another column
+  async function handleContextMoveTask(taskId: string, columnId: string) {
+    store.savePreviousState(taskId);
+    store.moveTask(taskId, columnId, 0);
+    try {
+      await moveTaskAction(taskId, columnId);
+      const col = columns.find((c) => c.id === columnId);
+      toast.success(`Moved to ${col?.name ?? "column"}`);
+    } catch {
+      store.revertMove();
+      toast.error("Failed to move task");
+    }
+  }
+
+  // Context menu: delete task
+  async function handleContextDeleteTask(taskId: string) {
+    store.removeTask(taskId);
+    try {
+      await deleteTaskAction(taskId);
+      toast.success("Task deleted");
+    } catch {
+      toast.error("Failed to delete task");
+    }
+  }
+
+  // Column management handlers
+  async function handleUpdateColumn(columnId: string, fields: { name?: string; color?: string; is_done?: boolean; wip_limit?: number | null }) {
+    try {
+      await updateColumnAction(columnId, fields);
+      toast.success("Column updated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update column");
+    }
+  }
+
+  async function handleDeleteColumn(columnId: string, moveTasksTo?: string) {
+    try {
+      await deleteColumnAction(columnId, moveTasksTo);
+      toast.success("Column deleted");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete column");
+    }
+  }
+
+  // Add new column
+  const [addingColumn, setAddingColumn] = useState(false);
+  const [newColumnName, setNewColumnName] = useState("");
+
+  async function handleAddColumn() {
+    if (!newColumnName.trim() || !projectId) return;
+    try {
+      await createColumnAction(projectId, newColumnName.trim());
+      setNewColumnName("");
+      setAddingColumn(false);
+      toast.success("Column created");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create column");
+    }
+  }
+
   // Use store tasks grouped by column — respects active filters
   const filteredTasks = store.getFilteredTasks();
   const getColumnTasks = (columnId: string) => {
@@ -203,12 +265,49 @@ export function BoardView({ columns, tasks, projectId, members }: BoardViewProps
               key={column.id}
               column={column}
               tasks={getColumnTasks(column.id)}
+              allColumns={columns}
+              isAdmin={isAdmin}
               onTaskClick={handleTaskClick}
               onAddTask={(colId) => setAddToColumn(colId)}
+              onMoveTask={handleContextMoveTask}
+              onDeleteTask={handleContextDeleteTask}
+              onUpdateColumn={isAdmin ? handleUpdateColumn : undefined}
+              onDeleteColumn={isAdmin ? handleDeleteColumn : undefined}
             />
           ))}
 
-          {columns.length === 0 && (
+          {/* Add Status button (admin only) */}
+          {isAdmin && projectId && (
+            <div className="flex h-full w-[280px] shrink-0 flex-col">
+              {addingColumn ? (
+                <div className="px-1 pb-3">
+                  <Input
+                    value={newColumnName}
+                    onChange={(e) => setNewColumnName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleAddColumn();
+                      if (e.key === "Escape") { setAddingColumn(false); setNewColumnName(""); }
+                    }}
+                    onBlur={() => { if (!newColumnName.trim()) setAddingColumn(false); }}
+                    placeholder="Column name..."
+                    className="h-8 text-sm"
+                    maxLength={50}
+                    autoFocus
+                  />
+                </div>
+              ) : (
+                <button
+                  onClick={() => setAddingColumn(true)}
+                  className="flex items-center gap-2 rounded-lg border border-dashed border-muted-foreground/25 px-4 py-2.5 text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Status
+                </button>
+              )}
+            </div>
+          )}
+
+          {columns.length === 0 && !isAdmin && (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
               <div className="rounded-xl bg-muted/50 p-8">
                 <h3 className="text-lg font-semibold">No columns yet</h3>

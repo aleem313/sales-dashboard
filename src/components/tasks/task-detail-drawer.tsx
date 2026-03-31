@@ -39,11 +39,14 @@ import {
   updateTaskAction,
   deleteTaskAction,
   setTaskAssigneesAction,
+  setTaskTagsAction,
+  createTagAction,
   createCommentAction,
   addChecklistItemAction,
   toggleChecklistItemAction,
   deleteChecklistItemAction,
 } from "@/lib/task-actions";
+import type { TaskTag } from "@/lib/task-data";
 import { useBoardStore } from "@/lib/stores/board-store";
 import type { Task, BoardColumn, ProjectMember, ChecklistItem, Comment, ActivityLogEntry } from "@/lib/task-data";
 
@@ -113,6 +116,11 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
   const [newCheckItem, setNewCheckItem] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
+  // Tags
+  const [projectTags, setProjectTags] = useState<TaskTag[]>([]);
+  const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
+
   // Collapsible sections
   const [fieldsExpanded, setFieldsExpanded] = useState(true);
   const [checklistExpanded, setChecklistExpanded] = useState(true);
@@ -145,6 +153,12 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
     // Load activity
     fetch(`/api/tasks/${taskId}/activity`).then((r) => r.json()).then(setActivity).catch(() => {});
   }, [taskId]);
+
+  // Fetch project tags when task loads
+  useEffect(() => {
+    if (!task?.project_id) return;
+    fetch(`/api/projects/${task.project_id}/tags`).then((r) => r.json()).then(setProjectTags).catch(() => {});
+  }, [task?.project_id]);
 
   // Update title draft when task loads
   useEffect(() => {
@@ -210,6 +224,41 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
         if (res.ok) setTask(await res.json());
       } catch {
         toast.error("Failed to update assignees");
+      }
+    });
+  }
+
+  function toggleTag(tagId: string) {
+    if (!task) return;
+    const currentIds = (task.tags ?? []).map((t) => t.id);
+    const newIds = currentIds.includes(tagId)
+      ? currentIds.filter((id) => id !== tagId)
+      : [...currentIds, tagId];
+    startTransition(async () => {
+      try {
+        await setTaskTagsAction(task.id, newIds);
+        const res = await fetch(`/api/tasks/${task.id}`);
+        if (res.ok) setTask(await res.json());
+      } catch {
+        toast.error("Failed to update tags");
+      }
+    });
+  }
+
+  async function handleCreateTag() {
+    if (!task || !newTagName.trim()) return;
+    startTransition(async () => {
+      try {
+        const tag = await createTagAction(task.project_id, newTagName.trim());
+        setProjectTags((prev) => [...prev, tag as TaskTag]);
+        setNewTagName("");
+        // Auto-assign the new tag to this task
+        const currentIds = (task.tags ?? []).map((t) => t.id);
+        await setTaskTagsAction(task.id, [...currentIds, tag.id]);
+        const res = await fetch(`/api/tasks/${task.id}`);
+        if (res.ok) setTask(await res.json());
+      } catch {
+        toast.error("Failed to create tag");
       }
     });
   }
@@ -546,6 +595,88 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
                 placeholder="Add a description..."
                 className="w-full min-h-[80px] rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
               />
+            </div>
+
+            <Separator />
+
+            {/* ── Labels / Tags ── */}
+            <div className="px-6 py-3">
+              <p className="text-sm font-medium mb-2">Labels</p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(task.tags ?? []).map((tag) => (
+                  <button
+                    key={tag.id}
+                    onClick={() => toggleTag(tag.id)}
+                    disabled={isPending}
+                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors hover:opacity-80"
+                    style={{ backgroundColor: tag.color + "22", color: tag.color }}
+                  >
+                    {tag.name}
+                    <X className="h-3 w-3 opacity-50 hover:opacity-100" />
+                  </button>
+                ))}
+                {/* Add tag dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setTagDropdownOpen(!tagDropdownOpen)}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                    title="Add label"
+                  >
+                    <Plus className="h-3 w-3" />
+                  </button>
+                  {tagDropdownOpen && (
+                    <div className="absolute top-8 left-0 z-50 w-56 rounded-lg border bg-popover shadow-lg p-1.5">
+                      <div className="px-1.5 pb-1.5">
+                        <Input
+                          value={newTagName}
+                          onChange={(e) => setNewTagName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && newTagName.trim()) {
+                              e.preventDefault();
+                              handleCreateTag();
+                            }
+                            if (e.key === "Escape") setTagDropdownOpen(false);
+                          }}
+                          placeholder="Search or create..."
+                          className="h-7 text-xs"
+                          autoFocus
+                        />
+                      </div>
+                      <div className="max-h-[160px] overflow-y-auto">
+                        {projectTags
+                          .filter((t) => !newTagName || t.name.toLowerCase().includes(newTagName.toLowerCase()))
+                          .map((tag) => {
+                            const isAssigned = (task.tags ?? []).some((t) => t.id === tag.id);
+                            return (
+                              <button
+                                key={tag.id}
+                                onClick={() => { toggleTag(tag.id); }}
+                                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-muted transition-colors"
+                              >
+                                <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
+                                <span className="truncate">{tag.name}</span>
+                                {isAssigned && <span className="ml-auto text-primary">✓</span>}
+                              </button>
+                            );
+                          })}
+                      </div>
+                      {newTagName.trim() && !projectTags.some((t) => t.name.toLowerCase() === newTagName.toLowerCase()) && (
+                        <>
+                          <Separator className="my-1" />
+                          <button
+                            onClick={handleCreateTag}
+                            disabled={isPending}
+                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-primary hover:bg-muted transition-colors"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Create &ldquo;{newTagName.trim()}&rdquo;
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <Separator />

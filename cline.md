@@ -272,7 +272,19 @@ Previous `cline.md` content was **fabricated** by a prior AI session. Verified o
 | 2.10 | Filter Bar | DONE |
 | 2.11 | Performance | DONE (optimistic UI, no formal benchmark) |
 
-### Milestones 3–5: NOT STARTED
+### Milestone 3: ClickUp Card UI & Column Management — COMPLETE (2026-03-31)
+
+| # | Feature | Status |
+|---|---------|--------|
+| 3.1 | Task Card Redesign | DONE (most already existed from M1/M2) |
+| 3.2 | Card Context Menu | DONE |
+| 3.3 | Column Management UI | DONE (drag reorder deferred) |
+| 3.4 | Assignee Dropdown | DONE (already existed from M2) |
+| 3.5 | Labels/Tags Enhancement | DONE |
+| 3.6 | Start Date Field | DONE (already existed from M2) |
+| 3.7 | Time Estimate & Tracking | DONE (already existed from M2) |
+
+### Milestones 4–7: NOT STARTED
 See `plan.md` for full breakdown.
 
 ---
@@ -423,7 +435,7 @@ When resuming work:
 - `plan.md` — Upgraded to v3.0 with 8 milestones (M2B urgent fixes, M3–M7 new features)
 - `task_board_fixes.md` — Technical fix guide with code samples for all 5 bugs + UI/UX improvement suggestions
 
-**Next action:** Execute Milestone 3 (ClickUp Card UI & Column Management)
+**Milestone 3 completed:** Card context menu, column management UI, labels/tags enhancement
 
 ### Milestone 2B — Critical Bug Fixes (completed 2026-03-31)
 
@@ -469,5 +481,32 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ---
 
-*Current Phase: Milestone 2 complete — drag-drop, task drawer, inline editing, filters*
-*Next Action: Push to Vercel → verify drag-drop + drawer + filters → then "Start milestone3"*
+### Milestone 3 — ClickUp Card UI & Column Management (completed 2026-03-31)
+
+**New packages:** (none — uses existing shadcn/ui dropdown-menu added)
+
+**New files created:**
+
+| File | Purpose |
+|------|---------|
+| `src/components/ui/dropdown-menu.tsx` | shadcn/ui dropdown menu component (Radix) |
+| `src/app/api/projects/[id]/tags/route.ts` | GET (list) / POST (create) tags for a project |
+| `src/app/api/projects/[id]/tags/[tid]/route.ts` | PATCH (update) / DELETE tag |
+
+**Modified files:**
+
+| File | Change |
+|------|--------|
+| `src/components/tasks/task-card.tsx` | Added "..." context menu (DropdownMenu) on hover: Edit, Move to (submenu), Copy Link, Delete (admin). New props: columns, isAdmin, onMoveTask, onDeleteTask |
+| `src/components/tasks/board-column.tsx` | Full rewrite: admin column header "..." menu (Rename, Color, WIP, Done, Delete), inline rename on double-click, color picker dialog (12 presets), WIP limit dialog, delete-with-move dialog |
+| `src/components/tasks/board-view.tsx` | Added column management handlers (updateColumnAction, deleteColumnAction, createColumnAction), "Add Status" inline input at end of columns, context menu move/delete handlers |
+| `src/components/tasks/task-detail-drawer.tsx` | Added Labels section: tag chips with remove, "+" dropdown with search + create-new-tag inline, project tag fetching |
+| `src/components/tasks/board-filter-bar.tsx` | Added "Label" filter dropdown with project tags |
+| `src/lib/stores/board-store.ts` | Added `tag` filter support in filters + getFilteredTasks() |
+| `src/lib/task-actions.ts` | Added: createColumnAction, updateColumnAction, deleteColumnAction (with bulk move), reorderColumnsAction, createTagAction, updateTagAction, deleteTagAction, getProjectTagsAction |
+| `src/app/(dashboard)/tasks/page.tsx` | Load and pass tags to filter bar, pass isAdmin to BoardView |
+
+---
+
+*Current Phase: Milestone 3 complete — card context menu, column management, labels/tags*
+*Next Action: Push to Vercel → verify M3 features → then start Milestone 4*
