@@ -31,6 +31,7 @@ import {
   Share2,
   Link2,
   Plus,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow, format } from "date-fns";
@@ -535,6 +536,81 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
                   </button>
                 )}
               </FieldRow>
+
+              {/* Labels / Tags */}
+              <FieldRow icon={<Tag className="h-4 w-4" />} label="Labels">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(task.tags ?? []).map((tag) => (
+                    <button
+                      key={tag.id}
+                      onClick={() => toggleTag(tag.id)}
+                      disabled={isPending}
+                      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors hover:opacity-80"
+                      style={{ backgroundColor: tag.color + "22", color: tag.color }}
+                    >
+                      {tag.name}
+                      <X className="h-2.5 w-2.5 opacity-50 hover:opacity-100" />
+                    </button>
+                  ))}
+                  <div className="relative">
+                    <button
+                      onClick={() => setTagDropdownOpen(!tagDropdownOpen)}
+                      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                      title="Add label"
+                    >
+                      <Plus className="h-2.5 w-2.5" />
+                    </button>
+                    {tagDropdownOpen && (
+                      <div className="absolute top-7 left-0 z-50 w-56 rounded-lg border bg-popover shadow-lg p-1.5">
+                        <div className="px-1.5 pb-1.5">
+                          <Input
+                            value={newTagName}
+                            onChange={(e) => setNewTagName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && newTagName.trim()) { e.preventDefault(); handleCreateTag(); }
+                              if (e.key === "Escape") setTagDropdownOpen(false);
+                            }}
+                            placeholder="Search or create..."
+                            className="h-7 text-xs"
+                            autoFocus
+                          />
+                        </div>
+                        <div className="max-h-[160px] overflow-y-auto">
+                          {projectTags
+                            .filter((t) => !newTagName || t.name.toLowerCase().includes(newTagName.toLowerCase()))
+                            .map((tag) => {
+                              const isAssigned = (task.tags ?? []).some((t) => t.id === tag.id);
+                              return (
+                                <button
+                                  key={tag.id}
+                                  onClick={() => { toggleTag(tag.id); }}
+                                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-muted transition-colors"
+                                >
+                                  <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
+                                  <span className="truncate">{tag.name}</span>
+                                  {isAssigned && <span className="ml-auto text-primary">✓</span>}
+                                </button>
+                              );
+                            })}
+                        </div>
+                        {newTagName.trim() && !projectTags.some((t) => t.name.toLowerCase() === newTagName.toLowerCase()) && (
+                          <>
+                            <Separator className="my-1" />
+                            <button
+                              onClick={handleCreateTag}
+                              disabled={isPending}
+                              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-primary hover:bg-muted transition-colors"
+                            >
+                              <Plus className="h-3 w-3" />
+                              Create &ldquo;{newTagName.trim()}&rdquo;
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </FieldRow>
             </div>
 
             <Separator />
@@ -595,88 +671,6 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
                 placeholder="Add a description..."
                 className="w-full min-h-[80px] rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
               />
-            </div>
-
-            <Separator />
-
-            {/* ── Labels / Tags ── */}
-            <div className="px-6 py-3">
-              <p className="text-sm font-medium mb-2">Labels</p>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {(task.tags ?? []).map((tag) => (
-                  <button
-                    key={tag.id}
-                    onClick={() => toggleTag(tag.id)}
-                    disabled={isPending}
-                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors hover:opacity-80"
-                    style={{ backgroundColor: tag.color + "22", color: tag.color }}
-                  >
-                    {tag.name}
-                    <X className="h-3 w-3 opacity-50 hover:opacity-100" />
-                  </button>
-                ))}
-                {/* Add tag dropdown */}
-                <div className="relative">
-                  <button
-                    onClick={() => setTagDropdownOpen(!tagDropdownOpen)}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
-                    title="Add label"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </button>
-                  {tagDropdownOpen && (
-                    <div className="absolute top-8 left-0 z-50 w-56 rounded-lg border bg-popover shadow-lg p-1.5">
-                      <div className="px-1.5 pb-1.5">
-                        <Input
-                          value={newTagName}
-                          onChange={(e) => setNewTagName(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && newTagName.trim()) {
-                              e.preventDefault();
-                              handleCreateTag();
-                            }
-                            if (e.key === "Escape") setTagDropdownOpen(false);
-                          }}
-                          placeholder="Search or create..."
-                          className="h-7 text-xs"
-                          autoFocus
-                        />
-                      </div>
-                      <div className="max-h-[160px] overflow-y-auto">
-                        {projectTags
-                          .filter((t) => !newTagName || t.name.toLowerCase().includes(newTagName.toLowerCase()))
-                          .map((tag) => {
-                            const isAssigned = (task.tags ?? []).some((t) => t.id === tag.id);
-                            return (
-                              <button
-                                key={tag.id}
-                                onClick={() => { toggleTag(tag.id); }}
-                                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-muted transition-colors"
-                              >
-                                <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
-                                <span className="truncate">{tag.name}</span>
-                                {isAssigned && <span className="ml-auto text-primary">✓</span>}
-                              </button>
-                            );
-                          })}
-                      </div>
-                      {newTagName.trim() && !projectTags.some((t) => t.name.toLowerCase() === newTagName.toLowerCase()) && (
-                        <>
-                          <Separator className="my-1" />
-                          <button
-                            onClick={handleCreateTag}
-                            disabled={isPending}
-                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-primary hover:bg-muted transition-colors"
-                          >
-                            <Plus className="h-3 w-3" />
-                            Create &ldquo;{newTagName.trim()}&rdquo;
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
             </div>
 
             <Separator />
