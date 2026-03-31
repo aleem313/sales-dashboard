@@ -109,6 +109,21 @@ export interface ActivityLogEntry {
   actor_avatar?: string | null;
 }
 
+export interface ProjectMember {
+  agent_id: string;
+  name: string;
+  email: string | null;
+  avatar_url: string | null;
+  role: "admin" | "member";
+  joined_at: string;
+  active: boolean;
+}
+
+export interface ProjectWithMeta extends Project {
+  task_count?: number;
+  member_count?: number;
+}
+
 export interface TaskFilters {
   column_id?: string;
   assignee_id?: string;
@@ -251,6 +266,290 @@ export async function getProjectMemberRole(projectId: string, agentId: string): 
 }
 
 // ============================================================
+// PROJECT (BOARD) CRUD
+// ============================================================
+
+export async function getAllProjects(): Promise<ProjectWithMeta[]> {
+  const result = await sql`
+    SELECT p.*,
+      (SELECT COUNT(*)::int FROM tasks WHERE project_id = p.id) AS task_count,
+      (SELECT COUNT(*)::int FROM project_members WHERE project_id = p.id) AS member_count
+    FROM projects p
+    JOIN workspaces w ON w.id = p.workspace_id
+    WHERE w.slug = 'rising-lion'
+    ORDER BY p.created_at ASC
+  `;
+  return result.rows as ProjectWithMeta[];
+}
+
+export async function getUserProjectsWithMeta(agentId: string): Promise<ProjectWithMeta[]> {
+  const result = await sql`
+    SELECT p.*,
+      (SELECT COUNT(*)::int FROM tasks WHERE project_id = p.id) AS task_count,
+      (SELECT COUNT(*)::int FROM project_members WHERE project_id = p.id) AS member_count
+    FROM projects p
+    JOIN project_members pm ON pm.project_id = p.id
+    WHERE pm.agent_id = ${agentId}
+    ORDER BY p.created_at ASC
+  `;
+  return result.rows as ProjectWithMeta[];
+}
+
+export async function getProjectById(projectId: string): Promise<Project | null> {
+  const result = await sql`SELECT * FROM projects WHERE id = ${projectId}`;
+  return (result.rows[0] as Project) ?? null;
+}
+
+export async function createProject(data: {
+  name: string;
+  description?: string | null;
+  creator_id: string;
+}): Promise<Project> {
+  // Get default workspace
+  let ws = await sql`SELECT id FROM workspaces WHERE slug = 'rising-lion' LIMIT 1`;
+  if (ws.rows.length === 0) {
+    // Create workspace with creator as owner
+    ws = await sql`
+      INSERT INTO workspaces (name, slug, owner_id)
+      VALUES ('Rising Lion', 'rising-lion', ${data.creator_id})
+      ON CONFLICT (slug) DO UPDATE SET name = 'Rising Lion'
+      RETURNING id
+    `;
+  }
+  const workspaceId = ws.rows[0].id as string;
+
+  const result = await sql`
+    INSERT INTO projects (workspace_id, name, description)
+    VALUES (${workspaceId}, ${data.name}, ${data.description ?? null})
+    RETURNING *
+  `;
+  const project = result.rows[0] as Project;
+
+  // Add creator as admin member
+  await sql`
+    INSERT INTO project_members (project_id, agent_id, role)
+    VALUES (${project.id}, ${data.creator_id}, 'admin')
+    ON CONFLICT (project_id, agent_id) DO NOTHING
+  `;
+
+  // Create default columns
+  const defaultColumns = [
+    { name: 'To Do', position: 1000, color: '#6b7280', is_done: false },
+    { name: 'In Progress', position: 2000, color: '#3b82f6', is_done: false },
+    { name: 'In Review', position: 3000, color: '#f59e0b', is_done: false },
+    { name: 'Done', position: 4000, color: '#22c55e', is_done: true },
+  ];
+  for (const col of defaultColumns) {
+    await sql`
+      INSERT INTO columns (project_id, name, position, color, is_done)
+      VALUES (${project.id}, ${col.name}, ${col.position}, ${col.color}, ${col.is_done})
+    `;
+  }
+
+  return project;
+}
+
+export async function updateProject(
+  projectId: string,
+  fields: { name?: string; description?: string | null }
+): Promise<Project | null> {
+  const result = await sql`
+    UPDATE projects SET
+      name = COALESCE(${fields.name ?? null}, name),
+      description = ${fields.description !== undefined ? (fields.description ?? null) : null}
+    WHERE id = ${projectId}
+    RETURNING *
+  `;
+  return (result.rows[0] as Project) ?? null;
+}
+
+export async function deleteProject(projectId: string): Promise<boolean> {
+  // CASCADE handles tasks, columns, members, etc.
+  const result = await sql`DELETE FROM projects WHERE id = ${projectId}`;
+  return (result.rowCount ?? 0) > 0;
+}
+
+export async function getProjectTaskCount(projectId: string): Promise<number> {
+  const result = await sql`SELECT COUNT(*)::int AS count FROM tasks WHERE project_id = ${projectId}`;
+  return result.rows[0].count as number;
+}
+
+// ============================================================
+// PROJECT MEMBER MANAGEMENT
+// ============================================================
+
+export async function getProjectMembers(projectId: string): Promise<ProjectMember[]> {
+  const result = await sql`
+    SELECT a.id AS agent_id, a.name, a.email, a.avatar_url, a.active,
+           pm.role, pm.joined_at
+    FROM project_members pm
+    JOIN agents a ON a.id = pm.agent_id
+    WHERE pm.project_id = ${projectId}
+    ORDER BY
+      CASE pm.role WHEN 'admin' THEN 0 ELSE 1 END,
+      a.name ASC
+  `;
+  return result.rows as unknown as ProjectMember[];
+}
+
+export async function addProjectMembers(
+  projectId: string,
+  agentIds: string[],
+  role: "admin" | "member" = "member"
+): Promise<number> {
+  let added = 0;
+  for (const agentId of agentIds) {
+    // Validate agent is active
+    const agent = await sql`SELECT id FROM agents WHERE id = ${agentId} AND active = true`;
+    if (agent.rows.length === 0) continue;
+
+    const result = await sql`
+      INSERT INTO project_members (project_id, agent_id, role)
+      VALUES (${projectId}, ${agentId}, ${role})
+      ON CONFLICT (project_id, agent_id) DO NOTHING
+    `;
+    if ((result.rowCount ?? 0) > 0) added++;
+  }
+  return added;
+}
+
+export async function updateMemberRole(
+  projectId: string,
+  agentId: string,
+  newRole: "admin" | "member"
+): Promise<{ success: boolean; error?: string }> {
+  // Block demoting last admin
+  if (newRole === "member") {
+    const adminCount = await sql`
+      SELECT COUNT(*)::int AS count FROM project_members
+      WHERE project_id = ${projectId} AND role = 'admin'
+    `;
+    if ((adminCount.rows[0].count as number) <= 1) {
+      // Check if this agent IS the last admin
+      const isAdmin = await sql`
+        SELECT 1 FROM project_members
+        WHERE project_id = ${projectId} AND agent_id = ${agentId} AND role = 'admin'
+      `;
+      if (isAdmin.rows.length > 0) {
+        return { success: false, error: "Cannot demote the last admin" };
+      }
+    }
+  }
+
+  await sql`
+    UPDATE project_members SET role = ${newRole}
+    WHERE project_id = ${projectId} AND agent_id = ${agentId}
+  `;
+  return { success: true };
+}
+
+export async function removeProjectMember(
+  projectId: string,
+  agentId: string,
+  unassignTasks: boolean = false
+): Promise<{ success: boolean; error?: string; assignedTaskCount?: number }> {
+  // Check if workspace owner
+  const ownerCheck = await sql`
+    SELECT w.owner_id FROM workspaces w
+    JOIN projects p ON p.workspace_id = w.id
+    WHERE p.id = ${projectId}
+  `;
+  if (ownerCheck.rows.length > 0 && ownerCheck.rows[0].owner_id === agentId) {
+    return { success: false, error: "Cannot remove workspace owner from board" };
+  }
+
+  // Block removing last admin
+  const memberRole = await sql`
+    SELECT role FROM project_members
+    WHERE project_id = ${projectId} AND agent_id = ${agentId}
+  `;
+  if (memberRole.rows.length === 0) {
+    return { success: false, error: "Agent is not a member of this board" };
+  }
+  if (memberRole.rows[0].role === "admin") {
+    const adminCount = await sql`
+      SELECT COUNT(*)::int AS count FROM project_members
+      WHERE project_id = ${projectId} AND role = 'admin'
+    `;
+    if ((adminCount.rows[0].count as number) <= 1) {
+      return { success: false, error: "Cannot remove the last admin" };
+    }
+  }
+
+  // Check for task assignments
+  const assignedTasks = await sql`
+    SELECT COUNT(*)::int AS count FROM task_assignees ta
+    JOIN tasks t ON t.id = ta.task_id
+    WHERE t.project_id = ${projectId} AND ta.agent_id = ${agentId}
+  `;
+  const assignedCount = assignedTasks.rows[0].count as number;
+
+  if (assignedCount > 0 && !unassignTasks) {
+    return { success: false, error: "Agent has task assignments", assignedTaskCount: assignedCount };
+  }
+
+  // Unassign from tasks if requested
+  if (unassignTasks && assignedCount > 0) {
+    await sql`
+      DELETE FROM task_assignees
+      WHERE agent_id = ${agentId}
+        AND task_id IN (SELECT id FROM tasks WHERE project_id = ${projectId})
+    `;
+  }
+
+  // Remove from board
+  await sql`DELETE FROM project_members WHERE project_id = ${projectId} AND agent_id = ${agentId}`;
+  return { success: true };
+}
+
+export async function getAvailableAgents(projectId: string): Promise<TaskAssignee[]> {
+  const result = await sql`
+    SELECT a.id AS agent_id, a.name, a.email, a.avatar_url
+    FROM agents a
+    WHERE a.active = true
+      AND a.id NOT IN (SELECT agent_id FROM project_members WHERE project_id = ${projectId})
+    ORDER BY a.name ASC
+  `;
+  return result.rows as unknown as TaskAssignee[];
+}
+
+// Also add cross-board tasks for agent
+export async function getAgentTasksAcrossBoards(agentId: string): Promise<(Task & { project_name: string })[]> {
+  const result = await sql`
+    SELECT t.*, c.name AS column_name, a.name AS creator_name, p.name AS project_name
+    FROM tasks t
+    JOIN columns c ON c.id = t.column_id
+    JOIN projects p ON p.id = t.project_id
+    LEFT JOIN agents a ON a.id = t.creator_id
+    WHERE EXISTS (
+      SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentId}
+    )
+    ORDER BY t.updated_at DESC
+  `;
+
+  const tasks = result.rows as (Task & { project_name: string })[];
+
+  // Load assignees and tags per task
+  for (const task of tasks) {
+    const assignees = await sql`
+      SELECT a.id AS agent_id, a.name, a.email, a.avatar_url
+      FROM task_assignees ta JOIN agents a ON a.id = ta.agent_id
+      WHERE ta.task_id = ${task.id}
+    `;
+    task.assignees = assignees.rows as unknown as TaskAssignee[];
+
+    const tags = await sql`
+      SELECT tt.id, tt.name, tt.color
+      FROM task_tag_map ttm JOIN task_tags tt ON tt.id = ttm.tag_id
+      WHERE ttm.task_id = ${task.id}
+    `;
+    task.tags = tags.rows as unknown as TaskTag[];
+  }
+
+  return tasks;
+}
+
+// ============================================================
 // COLUMN QUERIES
 // ============================================================
 
@@ -303,7 +602,7 @@ export async function updateColumn(
   return result.rows[0] as BoardColumn;
 }
 
-export async function deleteColumn(columnId: string): Promise<{ deleted: boolean; taskCount: number }> {
+export async function deleteColumn(columnId: string): Promise<{ deleted: boolean; taskCount: number; error?: string }> {
   // Check for tasks
   const taskCheck = await sql`
     SELECT COUNT(*)::int AS count FROM tasks WHERE column_id = ${columnId}
@@ -311,6 +610,17 @@ export async function deleteColumn(columnId: string): Promise<{ deleted: boolean
   const taskCount = taskCheck.rows[0].count as number;
   if (taskCount > 0) {
     return { deleted: false, taskCount };
+  }
+
+  // Block deleting the last column
+  const col = await sql`SELECT project_id FROM columns WHERE id = ${columnId}`;
+  if (col.rows.length > 0) {
+    const colCount = await sql`
+      SELECT COUNT(*)::int AS count FROM columns WHERE project_id = ${col.rows[0].project_id}
+    `;
+    if ((colCount.rows[0].count as number) <= 1) {
+      return { deleted: false, taskCount: 0, error: "Cannot delete the last column" };
+    }
   }
 
   await sql`DELETE FROM columns WHERE id = ${columnId}`;

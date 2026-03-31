@@ -1,0 +1,184 @@
+"use client";
+
+import { useState, useTransition, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Users, UserPlus, X, Shield, User } from "lucide-react";
+import { toast } from "sonner";
+import {
+  addBoardMembersAction,
+  updateMemberRoleAction,
+  removeBoardMemberAction,
+} from "@/lib/task-actions";
+import type { ProjectMember, TaskAssignee } from "@/lib/task-data";
+
+interface BoardMembersPanelProps {
+  projectId: string;
+  members: ProjectMember[];
+  availableAgents: TaskAssignee[];
+  isAdmin: boolean;
+}
+
+function getInitials(name: string): string {
+  return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+}
+
+export function BoardMembersPanel({
+  projectId,
+  members: initialMembers,
+  availableAgents: initialAvailable,
+  isAdmin,
+}: BoardMembersPanelProps) {
+  const [members, setMembers] = useState(initialMembers);
+  const [available, setAvailable] = useState(initialAvailable);
+  const [isPending, startTransition] = useTransition();
+  const [selectedAgent, setSelectedAgent] = useState<string>("");
+
+  useEffect(() => {
+    setMembers(initialMembers);
+    setAvailable(initialAvailable);
+  }, [initialMembers, initialAvailable]);
+
+  function handleAddMember() {
+    if (!selectedAgent) return;
+    startTransition(async () => {
+      try {
+        await addBoardMembersAction(projectId, [selectedAgent]);
+        toast.success("Member added");
+        setSelectedAgent("");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to add member");
+      }
+    });
+  }
+
+  function handleRoleChange(agentId: string, role: "admin" | "member") {
+    startTransition(async () => {
+      try {
+        await updateMemberRoleAction(projectId, agentId, role);
+        toast.success("Role updated");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to update role");
+      }
+    });
+  }
+
+  function handleRemove(agentId: string, name: string) {
+    if (!confirm(`Remove ${name} from this board? They will be unassigned from all tasks.`)) return;
+    startTransition(async () => {
+      try {
+        await removeBoardMemberAction(projectId, agentId, true);
+        toast.success(`${name} removed`);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to remove member");
+      }
+    });
+  }
+
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
+          <Users className="h-4 w-4" />
+          <span className="text-xs">{members.length}</span>
+        </Button>
+      </SheetTrigger>
+      <SheetContent className="w-[360px] sm:w-[400px]">
+        <SheetHeader>
+          <SheetTitle>Board Members</SheetTitle>
+        </SheetHeader>
+
+        {/* Add member */}
+        {isAdmin && available.length > 0 && (
+          <div className="flex gap-2 mt-4 mb-4">
+            <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+              <SelectTrigger className="flex-1 h-8 text-sm">
+                <SelectValue placeholder="Add agent..." />
+              </SelectTrigger>
+              <SelectContent>
+                {available.map((a) => (
+                  <SelectItem key={a.agent_id} value={a.agent_id}>
+                    {a.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" onClick={handleAddMember} disabled={!selectedAgent || isPending}>
+              <UserPlus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
+
+        {/* Member list */}
+        <div className="space-y-1 mt-2">
+          {members.map((m) => (
+            <div
+              key={m.agent_id}
+              className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted/50"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary shrink-0">
+                {m.avatar_url ? (
+                  <img src={m.avatar_url} alt={m.name} className="h-full w-full rounded-full object-cover" />
+                ) : (
+                  getInitials(m.name)
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">{m.name}</div>
+                <div className="text-xs text-muted-foreground truncate">{m.email}</div>
+              </div>
+              {isAdmin ? (
+                <Select
+                  value={m.role}
+                  onValueChange={(role) => handleRoleChange(m.agent_id, role as "admin" | "member")}
+                  disabled={isPending}
+                >
+                  <SelectTrigger className="w-[90px] h-7 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">
+                      <span className="flex items-center gap-1"><Shield className="h-3 w-3" /> Admin</span>
+                    </SelectItem>
+                    <SelectItem value="member">
+                      <span className="flex items-center gap-1"><User className="h-3 w-3" /> Member</span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Badge variant="secondary" className="text-xs">
+                  {m.role === "admin" ? "Admin" : "Member"}
+                </Badge>
+              )}
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                  onClick={() => handleRemove(m.agent_id, m.name)}
+                  disabled={isPending}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}

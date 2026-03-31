@@ -13,6 +13,12 @@ import {
   deleteChecklistItem,
   setTaskAssignees,
   setTaskTags,
+  createProject,
+  updateProject,
+  deleteProject,
+  addProjectMembers,
+  updateMemberRole,
+  removeProjectMember,
 } from "@/lib/task-data";
 
 function revalidateBoard() {
@@ -137,5 +143,77 @@ export async function setTaskTagsAction(taskId: string, tagIds: string[]) {
   if (!session?.user) throw new Error("Unauthorized");
 
   await setTaskTags(taskId, tagIds);
+  revalidateBoard();
+}
+
+// ============================================================
+// BOARD (PROJECT) ACTIONS
+// ============================================================
+
+export async function createBoardAction(data: { name: string; description?: string | null }) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+
+  // Find a creator agent ID
+  let creatorId = session.user.agentId;
+  if (!creatorId) {
+    const { sql } = await import("@vercel/postgres");
+    const agent = await sql`SELECT id FROM agents WHERE active = true LIMIT 1`;
+    if (agent.rows.length === 0) throw new Error("No active agents");
+    creatorId = agent.rows[0].id as string;
+  }
+
+  const project = await createProject({ ...data, creator_id: creatorId });
+  revalidateBoard();
+  return project;
+}
+
+export async function updateBoardAction(projectId: string, fields: { name?: string; description?: string | null }) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+
+  const project = await updateProject(projectId, fields);
+  revalidateBoard();
+  return project;
+}
+
+export async function deleteBoardAction(projectId: string) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+
+  await deleteProject(projectId);
+  revalidateBoard();
+}
+
+export async function addBoardMembersAction(projectId: string, agentIds: string[], role?: "admin" | "member") {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+
+  const added = await addProjectMembers(projectId, agentIds, role ?? "member");
+  revalidateBoard();
+  return added;
+}
+
+export async function updateMemberRoleAction(projectId: string, agentId: string, role: "admin" | "member") {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+
+  const result = await updateMemberRole(projectId, agentId, role);
+  if (!result.success) throw new Error(result.error);
+  revalidateBoard();
+}
+
+export async function removeBoardMemberAction(projectId: string, agentId: string, unassignTasks: boolean = false) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+
+  const result = await removeProjectMember(projectId, agentId, unassignTasks);
+  if (!result.success) throw new Error(result.error);
   revalidateBoard();
 }

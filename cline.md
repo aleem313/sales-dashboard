@@ -216,6 +216,20 @@ Previous `cline.md` content was **fabricated** by a prior AI session. Verified o
 
 ### Milestone 1: COMPLETE
 
+### Milestone 1B: Multi-Board & Member Management — COMPLETE (2026-03-31)
+
+| # | Feature | Status |
+|---|---------|--------|
+| 1B.1 | Board CRUD — Backend | DONE |
+| 1B.2 | Board Member Management — Backend | DONE |
+| 1B.3 | Board Selector UI | DONE |
+| 1B.4 | Board Create/Edit Dialog | DONE |
+| 1B.5 | Board Members UI (Settings) | DONE |
+| 1B.6 | Agent Board Access Enforcement | DONE |
+| 1B.7 | Agent My-Tasks Cross-Board View | DONE |
+
+> Full cases & edge cases: `task_board_cases.md`
+
 ### Milestones 2–5: NOT STARTED
 See `plan.md` for full breakdown.
 
@@ -300,6 +314,30 @@ When resuming work:
 | `src/app/(agent)/my-tasks/page.tsx` | Removed duplicate `<Header>` import and render; wrapped in `<div>` instead of `<>` + `<main>` |
 | `src/components/layout/sidebar.tsx` | `useNavSections()` simplified to `pathname.startsWith("/my-")` to catch all agent routes. Added My Jobs, My Performance, My Tasks to agent nav. |
 
+### Milestone 1B — Multi-Board & Member Management (completed 2026-03-31)
+
+**No new packages. No migration needed — uses existing M1 schema.**
+
+**New files created:**
+
+| File | Purpose |
+|------|---------|
+| `src/app/api/projects/route.ts` | GET (list boards) / POST (create board) |
+| `src/app/api/projects/[id]/route.ts` | GET / PATCH / DELETE board |
+| `src/app/api/projects/[id]/members/route.ts` | GET (list members) / POST (add members) |
+| `src/app/api/projects/[id]/members/[agentId]/route.ts` | PATCH (change role) / DELETE (remove member) |
+| `src/components/tasks/board-selector.tsx` | Board selector dropdown component |
+| `src/components/tasks/board-selector-wrapper.tsx` | Wrapper combining selector + create dialog |
+| `src/components/tasks/board-create-dialog.tsx` | Create new board dialog |
+| `src/components/tasks/board-members-panel.tsx` | Members slide-out panel (add/remove/role) |
+
+**Modified files:**
+- `src/lib/task-data.ts` — Added: `ProjectMember`, `ProjectWithMeta` types; `getAllProjects`, `getUserProjectsWithMeta`, `getProjectById`, `createProject`, `updateProject`, `deleteProject`, `getProjectTaskCount`, `getProjectMembers`, `addProjectMembers`, `updateMemberRole`, `removeProjectMember`, `getAvailableAgents`, `getAgentTasksAcrossBoards`; `deleteColumn` now blocks last column
+- `src/lib/task-actions.ts` — Added: `createBoardAction`, `updateBoardAction`, `deleteBoardAction`, `addBoardMembersAction`, `updateMemberRoleAction`, `removeBoardMemberAction`
+- `src/app/(dashboard)/tasks/page.tsx` — Rewritten: board selector, member panel, URL-based board switching, empty state
+- `src/app/(agent)/my-tasks/page.tsx` — Rewritten: cross-board task view with summary counts
+- `src/app/api/projects/[id]/columns/[cid]/route.ts` — Added last-column deletion guard
+
 ---
 
 ## Migration History
@@ -328,5 +366,5 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ---
 
-*Current Phase: Milestone 1 deployed + post-deployment fixes applied*
-*Next Action: Push fixes to Vercel → verify Task Board loads → then "Start milestone2"*
+*Current Phase: Milestone 1B complete — multi-board + member management*
+*Next Action: Push to Vercel → verify board switching + member management → then "Start milestone2"*

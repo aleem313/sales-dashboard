@@ -205,6 +205,82 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ---
 
+## Milestone 1B: Multi-Board & Member Management
+> Theme: Multiple boards, board CRUD, agent membership, board switching UI. Ref: `task_board_cases.md` sections 1–2.
+
+### 1B.1 Board CRUD — Backend
+
+- [x] `POST /api/projects` — create board (admin only): name (required, max 100 chars), description (optional); auto-create 4 default columns; add creator as admin member
+- [x] `GET /api/projects` — list boards: admin sees all in workspace, agent sees only boards they're a member of
+- [x] `PATCH /api/projects/[id]` — update board name/description (admin only)
+- [x] `DELETE /api/projects/[id]` — delete board (admin only); if board has tasks, require `confirm=true` query param; cascade delete all tasks, columns, tags, configs
+- [x] Server actions: `createBoardAction`, `updateBoardAction`, `deleteBoardAction` with `revalidatePath`
+- [x] Data layer: `getAllProjects()`, `getUserProjectsWithMeta(agentId)`, `createProject(data)`, `updateProject(id, fields)`, `deleteProject(id)`
+- [x] Prevent deleting the last column on a board (API returns 422)
+
+### 1B.2 Board Member Management — Backend
+
+- [x] `GET /api/projects/[id]/members` — list members with role, name, email, avatar, joined_at
+- [x] `POST /api/projects/[id]/members` — add agent(s) to board (admin only); validate: agent exists, is active, not already member; body: `{ agent_ids: string[], role?: 'admin'|'member' }`
+- [x] `PATCH /api/projects/[id]/members/[agentId]` — change member role (admin only); block if last admin
+- [x] `DELETE /api/projects/[id]/members/[agentId]` — remove agent from board (admin only); block removing workspace owner; if agent has task assignments, requires `unassign=true` or returns 409
+- [x] Server actions: `addBoardMembersAction`, `updateMemberRoleAction`, `removeBoardMemberAction`
+- [x] Available agents query: `getAvailableAgents(projectId)` returns active agents not yet on board
+
+### 1B.3 Board Selector UI
+
+- [x] Board selector dropdown in board page header — lists accessible boards
+- [x] Route change: `/tasks?board=<project_id>` (URL-based board selection)
+- [x] "Create New Board" button in selector (admin only) — opens create board dialog
+- [x] Agent sees only boards they're members of
+- [x] Remember last active board in localStorage; load on next visit
+- [x] Empty state: no boards → "Create your first board." (admin) / "No boards assigned." (agent)
+
+### 1B.4 Board Create/Edit Dialog
+
+- [x] Create board dialog: name (required, max 100), description (optional)
+- [x] Edit board: `PATCH /api/projects/[id]` + `updateBoardAction` (UI inline rename deferred to M2 drawer)
+- [x] Delete board: `DELETE /api/projects/[id]?confirm=true` + `deleteBoardAction`
+
+### 1B.5 Board Members UI (Board Settings)
+
+- [x] Members slide-out panel (`board-members-panel.tsx`) triggered from board header
+- [x] Members list: avatar, name, email, role dropdown, remove button
+- [x] Add member: agent picker (active agents not already on board)
+- [x] Change role: dropdown per member (admin only); last-admin demotion blocked
+- [x] Remove member: confirmation + auto-unassign from tasks
+- [x] Member count button on board header
+
+### 1B.6 Agent Board Access Enforcement
+
+- [x] All task/column/comment API routes: `isProjectMember` check present on all routes
+- [x] Agent removed from board: next API call returns 403
+- [x] Available agents for assignment: `getAvailableAgents()` scoped to board members
+- [x] Workspace owner removal blocked in `removeProjectMember()`
+
+### 1B.7 Agent My-Tasks Cross-Board View
+
+- [x] `/my-tasks` shows tasks assigned to agent across ALL boards via `getAgentTasksAcrossBoards()`
+- [x] Shows task count and board count summary
+- [x] Board view filtered to primary board's columns
+
+---
+
+### ✅ Milestone 1B Completed
+
+**Features:**
+- [x] Board CRUD: create/edit/delete boards with default columns, cascade delete
+- [x] Member management: add/remove agents, role changes, last-admin guard, workspace owner protection
+- [x] Board selector dropdown with URL-based switching + localStorage persistence
+- [x] Create board dialog (name + description)
+- [x] Members slide-out panel with add/remove/role-change
+- [x] Agent access enforcement on all routes + available agents scoping
+- [x] Cross-board My Tasks view for agents
+
+**No migration needed** — uses existing schema (workspaces, projects, project_members tables from M1).
+
+---
+
 ## Milestone 2: Board UX, Drag & Drop & Task Detail (Sprint 2)
 > Theme: Interactive drag-drop board, task detail drawer, rich text, file attachments, checklist.
 
@@ -576,13 +652,23 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ## Quick Reference — API Endpoints (Updated)
 
+### Board & Member Management (Milestone 1B)
 | Method | Endpoint | Access |
 |--------|----------|--------|
-| GET | `/api/projects/[id]/tasks` | Agent+ |
-| POST | `/api/projects/[id]/tasks` | Agent+ |
-| GET | `/api/tasks/[id]` | Agent+ |
-| PATCH | `/api/tasks/[id]` | Agent+ (own/assigned) |
-| DELETE | `/api/tasks/[id]` | Admin |
+| GET | `/api/projects` | Agent+ (filtered by membership) |
+| POST | `/api/projects` | Admin |
+| PATCH | `/api/projects/[id]` | Admin |
+| DELETE | `/api/projects/[id]` | Admin |
+| GET | `/api/projects/[id]/members` | Agent+ (board members) |
+| POST | `/api/projects/[id]/members` | Admin |
+| PATCH | `/api/projects/[id]/members/[agentId]` | Admin |
+| DELETE | `/api/projects/[id]/members/[agentId]` | Admin |
+
+### Tasks, Columns & Comments (Milestone 1)
+| Method | Endpoint | Access |
+|--------|----------|--------|
+| GET/POST | `/api/projects/[id]/tasks` | Agent+ (board member) |
+| GET/PATCH/DELETE | `/api/tasks/[id]` | Agent+ / Admin |
 | PATCH | `/api/tasks/[id]/move` | Agent+ |
 | GET/POST | `/api/tasks/[id]/comments` | Agent+ |
 | PATCH/DELETE | `/api/tasks/[id]/comments/[cid]` | Author (60min) / Admin |
@@ -593,6 +679,10 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 | PATCH | `/api/projects/[id]/columns/[cid]` | Admin |
 | PATCH | `/api/projects/[id]/columns/reorder` | Admin |
 | DELETE | `/api/projects/[id]/columns/[cid]` | Admin |
+
+### Custom Fields, Webhooks, Notifications (Milestones 3–4)
+| Method | Endpoint | Access |
+|--------|----------|--------|
 | GET/POST | `/api/projects/[id]/custom-fields` | Agent+ / Admin |
 | PATCH/DELETE | `/api/projects/[id]/custom-fields/[fid]` | Admin |
 | PATCH | `/api/projects/[id]/webhook-config` | Admin |

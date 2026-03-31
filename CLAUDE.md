@@ -145,6 +145,14 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 - **Agent layout**: `(agent)/layout.tsx` does NOT render a `<Header>` — each agent page provides its own inline `<h1>` title. Do not add `<Header>` to agent pages (it will duplicate).
 - **Auto-seed**: `getDefaultProject()` auto-creates default workspace + project + columns on first access if tables exist but are empty. No manual migration re-run needed.
 
+## Key Reference Files
+
+| File | Purpose |
+|------|---------|
+| `plan.md` | Execution plan with milestones and checklists |
+| `cline.md` | Project history, progress tracking, resume instructions |
+| `task_board_cases.md` | All cases, subcases & edge cases for Task Board (3 levels deep) — used for dev scoping and QA |
+
 ## Conversation Continuity
 
 **Always read `cline.md` first** in every new conversation. It contains:

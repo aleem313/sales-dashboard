@@ -61,6 +61,9 @@ export async function DELETE(
   const result = await deleteColumn(columnId);
 
   if (!result.deleted) {
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: 422 });
+    }
     return NextResponse.json(
       { error: `Cannot delete column with ${result.taskCount} tasks. Move or delete tasks first.` },
       { status: 409 }
