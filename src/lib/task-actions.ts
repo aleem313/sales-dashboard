@@ -89,10 +89,7 @@ export async function deleteTaskAction(taskId: string) {
 
   const deleted = await deleteTask(taskId, session.user.agentId ?? null);
   if (!deleted) throw new Error("Task not found or already deleted");
-  // Don't revalidate /tasks — the client handles the optimistic removal via
-  // store.removeTask(). Revalidating triggers a server re-render that conflicts
-  // with the active DndContext. Only revalidate /my-tasks for the agent view.
-  revalidatePath("/my-tasks");
+  revalidateBoard();
 }
 
 export async function createCommentAction(
@@ -190,10 +187,7 @@ export async function deleteBoardAction(projectId: string) {
 
   const deleted = await deleteProject(projectId);
   if (!deleted) throw new Error("Board not found or already deleted");
-  // Don't revalidate /tasks here — the client navigates to /tasks (without ?board= param)
-  // which fetches fresh data. Revalidating the current URL with the deleted board's ID
-  // causes a server re-render race condition + dnd-kit conflicts.
-  revalidatePath("/my-tasks");
+  revalidateBoard();
 }
 
 export async function addBoardMembersAction(projectId: string, agentIds: string[], role?: "admin" | "member") {

@@ -1,5 +1,20 @@
 import { sql } from "@vercel/postgres";
 
+// Fix activity_log trigger to allow DELETE (migration 007 may not have been applied)
+async function fixActivityLogTrigger() {
+  await sql`
+    CREATE OR REPLACE FUNCTION prevent_activity_log_mutation()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      IF TG_OP = 'UPDATE' THEN
+        RAISE EXCEPTION 'activity_log is append-only: UPDATE operations are not allowed';
+      END IF;
+      RETURN OLD;
+    END;
+    $$ LANGUAGE plpgsql
+  `;
+}
+
 // ============================================================
 // TYPES
 // ============================================================
@@ -382,11 +397,20 @@ export async function updateProject(
 }
 
 export async function deleteProject(projectId: string): Promise<boolean> {
-  // Delete activity_log entries first (trigger blocks CASCADE deletes before migration 007)
-  await sql`
-    DELETE FROM activity_log
-    WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ${projectId})
-  `;
+  // Delete activity_log entries first — trigger may block DELETE if migration 007 not applied
+  try {
+    await sql`
+      DELETE FROM activity_log
+      WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ${projectId})
+    `;
+  } catch {
+    // Trigger blocks DELETE — apply migration 007 fix inline, then retry
+    await fixActivityLogTrigger();
+    await sql`
+      DELETE FROM activity_log
+      WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ${projectId})
+    `;
+  }
   // CASCADE handles tasks, columns, members, tags, etc.
   const result = await sql`DELETE FROM projects WHERE id = ${projectId}`;
   return (result.rowCount ?? 0) > 0;
@@ -976,8 +1000,14 @@ export async function deleteTask(taskId: string, _actorId?: string | null): Prom
   const task = await sql`SELECT title FROM tasks WHERE id = ${taskId}`;
   if (task.rows.length === 0) return false;
 
-  // Delete activity_log entries first (trigger blocks CASCADE deletes before migration 007)
-  await sql`DELETE FROM activity_log WHERE task_id = ${taskId}`;
+  // Delete activity_log entries first — trigger may block DELETE if migration 007 not applied
+  try {
+    await sql`DELETE FROM activity_log WHERE task_id = ${taskId}`;
+  } catch {
+    // Trigger blocks DELETE — apply migration 007 fix inline, then retry
+    await fixActivityLogTrigger();
+    await sql`DELETE FROM activity_log WHERE task_id = ${taskId}`;
+  }
   // CASCADE handles assignees, tags, comments, checklist, attachments
   await sql`DELETE FROM tasks WHERE id = ${taskId}`;
   return true;
