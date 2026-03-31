@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 import { auth } from "@/lib/auth";
-import { Header } from "@/components/layout/header";
 import { BoardView } from "@/components/tasks/board-view";
 import { TaskCreateModal } from "@/components/tasks/task-create-modal";
 import { getDefaultProject, getProjectColumns, getProjectTasks } from "@/lib/task-data";
@@ -43,10 +42,8 @@ async function AgentBoardContent() {
 
 export default function MyTasksPage() {
   return (
-    <>
-      <Header title="My Tasks" />
-      <main className="flex-1 overflow-hidden flex flex-col">
-        <Suspense
+    <div className="flex-1 overflow-hidden flex flex-col">
+      <Suspense
           fallback={
             <div className="flex h-full gap-4 overflow-x-auto px-6 py-4">
               {[1, 2, 3].map((col) => (
@@ -64,7 +61,6 @@ export default function MyTasksPage() {
         >
           <AgentBoardContent />
         </Suspense>
-      </main>
-    </>
+    </div>
   );
 }

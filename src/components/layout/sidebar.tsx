@@ -77,6 +77,13 @@ const agentNavSections: NavSection[] = [
     label: "Overview",
     items: [
       { href: "/my-dashboard", label: "My Dashboard", icon: Gauge },
+      { href: "/my-jobs", label: "My Jobs", icon: Briefcase },
+      { href: "/my-performance", label: "My Performance", icon: TrendingUp },
+    ],
+  },
+  {
+    label: "Tasks",
+    items: [
       { href: "/my-tasks", label: "My Tasks", icon: KanbanSquare },
     ],
   },
@@ -147,10 +154,7 @@ function SidebarNav({
 
 function useNavSections() {
   const pathname = usePathname();
-  const isAgentRoute =
-    pathname.startsWith("/my-dashboard") ||
-    pathname.startsWith("/my-jobs") ||
-    pathname.startsWith("/my-performance");
+  const isAgentRoute = pathname.startsWith("/my-");
   return isAgentRoute ? agentNavSections : adminNavSections;
 }
 

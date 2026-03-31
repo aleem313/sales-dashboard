@@ -132,11 +132,18 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 
 | File | What it does |
 |------|-------------|
-| `src/lib/task-data.ts` | All task management queries (~550 lines raw SQL) |
+| `src/lib/task-data.ts` | All task management queries (~550 lines raw SQL). `getDefaultProject()` auto-creates workspace/project/columns if migration seed was skipped. |
 | `src/lib/task-actions.ts` | Server actions for task mutations + revalidatePath |
 | `src/components/tasks/` | Board view, task card, column, create modal |
 | `src/app/(dashboard)/tasks/` | Admin task board page |
 | `src/app/(agent)/my-tasks/` | Agent task board (filtered to assigned) |
+
+### Known Patterns & Gotchas
+
+- **Admin auth**: Admins log in via `ADMIN_CREDENTIALS` env var — they do NOT have a row in `agents` table. Code that queries `agents WHERE role = 'admin'` may find nothing.
+- **Agent sidebar detection**: `useNavSections()` uses `pathname.startsWith("/my-")` to show agent nav. All agent routes MUST start with `/my-`.
+- **Agent layout**: `(agent)/layout.tsx` does NOT render a `<Header>` — each agent page provides its own inline `<h1>` title. Do not add `<Header>` to agent pages (it will duplicate).
+- **Auto-seed**: `getDefaultProject()` auto-creates default workspace + project + columns on first access if tables exist but are empty. No manual migration re-run needed.
 
 ## Conversation Continuity
 

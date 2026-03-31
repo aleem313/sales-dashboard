@@ -283,6 +283,23 @@ When resuming work:
 - `src/middleware.ts` — Added `/tasks/*`, `/my-tasks/*`, `/api/projects/*`, `/api/tasks/*` to auth matcher
 - `src/components/layout/sidebar.tsx` — Added "Task Board" (admin) and "My Tasks" (agent) nav items
 
+### Post-Deployment Bugfixes (2026-03-31)
+
+**Issues found after M1 deployment:**
+1. "No project found" on Task Board — migration seed skipped because no `role='admin'` row in agents table (admins use env var login)
+2. Double header on agent `/my-tasks` page
+3. Agent sidebar showing full admin menu on `/my-tasks`
+4. Agent nav missing My Jobs, My Performance links
+
+**Fixes applied:**
+
+| File | Change |
+|------|--------|
+| `src/lib/task-data.ts` | `getDefaultProject()` now auto-creates workspace/project/columns/members on first access if seed was skipped. Falls back to any active agent as owner. |
+| `src/app/(agent)/layout.tsx` | Removed layout-level `<Header>` — agent pages have their own inline `<h1>` titles |
+| `src/app/(agent)/my-tasks/page.tsx` | Removed duplicate `<Header>` import and render; wrapped in `<div>` instead of `<>` + `<main>` |
+| `src/components/layout/sidebar.tsx` | `useNavSections()` simplified to `pathname.startsWith("/my-")` to catch all agent routes. Added My Jobs, My Performance, My Tasks to agent nav. |
+
 ---
 
 ## Migration History
@@ -311,5 +328,5 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ---
 
-*Current Phase: Milestone 1 complete — ready for deployment*
-*Next Action: Push to Vercel → open migration URL in browser → then "Start milestone2"*
+*Current Phase: Milestone 1 deployed + post-deployment fixes applied*
+*Next Action: Push fixes to Vercel → verify Task Board loads → then "Start milestone2"*

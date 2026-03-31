@@ -140,7 +140,86 @@ export async function getDefaultProject(): Promise<Project | null> {
     ORDER BY p.created_at ASC
     LIMIT 1
   `;
-  return result.rows[0] as Project | null ?? null;
+  if (result.rows.length > 0) return result.rows[0] as Project;
+
+  // Auto-create if tables exist but seed was skipped (e.g. no admin agent in DB)
+  return await ensureDefaultProject();
+}
+
+async function ensureDefaultProject(): Promise<Project | null> {
+  // Check if workspaces table exists
+  const tableCheck = await sql`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_name = 'workspaces'
+    ) AS exists
+  `;
+  if (!tableCheck.rows[0]?.exists) return null;
+
+  // Find any agent to be the owner (prefer admin role, fall back to any)
+  let ownerId: string | null = null;
+  const adminAgent = await sql`SELECT id FROM agents WHERE role = 'admin' LIMIT 1`;
+  if (adminAgent.rows.length > 0) {
+    ownerId = adminAgent.rows[0].id as string;
+  } else {
+    const anyAgent = await sql`SELECT id FROM agents WHERE active = true LIMIT 1`;
+    if (anyAgent.rows.length > 0) {
+      ownerId = anyAgent.rows[0].id as string;
+    }
+  }
+  if (!ownerId) return null;
+
+  // Create workspace
+  const wsResult = await sql`
+    INSERT INTO workspaces (name, slug, owner_id)
+    VALUES ('Rising Lion', 'rising-lion', ${ownerId})
+    ON CONFLICT (slug) DO NOTHING
+    RETURNING id
+  `;
+  let workspaceId: string;
+  if (wsResult.rows.length > 0) {
+    workspaceId = wsResult.rows[0].id as string;
+  } else {
+    const existing = await sql`SELECT id FROM workspaces WHERE slug = 'rising-lion'`;
+    if (existing.rows.length === 0) return null;
+    workspaceId = existing.rows[0].id as string;
+  }
+
+  // Create project
+  const projResult = await sql`
+    INSERT INTO projects (workspace_id, name, description)
+    VALUES (${workspaceId}, 'Task Board', 'Default task management board')
+    RETURNING id
+  `;
+  const projectId = projResult.rows[0].id as string;
+
+  // Add all active agents as members
+  const agents = await sql`SELECT id, role FROM agents WHERE active = true`;
+  for (const agent of agents.rows) {
+    await sql`
+      INSERT INTO project_members (project_id, agent_id, role)
+      VALUES (${projectId}, ${agent.id}, ${agent.role === 'admin' ? 'admin' : 'member'})
+      ON CONFLICT (project_id, agent_id) DO NOTHING
+    `;
+  }
+
+  // Create default columns
+  const defaultColumns = [
+    { name: 'To Do', position: 1000, color: '#6b7280', is_done: false },
+    { name: 'In Progress', position: 2000, color: '#3b82f6', is_done: false },
+    { name: 'In Review', position: 3000, color: '#f59e0b', is_done: false },
+    { name: 'Done', position: 4000, color: '#22c55e', is_done: true },
+  ];
+  for (const col of defaultColumns) {
+    await sql`
+      INSERT INTO columns (project_id, name, position, color, is_done)
+      VALUES (${projectId}, ${col.name}, ${col.position}, ${col.color}, ${col.is_done})
+    `;
+  }
+
+  // Return the created project
+  const project = await sql`SELECT * FROM projects WHERE id = ${projectId}`;
+  return project.rows[0] as Project;
 }
 
 export async function getUserProjects(agentId: string): Promise<Project[]> {

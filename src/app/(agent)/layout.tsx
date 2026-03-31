@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
-import { Header } from "@/components/layout/header";
 import { Toaster } from "sonner";
 
 export default async function AgentLayout({
@@ -16,10 +15,7 @@ export default async function AgentLayout({
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Header title="Agent Portal" />
-        <main className="flex-1 overflow-y-auto bg-background">
-          {children}
-        </main>
+        {children}
       </div>
       <Toaster richColors position="bottom-right" />
     </div>

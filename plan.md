@@ -177,6 +177,12 @@ Before starting Milestone 1, install these packages:
 - [x] Inbound webhook (`/api/v1/webhooks/tasks` — Bearer auth, idempotency)
 - [x] Board UI (admin `/tasks` + agent `/my-tasks` + task cards + create modal + skeleton)
 
+**Post-deployment fixes (no migration needed):**
+- [x] Auto-create default workspace/project/columns on first access if migration seed was skipped (admins via env var have no agents row)
+- [x] Fix double header on agent `/my-tasks` — removed layout-level `<Header>`, page uses own content
+- [x] Fix agent sidebar showing admin menu on `/my-tasks` — detection now uses `pathname.startsWith("/my-")`
+- [x] Add My Jobs, My Performance, My Tasks to agent sidebar nav
+
 ## Migration Execution
 
 **Migration v=006** — Task Management Schema
