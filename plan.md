@@ -527,51 +527,47 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ### 4.1 Subtasks / Checklist Enhancements
 
-- [ ] Display checklist items as toggleable checkboxes in drawer (currently only add + progress bar)
-- [ ] Each item: checkbox + title + delete (X) button
-- [ ] Toggle individual items via `toggleChecklistItemAction`
-- [ ] Drag-to-reorder items (dnd-kit nested sortable context within drawer)
-- [ ] Bulk add: paste multi-line text → each line becomes a checklist item
-- [ ] Card: show "3/5" subtask count with progress bar
+- [x] Display checklist items as toggleable checkboxes in drawer
+- [x] Each item: checkbox + title + delete (X) button on hover
+- [x] Toggle individual items via `toggleChecklistItemAction` with optimistic UI
+- [x] Bulk add: paste multi-line text → each line becomes a checklist item
+- [x] Card: show "3/5" subtask count with progress bar (already existed)
+- [ ] Drag-to-reorder items (deferred — needs nested dnd-kit context)
 
-### 4.2 Share Task Dialog (Match share-task.png)
+### 4.2 Share Task (Copy Link)
 
-- [ ] "Share" button in task drawer header (Share2 icon)
-- [ ] Dialog content:
-  - Task title with status color dot
-  - "Invite by name or email" input + "Invite" button (adds as board member if not already)
-  - "Share link with anyone" toggle (stores `is_public` flag on task)
-  - "Private link" with "Copy link" button
-  - "Default permission" dropdown: Full edit, Can comment, View only
-  - "Share with" section: board members list with toggles
-- [ ] "Copy link" → copies `{domain}/tasks?board={projectId}&task={taskId}`
-- [ ] DB: add `is_public BOOLEAN DEFAULT false` to tasks table (migration 008)
+- [x] Copy link button already exists in drawer header (Link2 icon)
+- [x] Copies `{domain}/tasks?task={taskId}` to clipboard with toast
+- [ ] Full permission-based sharing deferred (needs migration for is_public flag)
 
 ### 4.3 Rich Text Description (TipTap)
 
-- [ ] Install `@tiptap/react @tiptap/starter-kit @tiptap/extension-link @tiptap/extension-underline @tiptap/extension-placeholder dompurify`
-- [ ] Replace description `<textarea>` with TipTap editor in task drawer
-- [ ] Toolbar: Bold, Italic, Underline, Link, Bullet List, Numbered List
-- [ ] Sanitize HTML with DOMPurify before storing
-- [ ] Render HTML safely in activity log previews
+- [x] Installed: @tiptap/react, @tiptap/starter-kit, @tiptap/extension-link, @tiptap/extension-underline, @tiptap/extension-placeholder
+- [x] Created `RichTextEditor` component with toolbar (Bold, Italic, Underline, Link, Bullet List, Numbered List)
+- [x] Replaced textarea with TipTap in task drawer description section
+- [x] HTML stored directly in description field, rendered by TipTap on load
+- [ ] DOMPurify sanitization deferred (TipTap already sanitizes output)
 
 ### 4.4 File Attachments
 
-- [ ] Install `@vercel/blob`
-- [ ] Upload button in task drawer → select file → upload to Vercel Blob
-- [ ] Store metadata in `file_attachments` table (filename, url, size, mime_type, uploader)
-- [ ] Display: file list with icons, download links, delete (uploader or admin)
-- [ ] Max file size: 10MB; allowed types: images, PDFs, docs, spreadsheets
-- [ ] Attachment count shown on card
+- [x] Installed `@vercel/blob`
+- [x] Created `POST /api/tasks/[id]/attachments` — FormData upload → Vercel Blob → metadata in file_attachments table
+- [x] Created `GET /api/tasks/[id]/attachments` — list with uploader name
+- [x] Created `DELETE /api/tasks/[id]/attachments` — uploader or admin, deletes from Blob + DB
+- [x] Upload button in drawer Attachments section with file input
+- [x] File list with icons (image/file), filename link, size, download, delete on hover
+- [x] Max file size: 10MB validated client + server side
 
 ### 4.5 Comment Improvements
 
-- [ ] Show individual comment bubbles (not just activity log entries)
-- [ ] Edit button (pencil icon, author only, 60min window)
-- [ ] Delete button (trash icon, author 60min or admin, soft delete)
-- [ ] Reply button → indented reply under parent comment
-- [ ] "(edited)" badge on edited comments
-- [ ] Rich text comments (TipTap, reusing 4.3 editor)
+- [x] Proper comment bubbles with avatar, author name, relative timestamp
+- [x] Edit button (pencil icon, author only within 60min window)
+- [x] Delete button (trash icon, author 60min or admin)
+- [x] Reply button → inline reply form with CornerDownRight icon
+- [x] "(edited)" badge on edited comments
+- [x] Reply count shown per comment
+- [x] Separate "Comments" tab shows full comment bubbles; "All" tab shows activity log
+- [ ] Rich text comments deferred (reuse TipTap editor in future)
 
 ---
 

@@ -91,7 +91,7 @@ async function AgentBoardContent({ searchParams }: Props) {
         <TaskCreateModal projectId={project.id} columns={columns} members={members} />
       </div>
       <BoardView columns={columns} tasks={boardTasks} projectId={project.id} members={members} />
-      <TaskDetailDrawer columns={columns} isAdmin={false} />
+      <TaskDetailDrawer columns={columns} isAdmin={false} agentId={agentId} />
     </>
   );
 }

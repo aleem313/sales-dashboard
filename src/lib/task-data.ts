@@ -65,6 +65,7 @@ export interface Task {
   // Joined fields
   assignees?: TaskAssignee[];
   tags?: TaskTag[];
+  checklist_items?: ChecklistItem[];
   checklist_total?: number;
   checklist_done?: number;
   comment_count?: number;
@@ -814,13 +815,13 @@ export async function getTaskById(taskId: string): Promise<Task | null> {
   `;
   task.tags = tags.rows as unknown as TaskTag[];
 
-  // Load checklist stats
-  const checklist = await sql`
-    SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE is_checked)::int AS done
-    FROM checklist_items WHERE task_id = ${taskId}
+  // Load checklist items + stats
+  const checklistRows = await sql`
+    SELECT * FROM checklist_items WHERE task_id = ${taskId} ORDER BY position ASC
   `;
-  task.checklist_total = checklist.rows[0].total as number;
-  task.checklist_done = checklist.rows[0].done as number;
+  task.checklist_items = checklistRows.rows as ChecklistItem[];
+  task.checklist_total = checklistRows.rows.length;
+  task.checklist_done = checklistRows.rows.filter((r) => r.is_checked).length;
 
   // Load comment count
   const comments = await sql`

@@ -32,6 +32,14 @@ import {
   Link2,
   Plus,
   Tag,
+  Pencil,
+  Reply,
+  CornerDownRight,
+  Paperclip,
+  Upload,
+  FileText,
+  Image as ImageIcon,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow, format } from "date-fns";
@@ -49,11 +57,13 @@ import {
 } from "@/lib/task-actions";
 import type { TaskTag } from "@/lib/task-data";
 import { useBoardStore } from "@/lib/stores/board-store";
+import { RichTextEditor } from "./rich-text-editor";
 import type { Task, BoardColumn, ProjectMember, ChecklistItem, Comment, ActivityLogEntry } from "@/lib/task-data";
 
 interface TaskDetailDrawerProps {
   columns: BoardColumn[];
   isAdmin: boolean;
+  agentId?: string | null;
 }
 
 const priorityOptions = [
@@ -97,7 +107,7 @@ function parseTimeInput(value: string): number | null {
   return null;
 }
 
-export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
+export function TaskDetailDrawer({ columns, isAdmin, agentId: currentAgentId }: TaskDetailDrawerProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const taskId = searchParams.get("task");
@@ -109,11 +119,18 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
   const [activity, setActivity] = useState<ActivityLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [activityTab, setActivityTab] = useState<"all" | "comments">("all");
+  const [attachments, setAttachments] = useState<{ id: string; filename: string; url: string; size_bytes: number; mime_type: string; uploader_id: string; uploader_name: string; created_at: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   // Edit states
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [newComment, setNewComment] = useState("");
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [editingComment, setEditingComment] = useState<string | null>(null);
+  const [editCommentText, setEditCommentText] = useState("");
   const [newCheckItem, setNewCheckItem] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
@@ -151,8 +168,10 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
       })
       .finally(() => setLoading(false));
 
-    // Load activity
+    // Load activity + comments + attachments
     fetch(`/api/tasks/${taskId}/activity`).then((r) => r.json()).then(setActivity).catch(() => {});
+    fetch(`/api/tasks/${taskId}/comments`).then((r) => r.json()).then(setComments).catch(() => {});
+    fetch(`/api/tasks/${taskId}/attachments`).then((r) => r.json()).then(setAttachments).catch(() => {});
   }, [taskId]);
 
   // Fetch project tags when task loads
@@ -271,12 +290,112 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
       try {
         await createCommentAction(task.id, newComment.trim());
         setNewComment("");
-        const res = await fetch(`/api/tasks/${task.id}/activity`);
-        if (res.ok) setActivity(await res.json());
+        // Refresh both comments and activity
+        const [actRes, cmtRes] = await Promise.all([
+          fetch(`/api/tasks/${task.id}/activity`),
+          fetch(`/api/tasks/${task.id}/comments`),
+        ]);
+        if (actRes.ok) setActivity(await actRes.json());
+        if (cmtRes.ok) setComments(await cmtRes.json());
       } catch {
         toast.error("Failed to add comment");
       }
     });
+  }
+
+  function handleReply(parentId: string) {
+    if (!task || !replyText.trim()) return;
+    startTransition(async () => {
+      try {
+        await createCommentAction(task.id, replyText.trim(), parentId);
+        setReplyText("");
+        setReplyTo(null);
+        const cmtRes = await fetch(`/api/tasks/${task.id}/comments`);
+        if (cmtRes.ok) setComments(await cmtRes.json());
+        const actRes = await fetch(`/api/tasks/${task.id}/activity`);
+        if (actRes.ok) setActivity(await actRes.json());
+      } catch {
+        toast.error("Failed to add reply");
+      }
+    });
+  }
+
+  async function handleEditComment(commentId: string) {
+    if (!task || !editCommentText.trim()) return;
+    startTransition(async () => {
+      try {
+        await fetch(`/api/tasks/${task.id}/comments/${commentId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body: editCommentText.trim() }),
+        });
+        setEditingComment(null);
+        setEditCommentText("");
+        const cmtRes = await fetch(`/api/tasks/${task.id}/comments`);
+        if (cmtRes.ok) setComments(await cmtRes.json());
+      } catch {
+        toast.error("Failed to edit comment");
+      }
+    });
+  }
+
+  async function handleDeleteComment(commentId: string) {
+    if (!task) return;
+    startTransition(async () => {
+      try {
+        await fetch(`/api/tasks/${task.id}/comments/${commentId}`, { method: "DELETE" });
+        const cmtRes = await fetch(`/api/tasks/${task.id}/comments`);
+        if (cmtRes.ok) setComments(await cmtRes.json());
+        const actRes = await fetch(`/api/tasks/${task.id}/activity`);
+        if (actRes.ok) setActivity(await actRes.json());
+      } catch {
+        toast.error("Failed to delete comment");
+      }
+    });
+  }
+
+  async function handleUploadFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !task) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File too large (max 10MB)");
+      return;
+    }
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/tasks/${task.id}/attachments`, { method: "POST", body: form });
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.error ?? "Upload failed");
+      } else {
+        toast.success("File uploaded");
+        const attRes = await fetch(`/api/tasks/${task.id}/attachments`);
+        if (attRes.ok) setAttachments(await attRes.json());
+      }
+    } catch {
+      toast.error("Upload failed");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  async function handleDeleteAttachment(attachmentId: string) {
+    if (!task) return;
+    setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+    try {
+      await fetch(`/api/tasks/${task.id}/attachments?attachmentId=${attachmentId}`, { method: "DELETE" });
+    } catch {
+      toast.error("Failed to delete attachment");
+    }
+  }
+
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   function handleAddCheckItem(e: React.FormEvent) {
@@ -290,6 +409,63 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
         if (res.ok) setTask(await res.json());
       } catch {
         toast.error("Failed to add checklist item");
+      }
+    });
+  }
+
+  function handleToggleCheckItem(itemId: string, isChecked: boolean) {
+    if (!task) return;
+    // Optimistic update
+    setTask((prev) => {
+      if (!prev) return prev;
+      const items = (prev.checklist_items ?? []).map((i) =>
+        i.id === itemId ? { ...i, is_checked: isChecked } : i
+      );
+      const done = items.filter((i) => i.is_checked).length;
+      return { ...prev, checklist_items: items, checklist_done: done };
+    });
+    startTransition(async () => {
+      try {
+        await toggleChecklistItemAction(itemId, isChecked);
+      } catch {
+        toast.error("Failed to toggle item");
+        const res = await fetch(`/api/tasks/${task.id}`);
+        if (res.ok) setTask(await res.json());
+      }
+    });
+  }
+
+  function handleDeleteCheckItem(itemId: string) {
+    if (!task) return;
+    // Optimistic update
+    setTask((prev) => {
+      if (!prev) return prev;
+      const items = (prev.checklist_items ?? []).filter((i) => i.id !== itemId);
+      return { ...prev, checklist_items: items, checklist_total: items.length, checklist_done: items.filter((i) => i.is_checked).length };
+    });
+    startTransition(async () => {
+      try {
+        await deleteChecklistItemAction(itemId);
+      } catch {
+        toast.error("Failed to delete item");
+        const res = await fetch(`/api/tasks/${task.id}`);
+        if (res.ok) setTask(await res.json());
+      }
+    });
+  }
+
+  async function handleBulkAddCheckItems(titles: string[]) {
+    if (!task) return;
+    startTransition(async () => {
+      try {
+        for (const title of titles) {
+          await addChecklistItemAction(task.id, title);
+        }
+        toast.success(`Added ${titles.length} items`);
+        const res = await fetch(`/api/tasks/${task.id}`);
+        if (res.ok) setTask(await res.json());
+      } catch {
+        toast.error("Failed to add items");
       }
     });
   }
@@ -684,12 +860,10 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
             {/* ── Description ── */}
             <div className="px-6 py-3">
               <p className="text-sm font-medium mb-2">Description</p>
-              <textarea
-                value={task.description ?? ""}
-                onChange={(e) => setTask((prev) => prev ? { ...prev, description: e.target.value } : prev)}
+              <RichTextEditor
+                content={task.description ?? ""}
+                onChange={(html) => setTask((prev) => prev ? { ...prev, description: html } : prev)}
                 onBlur={() => updateField("description", task.description)}
-                placeholder="Add a description..."
-                className="w-full min-h-[80px] rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
               />
             </div>
 
@@ -712,10 +886,10 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
               </button>
 
               {checklistExpanded && (
-                <div className="mt-2 pl-6">
+                <div className="mt-2 pl-6 space-y-1.5">
                   {/* Progress bar */}
                   {task.checklist_total != null && task.checklist_total > 0 && (
-                    <div className="w-full h-1.5 bg-muted rounded-full mb-3">
+                    <div className="w-full h-1.5 bg-muted rounded-full mb-2">
                       <div
                         className={cn(
                           "h-full rounded-full transition-all",
@@ -726,12 +900,53 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
                     </div>
                   )}
 
-                  {/* Add item form */}
-                  <form onSubmit={handleAddCheckItem} className="flex gap-2">
+                  {/* Checklist items */}
+                  {(task.checklist_items ?? []).map((item) => (
+                    <div key={item.id} className="group/item flex items-center gap-2">
+                      <button
+                        onClick={() => handleToggleCheckItem(item.id, !item.is_checked)}
+                        disabled={isPending}
+                        className="shrink-0"
+                      >
+                        <div className={cn(
+                          "h-4 w-4 rounded border-2 flex items-center justify-center transition-colors",
+                          item.is_checked
+                            ? "bg-green-500 border-green-500 text-white"
+                            : "border-muted-foreground/40 hover:border-primary"
+                        )}>
+                          {item.is_checked && <CheckSquare className="h-3 w-3" />}
+                        </div>
+                      </button>
+                      <span className={cn(
+                        "text-xs flex-1 min-w-0 truncate",
+                        item.is_checked && "line-through text-muted-foreground"
+                      )}>
+                        {item.title}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteCheckItem(item.id)}
+                        disabled={isPending}
+                        className="shrink-0 opacity-0 group-hover/item:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Add item form — supports bulk paste */}
+                  <form onSubmit={handleAddCheckItem} className="flex gap-2 pt-1">
                     <Input
                       value={newCheckItem}
                       onChange={(e) => setNewCheckItem(e.target.value)}
-                      placeholder="Add subtask..."
+                      onPaste={(e) => {
+                        const text = e.clipboardData.getData("text");
+                        const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+                        if (lines.length > 1) {
+                          e.preventDefault();
+                          handleBulkAddCheckItems(lines);
+                        }
+                      }}
+                      placeholder="Add subtask... (paste multiple lines)"
                       className="h-7 text-xs flex-1"
                     />
                     <Button size="sm" type="submit" disabled={isPending || !newCheckItem.trim()} className="h-7 text-xs px-2">
@@ -739,6 +954,55 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
                     </Button>
                   </form>
                 </div>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* ── Attachments ── */}
+            <div className="px-6 py-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Paperclip className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium">Attachments</p>
+                <label className="ml-auto cursor-pointer">
+                  <input type="file" className="hidden" onChange={handleUploadFile} disabled={uploading} />
+                  <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                    <Upload className="h-3 w-3" />
+                    {uploading ? "Uploading..." : "Upload"}
+                  </span>
+                </label>
+              </div>
+              {attachments.length > 0 && (
+                <div className="space-y-1.5">
+                  {attachments.map((att) => (
+                    <div key={att.id} className="group/att flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors">
+                      {att.mime_type?.startsWith("image/") ? (
+                        <ImageIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      ) : (
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      )}
+                      <a href={att.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 truncate text-primary hover:underline">
+                        {att.filename}
+                      </a>
+                      <span className="text-muted-foreground shrink-0">{formatFileSize(att.size_bytes)}</span>
+                      <a href={att.url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-muted-foreground hover:text-foreground" title="Download">
+                        <Download className="h-3 w-3" />
+                      </a>
+                      {(isAdmin || currentAgentId === att.uploader_id) && (
+                        <button
+                          onClick={() => handleDeleteAttachment(att.id)}
+                          className="shrink-0 opacity-0 group-hover/att:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+                          title="Delete"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {attachments.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-2">No attachments</p>
               )}
             </div>
 
@@ -778,41 +1042,135 @@ export function TaskDetailDrawer({ columns, isAdmin }: TaskDetailDrawerProps) {
                 </Button>
               </form>
 
-              {/* Activity list */}
-              <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                {activity
-                  .filter((a) => activityTab === "all" || a.action_type === "comment_added")
-                  .map((entry) => (
-                    <div key={entry.id} className="text-xs border-l-2 border-muted pl-3 py-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium">{entry.actor_name ?? entry.actor_label}</span>
-                        <span className="text-muted-foreground">
-                          {entry.action_type === "comment_added"
-                            ? "commented"
-                            : entry.action_type === "task_created"
-                              ? "created this task"
-                              : entry.action_type === "task_moved"
-                                ? `moved to ${entry.new_value}`
-                                : `changed ${entry.field}`}
-                        </span>
-                      </div>
-                      {entry.action_type === "comment_added" && entry.new_value && (
-                        <div className="mt-1 text-foreground bg-muted/50 rounded px-2 py-1">
-                          {entry.new_value}
+              <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                {activityTab === "comments" ? (
+                  /* ── Comments view — proper bubbles ── */
+                  comments.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">No comments yet</p>
+                  ) : (
+                    comments.map((cmt) => {
+                      const isAuthor = currentAgentId === cmt.author_id;
+                      const createdAt = new Date(cmt.created_at);
+                      const isEdited = cmt.updated_at !== cmt.created_at;
+                      const canEdit = isAuthor && (Date.now() - createdAt.getTime()) < 60 * 60 * 1000;
+                      const canDelete = isAdmin || canEdit;
+                      const isDeleted = cmt.deleted_at != null;
+
+                      return (
+                        <div key={cmt.id} className="group/cmt">
+                          <div className="flex items-start gap-2">
+                            <div className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white mt-0.5", hashColor(cmt.author_id))}>
+                              {cmt.author_avatar ? <img src={cmt.author_avatar} alt={cmt.author_name} className="h-full w-full rounded-full object-cover" /> : getInitials(cmt.author_name)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-medium">{cmt.author_name}</span>
+                                <span className="text-[10px] text-muted-foreground" title={cmt.created_at}>
+                                  {formatDistanceToNow(createdAt, { addSuffix: true })}
+                                </span>
+                                {isEdited && !isDeleted && <span className="text-[10px] text-muted-foreground italic">(edited)</span>}
+                              </div>
+
+                              {editingComment === cmt.id ? (
+                                <div className="mt-1 flex gap-1.5">
+                                  <Input
+                                    value={editCommentText}
+                                    onChange={(e) => setEditCommentText(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === "Enter") handleEditComment(cmt.id); if (e.key === "Escape") setEditingComment(null); }}
+                                    className="h-7 text-xs flex-1"
+                                    autoFocus
+                                  />
+                                  <Button size="sm" onClick={() => handleEditComment(cmt.id)} disabled={isPending} className="h-7 text-xs px-2">Save</Button>
+                                  <Button size="sm" variant="ghost" onClick={() => setEditingComment(null)} className="h-7 text-xs px-2">Cancel</Button>
+                                </div>
+                              ) : (
+                                <p className={cn("text-xs mt-0.5", isDeleted && "italic text-muted-foreground")}>
+                                  {isDeleted ? "[deleted]" : cmt.body}
+                                </p>
+                              )}
+
+                              {/* Actions */}
+                              {!isDeleted && editingComment !== cmt.id && (
+                                <div className="flex items-center gap-2 mt-1 opacity-0 group-hover/cmt:opacity-100 transition-opacity">
+                                  <button onClick={() => { setReplyTo(replyTo === cmt.id ? null : cmt.id); setReplyText(""); }} className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5">
+                                    <Reply className="h-3 w-3" /> Reply
+                                  </button>
+                                  {canEdit && (
+                                    <button onClick={() => { setEditingComment(cmt.id); setEditCommentText(cmt.body); }} className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5">
+                                      <Pencil className="h-3 w-3" /> Edit
+                                    </button>
+                                  )}
+                                  {canDelete && (
+                                    <button onClick={() => handleDeleteComment(cmt.id)} className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-0.5">
+                                      <Trash2 className="h-3 w-3" /> Delete
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Reply form */}
+                              {replyTo === cmt.id && (
+                                <div className="mt-2 flex gap-1.5 items-center">
+                                  <CornerDownRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                  <Input
+                                    value={replyText}
+                                    onChange={(e) => setReplyText(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === "Enter" && replyText.trim()) handleReply(cmt.id); if (e.key === "Escape") setReplyTo(null); }}
+                                    placeholder="Reply..."
+                                    className="h-7 text-xs flex-1"
+                                    autoFocus
+                                  />
+                                  <Button size="sm" onClick={() => handleReply(cmt.id)} disabled={isPending || !replyText.trim()} className="h-7 text-xs px-2">Reply</Button>
+                                </div>
+                              )}
+
+                              {/* Replies count */}
+                              {(cmt.reply_count ?? 0) > 0 && (
+                                <p className="text-[10px] text-muted-foreground mt-1">
+                                  {cmt.reply_count} {cmt.reply_count === 1 ? "reply" : "replies"}
+                                </p>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      )}
-                      {entry.action_type === "field_changed" && entry.old_value && (
-                        <div className="text-muted-foreground mt-0.5">
-                          {entry.old_value} → {entry.new_value}
+                      );
+                    })
+                  )
+                ) : (
+                  /* ── All activity view ── */
+                  activity.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">No activity yet</p>
+                  ) : (
+                    activity.map((entry) => (
+                      <div key={entry.id} className="text-xs border-l-2 border-muted pl-3 py-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium">{entry.actor_name ?? entry.actor_label}</span>
+                          <span className="text-muted-foreground">
+                            {entry.action_type === "comment_added"
+                              ? "commented"
+                              : entry.action_type === "task_created"
+                                ? "created this task"
+                                : entry.action_type === "task_moved"
+                                  ? `moved to ${entry.new_value}`
+                                  : `changed ${entry.field}`}
+                          </span>
                         </div>
-                      )}
-                      <div className="text-muted-foreground/60 mt-0.5" title={entry.created_at}>
-                        {formatDistanceToNow(new Date(entry.created_at), { addSuffix: true })}
+                        {entry.action_type === "comment_added" && entry.new_value && (
+                          <div className="mt-1 text-foreground bg-muted/50 rounded px-2 py-1">
+                            {entry.new_value}
+                          </div>
+                        )}
+                        {entry.action_type === "field_changed" && entry.old_value && (
+                          <div className="text-muted-foreground mt-0.5">
+                            {entry.old_value} → {entry.new_value}
+                          </div>
+                        )}
+                        <div className="text-muted-foreground/60 mt-0.5" title={entry.created_at}>
+                          {formatDistanceToNow(new Date(entry.created_at), { addSuffix: true })}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                {activity.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-4">No activity yet</p>
+                    ))
+                  )
                 )}
               </div>
             </div>

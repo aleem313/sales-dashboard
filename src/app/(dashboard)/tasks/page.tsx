@@ -89,7 +89,7 @@ async function BoardContent({ searchParams }: Props) {
       />
       <BoardFilterBar columns={columns} members={members} tags={tags} />
       <BoardView columns={columns} tasks={tasks} projectId={project.id} members={members} isAdmin={isAdmin} />
-      <TaskDetailDrawer columns={columns} isAdmin={isAdmin} />
+      <TaskDetailDrawer columns={columns} isAdmin={isAdmin} agentId={agentId} />
     </>
   );
 }

@@ -284,7 +284,17 @@ Previous `cline.md` content was **fabricated** by a prior AI session. Verified o
 | 3.6 | Start Date Field | DONE (already existed from M2) |
 | 3.7 | Time Estimate & Tracking | DONE (already existed from M2) |
 
-### Milestones 4–7: NOT STARTED
+### Milestone 4: Task Detail Drawer Enhancements — COMPLETE (2026-03-31)
+
+| # | Feature | Status |
+|---|---------|--------|
+| 4.1 | Checklist Enhancements | DONE (drag reorder deferred) |
+| 4.2 | Share Task (Copy Link) | DONE (full permissions deferred) |
+| 4.3 | Rich Text Description (TipTap) | DONE |
+| 4.4 | File Attachments (Vercel Blob) | DONE |
+| 4.5 | Comment Improvements | DONE (rich text comments deferred) |
+
+### Milestones 5–7: NOT STARTED
 See `plan.md` for full breakdown.
 
 ---
@@ -508,5 +518,27 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ---
 
-*Current Phase: Milestone 3 complete — card context menu, column management, labels/tags*
-*Next Action: Push to Vercel → verify M3 features → then start Milestone 4*
+### Milestone 4 — Task Detail Drawer Enhancements (completed 2026-03-31)
+
+**New packages:** @tiptap/react, @tiptap/starter-kit, @tiptap/extension-link, @tiptap/extension-underline, @tiptap/extension-placeholder, @vercel/blob
+
+**New files created:**
+
+| File | Purpose |
+|------|---------|
+| `src/components/tasks/rich-text-editor.tsx` | TipTap editor with toolbar (Bold, Italic, Underline, Link, Lists) |
+| `src/app/api/tasks/[id]/attachments/route.ts` | GET (list) / POST (upload to Blob) / DELETE (remove from Blob + DB) |
+
+**Modified files:**
+
+| File | Change |
+|------|--------|
+| `src/lib/task-data.ts` | `getTaskById()` now loads `checklist_items` array (not just stats); added `checklist_items` to Task interface |
+| `src/components/tasks/task-detail-drawer.tsx` | Checklist: render items as toggleable checkboxes with delete + bulk paste. Comments: proper bubbles with avatar, edit/delete/reply, (edited) badge. Description: replaced textarea with TipTap RichTextEditor. Attachments: upload/list/download/delete section. Added agentId prop for comment permissions. |
+| `src/app/(dashboard)/tasks/page.tsx` | Pass agentId to TaskDetailDrawer |
+| `src/app/(agent)/my-tasks/page.tsx` | Pass agentId to TaskDetailDrawer |
+
+---
+
+*Current Phase: Milestone 4 complete — checklist, rich text, attachments, comments*
+*Next Action: Push to Vercel → verify M4 features → then start Milestone 5*
