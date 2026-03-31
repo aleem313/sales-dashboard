@@ -67,7 +67,11 @@ Middleware (`src/middleware.ts`) enforces auth and redirects agents away from ad
 
 ### Database Tables
 
-Core tables: `agents`, `profiles`, `jobs`, `sync_log`, `stats_cache`, `alerts`. Schema in `src/lib/seed.ts` and `src/lib/schema.sql`. Migrations in `src/lib/migrations/`.
+**Original tables:** `agents`, `profiles`, `jobs`, `sync_log`, `stats_cache`, `alerts`. Schema in `src/lib/seed.ts` and `src/lib/schema.sql`.
+
+**Task management tables (migration 006):** `workspaces`, `projects`, `project_members`, `columns`, `tasks`, `task_assignees`, `task_tags`, `task_tag_map`, `comments`, `activity_log`, `checklist_items`, `file_attachments`, `webhook_configs`, `webhook_event_log`, `notifications`, `notification_preferences`, `saved_views`, `custom_field_definitions`.
+
+Migrations in `src/lib/migrations/`.
 
 ### API Conventions
 
@@ -84,6 +88,55 @@ Core tables: `agents`, `profiles`, `jobs`, `sync_log`, `stats_cache`, `alerts`. 
 - **Path alias**: `@/*` maps to `./src/*`
 - **URL state for filters** — job filters are stored in URL search params, not React state
 - **Server actions for mutations** — all writes go through `src/lib/actions.ts`, which revalidates paths after changes
+
+## Migration Version History
+
+| Version | File | Milestone | Description |
+|---------|------|-----------|-------------|
+| 004 | `004_cyberpunk_schema.sql` | — | connects_used, priority, rejection_reason, niche, connects_budget, bonus_earned |
+| 005 | `005_agent_passwords.sql` | — | password_hash column + 4 agent passwords |
+| 006 | `006_task_management_schema.sql` | M1 | 18 task management tables, 14 indexes, 3 triggers, default seed |
+
+## Migration Execution
+
+Migrations run via browser URL (no curl needed):
+
+```
+https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v={VERSION}&secret=YOUR_CRON_SECRET
+```
+
+**Latest migration:**
+```
+https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON_SECRET
+```
+
+Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variables. All migrations are idempotent — safe to re-run.
+
+## Task Management API Routes (Milestone 1)
+
+| Method | Endpoint | Access |
+|--------|----------|--------|
+| GET/POST | `/api/projects/[id]/tasks` | Agent+ |
+| GET/PATCH/DELETE | `/api/tasks/[id]` | Agent+ / Admin |
+| PATCH | `/api/tasks/[id]/move` | Agent+ |
+| GET/POST | `/api/tasks/[id]/comments` | Agent+ |
+| PATCH/DELETE | `/api/tasks/[id]/comments/[cid]` | Author (60min) / Admin |
+| GET | `/api/tasks/[id]/activity` | Agent+ |
+| GET/POST | `/api/projects/[id]/columns` | Agent+ / Admin |
+| PATCH/DELETE | `/api/projects/[id]/columns/[cid]` | Admin |
+| PATCH | `/api/projects/[id]/columns/reorder` | Admin |
+| POST | `/api/v1/webhooks/tasks` | API Key (Bearer) |
+| GET | `/api/migrate` | CRON_SECRET |
+
+### Task Management Key Files
+
+| File | What it does |
+|------|-------------|
+| `src/lib/task-data.ts` | All task management queries (~550 lines raw SQL) |
+| `src/lib/task-actions.ts` | Server actions for task mutations + revalidatePath |
+| `src/components/tasks/` | Board view, task card, column, create modal |
+| `src/app/(dashboard)/tasks/` | Admin task board page |
+| `src/app/(agent)/my-tasks/` | Agent task board (filtered to assigned) |
 
 ## Conversation Continuity
 

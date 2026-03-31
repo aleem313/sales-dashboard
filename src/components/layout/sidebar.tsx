@@ -19,6 +19,7 @@ import {
   Gauge,
   Briefcase,
   TrendingUp,
+  KanbanSquare,
 } from "lucide-react";
 import { useState, Suspense } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -63,6 +64,12 @@ const adminNavSections: NavSection[] = [
       { href: "/jobs", label: "Job Feed", icon: Radio },
     ],
   },
+  {
+    label: "Tasks",
+    items: [
+      { href: "/tasks", label: "Task Board", icon: KanbanSquare },
+    ],
+  },
 ];
 
 const agentNavSections: NavSection[] = [
@@ -70,6 +77,7 @@ const agentNavSections: NavSection[] = [
     label: "Overview",
     items: [
       { href: "/my-dashboard", label: "My Dashboard", icon: Gauge },
+      { href: "/my-tasks", label: "My Tasks", icon: KanbanSquare },
     ],
   },
 ];

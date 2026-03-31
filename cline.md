@@ -198,27 +198,23 @@ Dashboard normalizes this nested format to flat fields via `normalizePayload()` 
 
 Previous `cline.md` content was **fabricated** by a prior AI session. Verified on 2026-03-31:
 
-- **Database schema:** NO task management tables exist. No migration file (006_*).
-- **API routes:** `src/app/api/tasks/` directory exists but is COMPLETELY EMPTY (no route.ts files).
-- **Components:** No task/board/kanban components exist.
-- **Types:** No task-related TypeScript interfaces in types.ts.
-- **State management:** No Zustand stores. No dnd-kit. No TipTap.
-
-### Milestone 1: Core Foundation — NOT STARTED
+### Milestone 1: Core Foundation — COMPLETE (2026-03-31)
 
 | # | Feature | Status |
 |---|---------|--------|
-| 1.1 | Database Schema & Migrations | NOT STARTED |
-| 1.2 | Data Layer — Task & Column Queries | NOT STARTED |
-| 1.3 | REST API — Tasks & Columns | NOT STARTED |
-| 1.4 | REST API — Comments & Activity | NOT STARTED |
-| 1.5 | Server Actions — Task Mutations | NOT STARTED |
-| 1.6 | Auth & Role Extension | NOT STARTED |
-| 1.7 | Inbound Webhook Endpoint | NOT STARTED |
-| 1.8 | Board Page — Static Kanban UI | NOT STARTED |
-| 1.9 | Task Creation Modal | NOT STARTED |
-| 1.10 | Loading & Skeleton States | NOT STARTED |
-| 1.11 | Agent Portal — Task Board | NOT STARTED |
+| 1.1 | Database Schema & Migrations | DONE |
+| 1.2 | Data Layer — Task & Column Queries | DONE |
+| 1.3 | REST API — Tasks & Columns | DONE |
+| 1.4 | REST API — Comments & Activity | DONE |
+| 1.5 | Server Actions — Task Mutations | DONE |
+| 1.6 | Auth & Role Extension | DONE |
+| 1.7 | Inbound Webhook Endpoint | DONE |
+| 1.8 | Board Page — Static Kanban UI | DONE |
+| 1.9 | Task Creation Modal | DONE |
+| 1.10 | Loading & Skeleton States | DONE |
+| 1.11 | Agent Portal — Task Board | DONE |
+
+### Milestone 1: COMPLETE
 
 ### Milestones 2–5: NOT STARTED
 See `plan.md` for full breakdown.
@@ -252,9 +248,68 @@ When resuming work:
 
 ## What Was Built (Implementation Log)
 
-*Nothing yet. Will be populated as features are completed.*
+### Milestone 1 — Core Foundation (completed 2026-03-31)
+
+**New packages:** zustand
+
+**New files created:**
+
+| File | Purpose |
+|------|---------|
+| `src/lib/migrations/006_task_management_schema.sql` | 18 tables, indexes, 3 triggers (append-only activity_log, single is_done column, auto-update timestamps) |
+| `src/lib/migrations/006_task_management_schema_down.sql` | Complete rollback script |
+| `src/lib/migrations/run-006.ts` | Migration runner + seeds default workspace, project, columns, members |
+| `src/lib/task-data.ts` | All task management queries (~550 lines): CRUD for tasks, columns, comments, checklist, tags, activity log |
+| `src/lib/task-actions.ts` | Server actions: createTask, updateTask, moveTask, deleteTask, comments, checklist, assignees, tags |
+| `src/app/api/projects/[id]/tasks/route.ts` | GET (list+filter) / POST (create) tasks |
+| `src/app/api/tasks/[id]/route.ts` | GET / PATCH / DELETE task |
+| `src/app/api/tasks/[id]/move/route.ts` | PATCH move task to column |
+| `src/app/api/projects/[id]/columns/route.ts` | GET / POST columns |
+| `src/app/api/projects/[id]/columns/[cid]/route.ts` | PATCH / DELETE column |
+| `src/app/api/projects/[id]/columns/reorder/route.ts` | PATCH reorder columns |
+| `src/app/api/tasks/[id]/comments/route.ts` | GET / POST comments |
+| `src/app/api/tasks/[id]/comments/[cid]/route.ts` | PATCH (edit, 60min window) / DELETE (soft delete) |
+| `src/app/api/tasks/[id]/activity/route.ts` | GET activity log |
+| `src/app/api/v1/webhooks/tasks/route.ts` | POST inbound webhook (Bearer auth, idempotency) |
+| `src/components/tasks/task-card.tsx` | Task card with priority, assignees, due date, tags, counts |
+| `src/components/tasks/board-column.tsx` | Column with header, WIP indicator, card list |
+| `src/components/tasks/board-view.tsx` | Horizontal scrollable board grouping tasks by column |
+| `src/components/tasks/task-create-modal.tsx` | Modal: title, column, priority, due date, description |
+| `src/app/(dashboard)/tasks/page.tsx` | Admin task board page |
+| `src/app/(dashboard)/tasks/loading.tsx` | Skeleton loader |
+| `src/app/(agent)/my-tasks/page.tsx` | Agent task board (filtered to assigned tasks) |
+
+**Modified files:**
+- `src/middleware.ts` — Added `/tasks/*`, `/my-tasks/*`, `/api/projects/*`, `/api/tasks/*` to auth matcher
+- `src/components/layout/sidebar.tsx` — Added "Task Board" (admin) and "My Tasks" (agent) nav items
 
 ---
 
-*Current Phase: Pre-implementation — plan.md and cline.md finalized*
-*Next Action: "Start milestone1" to begin Milestone 1.1 (Database Schema)*
+## Migration History
+
+| Version | Date | Milestone | Description |
+|---------|------|-----------|-------------|
+| 004 | pre-existing | — | Cyberpunk schema: connects_used, priority, niche, bonus_earned |
+| 005 | pre-existing | — | Agent password_hash column + 4 PBKDF2 passwords |
+| **006** | **2026-03-31** | **M1** | **Task management: 18 tables, 14 indexes, 3 triggers + default seed** |
+
+### Migration 006 Details
+
+**Open in browser to execute:**
+```
+https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON_SECRET
+```
+
+| Detail | Value |
+|--------|-------|
+| Tables | 18 (workspaces, projects, project_members, columns, tasks, task_assignees, task_tags, task_tag_map, comments, activity_log, checklist_items, file_attachments, webhook_configs, webhook_event_log, notifications, notification_preferences, saved_views, custom_field_definitions) |
+| Indexes | 14 (including GIN on tasks.custom_fields) |
+| Triggers | 3 (append-only activity_log, single is_done column, auto-update timestamps) |
+| Seed | Workspace "Rising Lion" + Project "Task Board" + 4 columns + all agents as members |
+| Idempotent | Yes — `IF NOT EXISTS` / `ON CONFLICT DO NOTHING` |
+| Rollback | `src/lib/migrations/006_task_management_schema_down.sql` via Vercel Postgres SQL editor |
+
+---
+
+*Current Phase: Milestone 1 complete — ready for deployment*
+*Next Action: Push to Vercel → open migration URL in browser → then "Start milestone2"*

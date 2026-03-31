@@ -27,5 +27,9 @@ export const config = {
     "/my-dashboard/:path*",
     "/my-jobs/:path*",
     "/my-performance/:path*",
+    "/tasks/:path*",
+    "/my-tasks/:path*",
+    "/api/projects/:path*",
+    "/api/tasks/:path*",
   ],
 };
