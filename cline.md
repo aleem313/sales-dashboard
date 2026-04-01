@@ -582,5 +582,55 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ---
 
-*Current Phase: Milestone 5 complete — custom fields, grouping, filters, saved views*
-*Next Action: Push to Vercel → verify M5 features → then start Milestone 6*
+### n8n Dual-Delivery Integration (2026-04-01)
+
+**Task:** Extend n8n workflow to send processed jobs to custom board system in parallel with ClickUp.
+
+**What was done:**
+- Added "Create Board Task" HTTP Request node to workflow "multiple webhooks" (EWnZg3svZWwcIRs4)
+- Node POSTs to `https://sales-dashboard-snowy-beta.vercel.app/api/v1/webhooks/tasks` with Bearer token auth
+- Connected in parallel from "Format ClickUp Task" (same output feeds both "Create ClickUp Task" and "Create Board Task")
+- `onError: continueRegularOutput` — board failure does not affect ClickUp or dashboard event flow
+- `neverError: true` in response options — HTTP errors don't break the workflow
+- Workflow now has 28 nodes (was 27)
+
+**Payload mapping (n8n → Board API):**
+```json
+{
+  "title": "$json.taskName",           // "[profile] Job Title"
+  "description": "$json.taskDescription", // Rich formatted proposal + job snapshot
+  "priority": "medium",
+  "custom_fields": {
+    "_job_id": "$json.job.id",
+    "_job_url": "$json.job.url",
+    "_budget": "$json.job.budget",
+    "_skills": "$json.job.skills",
+    "_proposal": "$json.proposal",
+    "_assigned_agent": "$json.assigned_agent",
+    "_profile_name": "$json.profile_name",
+    "_source": "n8n",
+    "_client_country": "$json.job.clientCountry",
+    "_client_rating": "$json.job.clientRating",
+    "_client_spent": "$json.job.clientSpent",
+    "_client_hires": "$json.job.clientHires"
+  }
+}
+```
+
+**Flow architecture (parallel):**
+```
+Format ClickUp Task
+   ├── Create ClickUp Task → Format Dashboard Event → Send to Dashboard (unchanged)
+   └── Create Board Task (NEW, independent, continueOnFail)
+```
+
+**Auth:** Bearer token `n8n-board-sync`. The webhook endpoint falls back to default project when no matching `webhook_configs` row exists. To target a specific board, add a `webhook_configs` row with `inbound_api_key_hash = SHA256('n8n-board-sync')` pointing to the desired project.
+
+**No code changes to the dashboard codebase.** Existing `/api/v1/webhooks/tasks` endpoint handles everything.
+
+**Future:** When ClickUp is removed, simply disconnect "Create ClickUp Task" node and the dashboard event chain. The board task creation is fully independent.
+
+---
+
+*Current Phase: Milestone 5 complete + n8n dual-delivery integration*
+*Next Action: Push to Vercel → verify M5 features + board task creation → then start Milestone 6*

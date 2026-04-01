@@ -13,8 +13,12 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007") {
+  if (migration !== "006" && migration !== "007" && migration !== "008") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
+  }
+
+  if (migration === "008") {
+    return run008();
   }
 
   if (migration === "007") {
@@ -175,6 +179,68 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: false,
       migration: "006_task_management_schema",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run008() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 008: Add n8n board webhook config...");
+
+    // SHA256('n8n-board-sync') = 454ed665bfe2f9dcd05093f13ec700bfce53fad6e9ead95b17823ae0c94c7504
+    const tokenHash = "454ed665bfe2f9dcd05093f13ec700bfce53fad6e9ead95b17823ae0c94c7504";
+    const targetProjectId = "351494d8-918e-475e-b16c-2eee3232aefe";
+
+    // Verify project exists
+    const projectCheck = await sql`SELECT id, name FROM projects WHERE id = ${targetProjectId}`;
+    if (projectCheck.rows.length === 0) {
+      // Fallback: use default project
+      const fallback = await sql`SELECT id, name FROM projects ORDER BY created_at ASC LIMIT 1`;
+      if (fallback.rows.length === 0) {
+        return NextResponse.json({
+          success: false,
+          migration: "008_webhook_config",
+          steps: [...results, "✗ No projects found"],
+          error: "No projects exist in the database",
+        }, { status: 400 });
+      }
+      const projectId = fallback.rows[0].id;
+      const projectName = fallback.rows[0].name;
+
+      await sql`
+        INSERT INTO webhook_configs (project_id, inbound_api_key_hash, field_map, active)
+        VALUES (${projectId}, ${tokenHash}, '{"source": "n8n"}', true)
+        ON CONFLICT DO NOTHING
+      `;
+      results.push(`✓ Webhook config created for fallback project "${projectName}" (${projectId})`);
+    } else {
+      const projectName = projectCheck.rows[0].name;
+
+      // Remove any existing config with same hash to avoid duplicates
+      await sql`DELETE FROM webhook_configs WHERE inbound_api_key_hash = ${tokenHash}`;
+
+      await sql`
+        INSERT INTO webhook_configs (project_id, inbound_api_key_hash, field_map, active)
+        VALUES (${targetProjectId}, ${tokenHash}, '{"source": "n8n"}', true)
+      `;
+      results.push(`✓ Webhook config created for project "${projectName}" (${targetProjectId})`);
+    }
+
+    results.push("✓ Bearer token: n8n-board-sync → SHA256 hash mapped to target project");
+
+    return NextResponse.json({
+      success: true,
+      migration: "008_webhook_config",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "008_webhook_config",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });

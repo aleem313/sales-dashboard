@@ -759,6 +759,21 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ---
 
+## n8n → Custom Board Integration (2026-04-01)
+
+> **Context:** Temporary dual-sync phase. Jobs are sent to both ClickUp and the custom board system in parallel from n8n. When ClickUp is retired, only the board integration remains.
+
+- [x] Create "Create Board Task" HTTP Request node in n8n workflow
+- [x] Map payload from "Format ClickUp Task" output to board webhook API format
+- [x] Connect in parallel with existing "Create ClickUp Task" (from "Format ClickUp Task" output)
+- [x] Error handling: `continueOnFail` on new node, `neverError` in response options
+- [x] Verified workflow structure (28 nodes, parallel connections confirmed)
+- [x] Updated documentation: `CLAUDE.md`, `cline.md`, `plan.md`
+- [ ] Test end-to-end: job appears in both ClickUp and custom board
+- [ ] Configure proper Bearer token (optional: add `webhook_configs` row for targeted project)
+
+---
+
 ## Definition of Done (per feature)
 1. Code works on Vercel production (no localhost-only features)
 2. Raw SQL queries use parameterized `sql` tagged template (no string concatenation)

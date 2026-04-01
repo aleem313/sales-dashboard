@@ -61,9 +61,26 @@ Middleware (`src/middleware.ts`) enforces auth and redirects agents away from ad
 
 - **Instance**: ikonicdev.app.n8n.cloud (v2.42.3)
 - **MCP Server**: Connected (21 tools — can create/update/execute workflows)
-- **Active workflow**: "multiple webhooks" (EWnZg3svZWwcIRs4) — 6 Vollna webhooks per agent (Sana, Laiba, Khansa, Saim, Shayan, Craig) → Claude AI proposals → ClickUp tasks → Dashboard webhook
+- **Active workflow**: "multiple webhooks" (EWnZg3svZWwcIRs4) — 28 nodes, 6 Vollna webhooks per agent (Sana, Laiba, Khansa, Saim, Shayan, Craig) → Claude AI proposals → **dual output** (ClickUp + Custom Board) → Dashboard webhook
 - **Webhook payload**: Nested format with `job`, `client`, `routing`, `scores`, `clickup`, `proposal`, `outcome` fields. Normalized by `/api/webhook/n8n` route.
 - **Outcome values from n8n**: `proposal_created`, `gpt_error`, `rejected`, `no_profile`, `weekend`, `inactive`
+
+### Dual-Delivery Architecture (n8n → ClickUp + Custom Board)
+
+The n8n workflow delivers processed jobs to **two systems in parallel** after AI proposal generation:
+
+```
+Format ClickUp Task
+   ├── Create ClickUp Task (existing) → Format Dashboard Event → Send to Dashboard
+   └── Create Board Task (NEW) → POST /api/v1/webhooks/tasks
+```
+
+- **Parallel execution**: Both branches run independently from "Format ClickUp Task" output
+- **Error isolation**: Each branch has `continueOnFail` enabled — ClickUp failure does NOT affect board, board failure does NOT affect ClickUp
+- **Board API**: `POST /api/v1/webhooks/tasks` with Bearer token auth (`n8n-board-sync`). Falls back to default project.
+- **Payload mapping**: Task title = `[profile] Job Title`, description = rich formatted proposal + job snapshot. Job metadata stored in `custom_fields` (`_job_id`, `_job_url`, `_budget`, `_skills`, `_proposal`, `_assigned_agent`, `_profile_name`, `_source`, client data)
+- **Task-Job linking**: `custom_fields._job_id` links board tasks to the `jobs` table, enabling the 3-column task detail view (task fields | job details | proposal)
+- **Future**: ClickUp will be removed; only custom board will remain. System designed for easy switchover.
 
 ### Database Tables
 
