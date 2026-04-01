@@ -13,8 +13,12 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
+  }
+
+  if (migration === "009") {
+    return run009();
   }
 
   if (migration === "008") {
@@ -179,6 +183,101 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: false,
       migration: "006_task_management_schema",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run009() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 009: Create default custom field definitions for n8n job data...");
+
+    // Find the target project (same as migration 008)
+    const targetProjectId = "351494d8-918e-475e-b16c-2eee3232aefe";
+    const projectCheck = await sql`SELECT id FROM projects WHERE id = ${targetProjectId}`;
+    let projectId: string;
+    if (projectCheck.rows.length > 0) {
+      projectId = targetProjectId;
+    } else {
+      const fallback = await sql`SELECT id FROM projects ORDER BY created_at ASC LIMIT 1`;
+      if (fallback.rows.length === 0) {
+        return NextResponse.json({
+          success: false,
+          migration: "009_custom_field_definitions",
+          steps: [...results, "✗ No projects found"],
+          error: "No projects exist",
+        }, { status: 400 });
+      }
+      projectId = fallback.rows[0].id as string;
+    }
+
+    // Define all fields with stable IDs (deterministic UUIDs based on name)
+    // Using a fixed prefix so they can be referenced by the webhook
+    const fields = [
+      // ── Job Details ──
+      { name: "Job Link",     field_type: "text", position: 1,  show_on_card: false, group: "job" },
+      { name: "Budget",       field_type: "text", position: 2,  show_on_card: true,  group: "job" },
+      { name: "Skills",       field_type: "text", position: 3,  show_on_card: true,  group: "job" },
+      { name: "Posted",       field_type: "text", position: 4,  show_on_card: false, group: "job" },
+      // ── Client Info ──
+      { name: "Location",     field_type: "text", position: 5,  show_on_card: false, group: "client" },
+      { name: "Rating",       field_type: "text", position: 6,  show_on_card: false, group: "client" },
+      { name: "Total Spent",  field_type: "text", position: 7,  show_on_card: false, group: "client" },
+      { name: "Past Hires",   field_type: "text", position: 8,  show_on_card: false, group: "client" },
+      // ── Routing Info ──
+      { name: "Agent",        field_type: "text", position: 9,  show_on_card: true,  group: "routing" },
+      { name: "Profile",      field_type: "text", position: 10, show_on_card: true,  group: "routing" },
+      { name: "Stack",        field_type: "text", position: 11, show_on_card: false, group: "routing" },
+      { name: "Job ID",       field_type: "text", position: 12, show_on_card: false, group: "routing" },
+      { name: "Generated",    field_type: "text", position: 13, show_on_card: false, group: "routing" },
+      // ── Proposal ──
+      { name: "Proposal",     field_type: "text", position: 14, show_on_card: false, group: "proposal" },
+    ];
+
+    const createdIds: Record<string, string> = {};
+
+    for (const f of fields) {
+      // Skip if field already exists for this project
+      const existing = await sql`
+        SELECT id FROM custom_field_definitions
+        WHERE project_id = ${projectId} AND LOWER(name) = LOWER(${f.name})
+        LIMIT 1
+      `;
+      if (existing.rows.length > 0) {
+        createdIds[f.name] = existing.rows[0].id as string;
+        results.push(`⊘ "${f.name}" already exists (${existing.rows[0].id})`);
+        continue;
+      }
+
+      const inserted = await sql`
+        INSERT INTO custom_field_definitions (project_id, name, field_type, position, show_on_card, required, archived)
+        VALUES (${projectId}, ${f.name}, ${f.field_type}, ${f.position}, ${f.show_on_card}, false, false)
+        RETURNING id
+      `;
+      createdIds[f.name] = inserted.rows[0].id as string;
+      results.push(`✓ Created "${f.name}" (${inserted.rows[0].id})`);
+    }
+
+    // Log the field ID mapping for reference
+    results.push("");
+    results.push("Field ID mapping (use in webhook custom_fields):");
+    for (const [name, id] of Object.entries(createdIds)) {
+      results.push(`  ${name} → ${id}`);
+    }
+
+    return NextResponse.json({
+      success: true,
+      migration: "009_custom_field_definitions",
+      steps: results,
+      fieldIds: createdIds,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "009_custom_field_definitions",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });

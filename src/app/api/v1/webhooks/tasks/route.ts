@@ -133,6 +133,45 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // --- Map n8n data to formal custom field definitions ---
+  let finalCustomFields: Record<string, unknown> = { ...cf };
+  if (cf._source === "n8n") {
+    // Look up custom field definition IDs by name for this project
+    const fieldDefs = await sql`
+      SELECT id, LOWER(name) AS name_lower FROM custom_field_definitions
+      WHERE project_id = ${projectId} AND archived = false
+    `;
+    const fieldMap: Record<string, string> = {};
+    for (const row of fieldDefs.rows) {
+      fieldMap[row.name_lower as string] = row.id as string;
+    }
+
+    // Map n8n underscore-prefixed data → formal field IDs
+    const mapping: Record<string, unknown> = {
+      "job link":     cf._job_url || "",
+      "budget":       cf._budget ? String(cf._budget) : "Not specified",
+      "skills":       Array.isArray(cf._skills) ? (cf._skills as string[]).join(", ") : "",
+      "posted":       new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      "location":     cf._client_country || "Not specified",
+      "rating":       cf._client_rating ? String(cf._client_rating) : "No rating yet",
+      "total spent":  cf._client_spent ? `$${cf._client_spent}` : "New client",
+      "past hires":   cf._client_hires ? String(cf._client_hires) : "No hires yet",
+      "agent":        cf._assigned_agent || "",
+      "profile":      cf._profile_name || "",
+      "stack":        cf._stack || "",
+      "job id":       cf._job_id ? String(cf._job_id) : "",
+      "generated":    cf._generated || new Date().toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" }),
+      "proposal":     cf._proposal || "",
+    };
+
+    for (const [fieldName, value] of Object.entries(mapping)) {
+      const fieldId = fieldMap[fieldName];
+      if (fieldId && value) {
+        finalCustomFields[fieldId] = value;
+      }
+    }
+  }
+
   try {
     const task = await createTask({
       project_id: projectId,
@@ -143,7 +182,7 @@ export async function POST(request: NextRequest) {
       due_date: dueDate,
       assignee_ids: assigneeIds,
       tag_ids: tagIds,
-      custom_fields: cf,
+      custom_fields: finalCustomFields,
     });
 
     const responsePayload = { ok: true, task_id: task.id, task };

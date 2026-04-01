@@ -113,6 +113,8 @@ Migrations in `src/lib/migrations/`.
 | 004 | `004_cyberpunk_schema.sql` | — | connects_used, priority, rejection_reason, niche, connects_budget, bonus_earned |
 | 005 | `005_agent_passwords.sql` | — | password_hash column + 4 agent passwords |
 | 006 | `006_task_management_schema.sql` | M1 | 18 task management tables, 14 indexes, 3 triggers, default seed |
+| 008 | (in migrate route) | — | Webhook config: Bearer token `n8n-board-sync` → target project |
+| 009 | (in migrate route) | — | 14 custom field definitions for n8n job data (Job Details, Client Info, Routing Info, Proposal) |
 
 ## Migration Execution
 

@@ -658,5 +658,37 @@ Format ClickUp Task
 
 ---
 
-*Current Phase: Board UX overhaul complete*
-*Next Action: Push to Vercel → verify modal, auto-assignment, structured sections → then start Milestone 6*
+### Formal Custom Field Definitions for n8n Data (2026-04-01)
+
+**Task:** Create proper `custom_field_definitions` for Job Details, Client Info, and Routing Info fields so they appear as structured fields on task cards, auto-filled from n8n responses.
+
+**Migration 009** creates 14 custom field definitions in the target project:
+
+| # | Field Name | Group | Show on Card |
+|---|------------|-------|--------------|
+| 1 | Job Link | Job Details | No |
+| 2 | Budget | Job Details | Yes |
+| 3 | Skills | Job Details | Yes |
+| 4 | Posted | Job Details | No |
+| 5 | Location | Client Info | No |
+| 6 | Rating | Client Info | No |
+| 7 | Total Spent | Client Info | No |
+| 8 | Past Hires | Client Info | No |
+| 9 | Agent | Routing Info | Yes |
+| 10 | Profile | Routing Info | Yes |
+| 11 | Stack | Routing Info | No |
+| 12 | Job ID | Routing Info | No |
+| 13 | Generated | Routing Info | No |
+| 14 | Proposal | Proposal | No |
+
+**Webhook mapping:** When `_source === "n8n"`, the webhook looks up field definition IDs by name and maps n8n underscore-prefixed data (`_job_url` → "Job Link", `_budget` → "Budget", etc.) to formal field IDs. Values are stored as `custom_fields[fieldDefId] = value` so the existing `CustomFieldRenderer` displays them automatically.
+
+**Run migration:**
+```
+https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=009&secret=YOUR_CRON_SECRET
+```
+
+---
+
+*Current Phase: Custom field definitions + auto-fill complete*
+*Next Action: Deploy → run migration 009 → verify fields appear on n8n-created task cards*
