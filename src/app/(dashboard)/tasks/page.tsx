@@ -93,7 +93,6 @@ async function BoardContent({ searchParams }: Props) {
         availableAgents={available}
         isAdmin={isAdmin}
         customFields={customFields}
-        onCustomFieldsChange={() => {}}
       />
       <BoardFilterBar columns={columns} members={members} tags={tags} customFields={customFields} />
       <BoardView columns={columns} tasks={tasks} projectId={project.id} members={members} isAdmin={isAdmin} customFields={customFields} />

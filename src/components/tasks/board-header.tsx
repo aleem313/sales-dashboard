@@ -43,7 +43,6 @@ interface BoardHeaderProps {
   availableAgents: TaskAssignee[];
   isAdmin: boolean;
   customFields?: CustomFieldDefinition[];
-  onCustomFieldsChange?: () => void;
 }
 
 function getInitials(name: string): string {
@@ -69,7 +68,6 @@ export function BoardHeader({
   availableAgents,
   isAdmin,
   customFields,
-  onCustomFieldsChange,
 }: BoardHeaderProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -163,11 +161,11 @@ export function BoardHeader({
       <div className="flex items-center gap-2">
         <GroupSelector />
         <ViewsDropdown projectId={project.id} isAdmin={isAdmin} />
-        {isAdmin && customFields && onCustomFieldsChange && (
+        {isAdmin && customFields && (
           <CustomFieldsPanel
             projectId={project.id}
             fields={customFields}
-            onFieldsChange={onCustomFieldsChange}
+            onFieldsChange={() => router.refresh()}
           />
         )}
         <TaskCreateModal projectId={project.id} columns={columns} members={members} />
