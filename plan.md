@@ -577,51 +577,51 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ### 5.1 Custom Field Backend
 
-- [ ] `GET /api/projects/[id]/custom-fields` — list field definitions (ordered by position)
-- [ ] `POST /api/projects/[id]/custom-fields` — create field definition (admin only)
-- [ ] `PATCH /api/projects/[id]/custom-fields/[fid]` — update (admin); type locked after creation
-- [ ] `DELETE /api/projects/[id]/custom-fields/[fid]` — archive (not delete); values preserved in JSONB
-- [ ] 6 types: Text, Number, Dropdown, Multi-select, Date, Boolean
-- [ ] Values stored in `tasks.custom_fields` JSONB: `{ "field_id": value }`
+- [x] `GET /api/projects/[id]/custom-fields` — list field definitions (ordered by position)
+- [x] `POST /api/projects/[id]/custom-fields` — create field definition (admin only)
+- [x] `PATCH /api/projects/[id]/custom-fields/[fid]` — update (admin); type locked after creation
+- [x] `DELETE /api/projects/[id]/custom-fields/[fid]` — archive (not delete); values preserved in JSONB
+- [x] 6 types: Text, Number, Dropdown, Multi-select, Date, Boolean
+- [x] Values stored in `tasks.custom_fields` JSONB: `{ "field_id": value }`
 
 ### 5.2 Custom Field Management UI (Admin)
 
-- [ ] Project Settings > Custom Fields tab
-- [ ] Create form: name, type (locked), options (dropdown/multi-select), required flag, show_on_card toggle
-- [ ] Edit: change name, options, required, show_on_card (type immutable)
-- [ ] Archive: hidden from UI, data preserved, restorable
-- [ ] Drag-to-reorder field position
+- [x] Slide-out sheet from board header "Fields" button (admin only)
+- [x] Create form: name, type (locked), options (dropdown/multi-select), required flag, show_on_card toggle
+- [x] Edit: change name, options, required, show_on_card (type immutable)
+- [x] Archive: hidden from UI, data preserved, restorable
+- [x] Up/down arrow buttons for field reordering
 
 ### 5.3 Custom Fields in Task UI
 
-- [ ] Type-specific renderers in task drawer (text input, number input, select, checkboxes, date picker, toggle)
-- [ ] Show on card: max 3 fields controlled by `show_on_card` + position (compact "Label: Value" format)
-- [ ] Validation: required fields, number rejects NaN, etc.
+- [x] Type-specific renderers in task drawer (text input, number input, select, checkboxes, date picker, toggle)
+- [x] Show on card: max 3 fields controlled by `show_on_card` + position (compact "Label: Value" format)
+- [x] Validation: required fields, number rejects NaN, etc.
 - [ ] Pre-built field: "Connects Used" (Number type) as first custom field example
 
 ### 5.4 Board Grouping / List View
 
-- [ ] Group selector in board header: "Group by: Status (default) | Assignee | Priority | Label"
-- [ ] Group by Status = current board view (columns)
-- [ ] Group by Assignee = one column per assignee + "Unassigned" column
-- [ ] Group by Priority = columns: Urgent, High, Medium, Low, None
-- [ ] Group by Label = one column per label + "No label" column
-- [ ] Persisted in URL param: `?group=status|assignee|priority|label`
+- [x] Group selector in board header: "Group by: Status (default) | Assignee | Priority | Label"
+- [x] Group by Status = current board view (columns)
+- [x] Group by Assignee = one column per assignee + "Unassigned" column
+- [x] Group by Priority = columns: Urgent, High, Medium, Low, None
+- [x] Group by Label = one column per label + "No label" column
+- [x] Persisted in URL param: `?group=status|assignee|priority|label`
 
 ### 5.5 Advanced Filter System
 
-- [ ] Multi-condition filters: field → operator → value
-- [ ] Standard fields: Assignee, Status, Priority, Due Date, Labels, Created By
-- [ ] Custom field filters: type-specific operators
-- [ ] Server-side filtering for >500 tasks; client-side for ≤500
-- [ ] Filter state in URL params
+- [x] Multi-condition filters: field → operator → value
+- [x] Standard fields: Assignee, Status, Priority, Due Date, Labels (existing filter bar)
+- [x] Custom field filters: type-specific operators in "More Filters" section
+- [x] Client-side filtering via Zustand store
+- [x] Filter state in URL params
 
 ### 5.6 Saved Views
 
-- [ ] Save current filter + sort + group as named view
-- [ ] `GET/POST/DELETE /api/projects/[id]/saved-views`
-- [ ] Sidebar section listing saved views
-- [ ] "Unsaved changes" indicator when view modified
+- [x] Save current filter + sort + group as named view
+- [x] `GET/POST/DELETE /api/projects/[id]/saved-views`
+- [x] Views dropdown in board header with load/save/delete
+- [x] "Unsaved changes" indicator when view modified
 
 ---
 

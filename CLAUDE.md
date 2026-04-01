@@ -126,6 +126,11 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 | PATCH/DELETE | `/api/projects/[id]/columns/[cid]` | Admin |
 | PATCH | `/api/projects/[id]/columns/reorder` | Admin |
 | POST | `/api/v1/webhooks/tasks` | API Key (Bearer) |
+| GET/POST | `/api/projects/[id]/custom-fields` | Member+ / Admin |
+| PATCH/DELETE | `/api/projects/[id]/custom-fields/[fid]` | Admin |
+| PATCH | `/api/projects/[id]/custom-fields/reorder` | Admin |
+| GET/POST | `/api/projects/[id]/saved-views` | Member+ / Admin |
+| DELETE | `/api/projects/[id]/saved-views/[vid]` | Admin |
 | GET | `/api/migrate` | CRON_SECRET |
 
 ### Task Management Key Files
@@ -142,6 +147,11 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 | `src/components/tasks/board-selector.tsx` | Board dropdown with task counts + "New Board" (admin) |
 | `src/components/tasks/board-create-dialog.tsx` | Create board dialog (name + description) |
 | `src/components/tasks/board-members-panel.tsx` | Slide-out sheet: member list, add/remove/role-change |
+| `src/components/tasks/custom-field-renderer.tsx` | Type-specific renderers for 6 field types + compact card display |
+| `src/components/tasks/custom-fields-panel.tsx` | Admin slide-out sheet for field CRUD, archive/restore, reorder |
+| `src/components/tasks/group-selector.tsx` | Group-by dropdown (status/assignee/priority/label) |
+| `src/components/tasks/views-dropdown.tsx` | Saved views popover: load, save, delete |
+| `src/components/tasks/custom-field-filter.tsx` | "More Filters" section for custom field conditions |
 | `src/app/(dashboard)/tasks/page.tsx` | Admin board page — loads board by `?board=` param, falls back to first/default |
 | `src/app/(agent)/my-tasks/page.tsx` | Agent board page — shows first assigned board + cross-board task summary |
 

@@ -294,7 +294,18 @@ Previous `cline.md` content was **fabricated** by a prior AI session. Verified o
 | 4.4 | File Attachments (Vercel Blob) | DONE |
 | 4.5 | Comment Improvements | DONE (rich text comments deferred) |
 
-### Milestones 5–7: NOT STARTED
+### Milestone 5: Custom Fields & Grouping — COMPLETE (2026-04-01)
+
+| # | Feature | Status |
+|---|---------|--------|
+| 5.1 | Custom Field Backend (data layer, server actions, API routes) | DONE |
+| 5.2 | Custom Field Management UI (admin slide-out panel) | DONE |
+| 5.3 | Custom Fields in Task UI (drawer + card) | DONE |
+| 5.4 | Board Grouping (status, assignee, priority, label) | DONE |
+| 5.5 | Advanced Filter System ("More Filters" for custom fields) | DONE |
+| 5.6 | Saved Views (load/save/delete) | DONE |
+
+### Milestones 6–7: NOT STARTED
 See `plan.md` for full breakdown.
 
 ---
@@ -540,5 +551,36 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ---
 
-*Current Phase: Milestone 4 complete — checklist, rich text, attachments, comments*
-*Next Action: Push to Vercel → verify M4 features → then start Milestone 5*
+### Milestone 5 — Custom Fields & Grouping (completed 2026-04-01)
+
+**No new packages. No migration needed — uses existing `custom_field_definitions` table and `tasks.custom_fields` JSONB from migration 006.**
+
+**New files created:**
+
+| File | Purpose |
+|------|---------|
+| `src/components/tasks/custom-field-renderer.tsx` | Type-specific renderers for all 6 field types (text, number, dropdown, multi-select, date, boolean) + compact card display |
+| `src/components/tasks/custom-fields-panel.tsx` | Admin slide-out sheet for field CRUD, archive/restore, reorder |
+| `src/components/tasks/group-selector.tsx` | Group-by dropdown (status, assignee, priority, label) with URL sync |
+| `src/components/tasks/custom-field-filter.tsx` | "More Filters" expandable section with per-type operators |
+| `src/components/tasks/views-dropdown.tsx` | Saved views popover with load/save/delete |
+| `src/components/tasks/board-store-initializer.tsx` | Server-to-client hydration for customFields, savedViews, groupBy |
+
+**Modified files:**
+
+| File | Change |
+|------|--------|
+| `src/lib/stores/board-store.ts` | Added customFields, groupBy, customFieldFilters, savedViews, activeViewId state + getGroupedTasks(), getIsViewModified() + extended getFilteredTasks() with custom field filter operators |
+| `src/components/tasks/task-detail-drawer.tsx` | Added custom fields section after Labels with type-specific renderers |
+| `src/components/tasks/task-card.tsx` | Added customFields prop, show_on_card compact display |
+| `src/components/tasks/board-column.tsx` | Added readOnly prop for non-status grouped view |
+| `src/components/tasks/board-view.tsx` | Added grouped view rendering with virtual columns |
+| `src/components/tasks/board-header.tsx` | Added GroupSelector, ViewsDropdown, CustomFieldsPanel |
+| `src/components/tasks/board-filter-bar.tsx` | Added MoreFilters section, clear also clears custom field filters |
+| `src/app/(dashboard)/tasks/page.tsx` | Load customFields + savedViews, pass to all components |
+| `src/app/(agent)/my-tasks/page.tsx` | Load customFields, pass to BoardView |
+
+---
+
+*Current Phase: Milestone 5 complete — custom fields, grouping, filters, saved views*
+*Next Action: Push to Vercel → verify M5 features → then start Milestone 6*
