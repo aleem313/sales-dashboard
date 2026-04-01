@@ -45,7 +45,7 @@ export default async function AgentNewTaskPage({ searchParams }: Props) {
         columns={columns}
         members={members}
         defaultColumnId={params.column}
-        backUrl="/my-tasks"
+        backUrl={params.board ? `/my-tasks?board=${params.board}` : "/my-tasks"}
       />
     </div>
   );
