@@ -588,7 +588,6 @@ export function TaskDetailDrawer({ columns, isAdmin, agentId: currentAgentId }: 
                   });
                 }}>
                   <SelectTrigger className="h-7 w-fit text-xs font-medium gap-1.5 px-2.5 rounded-full" style={{ backgroundColor: (currentColumn?.color ?? "#6b7280") + "18", color: currentColumn?.color ?? "#6b7280", borderColor: (currentColumn?.color ?? "#6b7280") + "40" }}>
-                    <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: currentColumn?.color ?? "#6b7280" }} />
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
