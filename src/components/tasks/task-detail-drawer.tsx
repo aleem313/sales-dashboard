@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -46,6 +46,7 @@ import { formatDistanceToNow, format } from "date-fns";
 import { toast } from "sonner";
 import {
   updateTaskAction,
+  moveTaskAction,
   deleteTaskAction,
   setTaskAssigneesAction,
   setTaskTagsAction,
@@ -550,6 +551,7 @@ export function TaskDetailDrawer({ columns, isAdmin, agentId: currentAgentId }: 
                       {task.title}
                     </SheetTitle>
                   )}
+                  <SheetDescription className="sr-only">Task details and editing</SheetDescription>
                   {/* Action buttons */}
                   <div className="flex items-center gap-1 shrink-0">
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={handleCopyLink} title="Copy link">
@@ -566,7 +568,25 @@ export function TaskDetailDrawer({ columns, isAdmin, agentId: currentAgentId }: 
 
               {/* Status badge */}
               <div className="mt-3">
-                <Select value={task.column_id} onValueChange={(colId) => updateField("column_id", colId)}>
+                <Select value={task.column_id} onValueChange={(colId) => {
+                  if (!task || colId === task.column_id) return;
+                  const prevColumnId = task.column_id;
+                  // Optimistic update
+                  setTask((prev) => prev ? { ...prev, column_id: colId } : prev);
+                  store.moveTask(task.id, colId, 0);
+                  startTransition(async () => {
+                    try {
+                      await moveTaskAction(task.id, colId);
+                      const col = columns.find((c) => c.id === colId);
+                      toast.success(`Moved to ${col?.name ?? "column"}`);
+                    } catch {
+                      // Revert on failure
+                      setTask((prev) => prev ? { ...prev, column_id: prevColumnId } : prev);
+                      store.moveTask(task.id, prevColumnId, 0);
+                      toast.error("Failed to update status");
+                    }
+                  });
+                }}>
                   <SelectTrigger className="h-7 w-fit text-xs font-medium gap-1.5 px-2.5 rounded-full" style={{ backgroundColor: (currentColumn?.color ?? "#6b7280") + "18", color: currentColumn?.color ?? "#6b7280", borderColor: (currentColumn?.color ?? "#6b7280") + "40" }}>
                     <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: currentColumn?.color ?? "#6b7280" }} />
                     <SelectValue />

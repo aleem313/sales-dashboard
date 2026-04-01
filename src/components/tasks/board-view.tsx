@@ -14,14 +14,22 @@ import {
   type DragEndEvent,
   type DragOverEvent,
 } from "@dnd-kit/core";
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { BoardColumnComponent } from "./board-column";
 import { TaskCardContent } from "./task-card";
 import { TaskCreateModal } from "./task-create-modal";
 import { useBoardStore } from "@/lib/stores/board-store";
-import { moveTaskAction, deleteTaskAction, updateColumnAction, deleteColumnAction, createColumnAction } from "@/lib/task-actions";
+import { moveTaskAction, deleteTaskAction, updateColumnAction, deleteColumnAction, createColumnAction, reorderColumnsAction } from "@/lib/task-actions";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-import { Undo2, Plus } from "lucide-react";
+import { Undo2, Plus, GripVertical } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { BoardColumn, Task, ProjectMember } from "@/lib/task-data";
 
 interface BoardViewProps {
@@ -32,22 +40,77 @@ interface BoardViewProps {
   isAdmin?: boolean;
 }
 
-export function BoardView({ columns, tasks, projectId, members, isAdmin }: BoardViewProps) {
+/** Sortable wrapper for a column — only renders drag handle for admins */
+function SortableColumn({
+  column,
+  children,
+  isAdmin,
+}: {
+  column: BoardColumn;
+  children: React.ReactNode;
+  isAdmin?: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: `sortable-col-${column.id}`,
+    data: { type: "column-sortable", columnId: column.id },
+    disabled: !isAdmin,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform ? { ...transform, scaleX: 1, scaleY: 1 } : null),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn("flex h-full shrink-0 flex-col", isDragging && "opacity-50")}
+    >
+      {isAdmin && (
+        <div
+          {...attributes}
+          {...listeners}
+          className="flex items-center justify-center h-5 cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground transition-colors mb-0.5"
+          title="Drag to reorder column"
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+
+export function BoardView({ columns: serverColumns, tasks, projectId, members, isAdmin }: BoardViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [addToColumn, setAddToColumn] = useState<string | null>(null);
+
+  // Local column order state — synced from server, reorderable by DnD
+  const [columnOrder, setColumnOrder] = useState<BoardColumn[]>(serverColumns);
+  useEffect(() => {
+    setColumnOrder(serverColumns);
+  }, [serverColumns]);
 
   // Initialize Zustand store from server data
   const store = useBoardStore();
   useEffect(() => {
     store.initBoard({
-      columns,
+      columns: serverColumns,
       tasks,
       members: members ?? [],
       projectId: projectId ?? "",
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columns, tasks, members, projectId]);
+  }, [serverColumns, tasks, members, projectId]);
 
   // DnD sensors
   const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 8 } });
@@ -56,13 +119,17 @@ export function BoardView({ columns, tasks, projectId, members, isAdmin }: Board
 
   // Active drag state for overlay
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [activeColumn, setActiveColumn] = useState<BoardColumn | null>(null);
 
   function handleDragStart(event: DragStartEvent) {
-    const task = event.active.data.current?.task as Task | undefined;
-    if (task) {
+    const data = event.active.data.current;
+    if (data?.type === "task") {
+      const task = data.task as Task;
       setActiveTask(task);
       store.setActiveTask(task.id);
       store.savePreviousState(task.id);
+    } else if (data?.type === "column-sortable") {
+      setActiveColumn(columnOrder.find((c) => c.id === data.columnId) ?? null);
     }
   }
 
@@ -72,6 +139,8 @@ export function BoardView({ columns, tasks, projectId, members, isAdmin }: Board
 
     const activeData = active.data.current;
     const overData = over.data.current;
+
+    // Only handle task drags here (not column drags)
     if (activeData?.type !== "task") return;
 
     // Determine target column
@@ -90,7 +159,8 @@ export function BoardView({ columns, tasks, projectId, members, isAdmin }: Board
 
     if (targetColumnId && active.id !== over.id) {
       const task = store.tasks.find((t) => t.id === active.id);
-      if (task && task.column_id !== targetColumnId) {
+      if (task) {
+        // Move optimistically — both cross-column AND same-column reorders
         store.moveTask(task.id, targetColumnId, targetIndex);
       }
     }
@@ -100,6 +170,7 @@ export function BoardView({ columns, tasks, projectId, members, isAdmin }: Board
     async (event: DragEndEvent) => {
       const { active, over } = event;
       setActiveTask(null);
+      setActiveColumn(null);
       store.setActiveTask(null);
 
       if (!over || !active) {
@@ -108,6 +179,33 @@ export function BoardView({ columns, tasks, projectId, members, isAdmin }: Board
       }
 
       const activeData = active.data.current;
+
+      // ── Column reorder ──
+      if (activeData?.type === "column-sortable") {
+        const overData = over.data.current;
+        if (overData?.type !== "column-sortable" || active.id === over.id) return;
+
+        const activeColId = activeData.columnId as string;
+        const overColId = overData.columnId as string;
+
+        const oldIndex = columnOrder.findIndex((c) => c.id === activeColId);
+        const newIndex = columnOrder.findIndex((c) => c.id === overColId);
+        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+        const reordered = arrayMove(columnOrder, oldIndex, newIndex);
+        setColumnOrder(reordered);
+
+        try {
+          await reorderColumnsAction(projectId!, reordered.map((c) => c.id));
+          toast.success("Columns reordered");
+        } catch {
+          setColumnOrder(columnOrder); // revert
+          toast.error("Failed to reorder columns");
+        }
+        return;
+      }
+
+      // ── Task drag ──
       if (activeData?.type !== "task") return;
 
       const task = store.tasks.find((t) => t.id === active.id);
@@ -148,9 +246,12 @@ export function BoardView({ columns, tasks, projectId, members, isAdmin }: Board
       try {
         await moveTaskAction(task.id, targetColumnId, newPosition);
 
+        // Update the store position to match what was persisted
+        store.updateTask(task.id, { position: newPosition, column_id: targetColumnId });
+
         // Undo toast
         if (prev && (prev.columnId !== targetColumnId || prev.position !== newPosition)) {
-          const col = columns.find((c) => c.id === targetColumnId);
+          const col = columnOrder.find((c) => c.id === targetColumnId);
           toast(`Moved to ${col?.name ?? "column"}`, {
             icon: <Undo2 className="h-4 w-4" />,
             duration: 5000,
@@ -173,7 +274,7 @@ export function BoardView({ columns, tasks, projectId, members, isAdmin }: Board
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [columns]
+    [columnOrder, projectId]
   );
 
   function handleTaskClick(taskId: string) {
@@ -188,7 +289,7 @@ export function BoardView({ columns, tasks, projectId, members, isAdmin }: Board
     store.moveTask(taskId, columnId, 0);
     try {
       await moveTaskAction(taskId, columnId);
-      const col = columns.find((c) => c.id === columnId);
+      const col = columnOrder.find((c) => c.id === columnId);
       toast.success(`Moved to ${col?.name ?? "column"}`);
     } catch {
       store.revertMove();
@@ -250,6 +351,9 @@ export function BoardView({ columns, tasks, projectId, members, isAdmin }: Board
       .sort((a, b) => a.position - b.position);
   };
 
+  // Column sortable IDs
+  const columnSortableIds = columnOrder.map((c) => `sortable-col-${c.id}`);
+
   return (
     <>
       <DndContext
@@ -260,21 +364,24 @@ export function BoardView({ columns, tasks, projectId, members, isAdmin }: Board
         onDragEnd={handleDragEnd}
       >
         <div className="flex h-full gap-4 overflow-x-auto px-6 py-4">
-          {columns.map((column) => (
-            <BoardColumnComponent
-              key={column.id}
-              column={column}
-              tasks={getColumnTasks(column.id)}
-              allColumns={columns}
-              isAdmin={isAdmin}
-              onTaskClick={handleTaskClick}
-              onAddTask={(colId) => setAddToColumn(colId)}
-              onMoveTask={handleContextMoveTask}
-              onDeleteTask={handleContextDeleteTask}
-              onUpdateColumn={isAdmin ? handleUpdateColumn : undefined}
-              onDeleteColumn={isAdmin ? handleDeleteColumn : undefined}
-            />
-          ))}
+          <SortableContext items={columnSortableIds} strategy={horizontalListSortingStrategy}>
+            {columnOrder.map((column) => (
+              <SortableColumn key={column.id} column={column} isAdmin={isAdmin}>
+                <BoardColumnComponent
+                  column={column}
+                  tasks={getColumnTasks(column.id)}
+                  allColumns={columnOrder}
+                  isAdmin={isAdmin}
+                  onTaskClick={handleTaskClick}
+                  onAddTask={(colId) => setAddToColumn(colId)}
+                  onMoveTask={handleContextMoveTask}
+                  onDeleteTask={handleContextDeleteTask}
+                  onUpdateColumn={isAdmin ? handleUpdateColumn : undefined}
+                  onDeleteColumn={isAdmin ? handleDeleteColumn : undefined}
+                />
+              </SortableColumn>
+            ))}
+          </SortableContext>
 
           {/* Add Status button (admin only) */}
           {isAdmin && projectId && (
@@ -307,7 +414,7 @@ export function BoardView({ columns, tasks, projectId, members, isAdmin }: Board
             </div>
           )}
 
-          {columns.length === 0 && !isAdmin && (
+          {columnOrder.length === 0 && !isAdmin && (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
               <div className="rounded-xl bg-muted/50 p-8">
                 <h3 className="text-lg font-semibold">No columns yet</h3>
@@ -317,15 +424,23 @@ export function BoardView({ columns, tasks, projectId, members, isAdmin }: Board
           )}
         </div>
 
-        {/* Drag overlay — ghost card */}
+        {/* Drag overlay — ghost card or column */}
         <DragOverlay dropAnimation={null}>
           {activeTask && (
             <div className="w-[264px] opacity-90 rotate-[2deg]">
               <TaskCardContent
                 task={activeTask}
-                columnColor={columns.find((c) => c.id === activeTask.column_id)?.color}
+                columnColor={columnOrder.find((c) => c.id === activeTask.column_id)?.color}
                 isDragging
               />
+            </div>
+          )}
+          {activeColumn && (
+            <div className="w-[280px] opacity-80 rotate-[1deg] rounded-lg border bg-card/90 p-3 shadow-lg">
+              <div className="flex items-center gap-2">
+                <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: activeColumn.color }} />
+                <span className="text-sm font-semibold">{activeColumn.name}</span>
+              </div>
             </div>
           )}
         </DragOverlay>
@@ -335,7 +450,7 @@ export function BoardView({ columns, tasks, projectId, members, isAdmin }: Board
       {projectId && addToColumn && (
         <TaskCreateModal
           projectId={projectId}
-          columns={columns}
+          columns={columnOrder}
           defaultColumnId={addToColumn}
           members={members}
           triggerOpen={!!addToColumn}

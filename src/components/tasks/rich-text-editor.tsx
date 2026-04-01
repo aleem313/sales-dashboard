@@ -35,6 +35,9 @@ export function RichTextEditor({
       StarterKit.configure({
         heading: false,
         codeBlock: false,
+        // Disable extensions that we add separately to avoid duplicates
+        bold: { HTMLAttributes: {} },
+        italic: { HTMLAttributes: {} },
       }),
       Link.configure({
         openOnClick: false,
@@ -44,6 +47,7 @@ export function RichTextEditor({
       Placeholder.configure({ placeholder }),
     ],
     content,
+    immediatelyRender: false,
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML());
     },

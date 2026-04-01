@@ -248,6 +248,7 @@ export function BoardColumnComponent({
         <DialogContent className="sm:max-w-[320px]">
           <DialogHeader>
             <DialogTitle>Column Color</DialogTitle>
+            <DialogDescription>Choose a color for this column.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-6 gap-2 mt-2">
             {PRESET_COLORS.map((color) => (
