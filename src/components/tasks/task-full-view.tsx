@@ -1130,7 +1130,7 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
           </div>
 
           {/* ═══ COLUMN 2: Job Details ═══ */}
-          <div className="xl:col-span-4 md:col-span-1 border-r overflow-y-auto p-5">
+          <div className="xl:col-span-4 md:col-span-1 border-r overflow-y-auto p-5 space-y-5">
             <div className="flex items-center justify-between sticky top-0 bg-background pb-2 z-10">
               <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Job Details</h2>
               <div className="flex items-center gap-1">
@@ -1171,13 +1171,89 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
                 </div>
               </div>
             </div>
-            <JobDetails job={job} loading={jobLoading} error={jobError} customFields={task.custom_fields as Record<string, unknown> | null} />
+
+            {/* ── Job Snapshot ── */}
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">📌 Job Snapshot</h4>
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-0">
+                <FieldRow icon={<span className="text-sm">🔗</span>} label="Job Link">
+                  <Input value={(cf._job_url as string) ?? job?.job_url ?? ""} onChange={(e) => updateCustomField("_job_url", e.target.value)}
+                    placeholder="https://upwork.com/jobs/..." className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2" />
+                </FieldRow>
+                <FieldRow icon={<span className="text-sm">💰</span>} label="Budget">
+                  <Input value={(cf._budget as string) ?? ""} onChange={(e) => updateCustomField("_budget", e.target.value)}
+                    placeholder="Not specified" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                </FieldRow>
+                <FieldRow icon={<span className="text-sm">🛠</span>} label="Skills">
+                  <Input value={Array.isArray(cf._skills) ? (cf._skills as string[]).join(", ") : (cf._skills as string) ?? ""} onChange={(e) => updateCustomField("_skills", e.target.value)}
+                    placeholder="e.g. React, Node.js" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2" />
+                </FieldRow>
+                <FieldRow icon={<span className="text-sm">📅</span>} label="Posted">
+                  <Input value={(cf._posted as string) ?? ""} onChange={(e) => updateCustomField("_posted", e.target.value)}
+                    placeholder="e.g. Apr 1, 2026" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                </FieldRow>
+              </div>
+            </div>
+
+            {/* ── Client Intel ── */}
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">👤 Client Intel</h4>
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-0">
+                <FieldRow icon={<span className="text-sm">🌍</span>} label="Location">
+                  <Input value={(cf._client_country as string) ?? ""} onChange={(e) => updateCustomField("_client_country", e.target.value)}
+                    placeholder="e.g. Netherlands" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                </FieldRow>
+                <FieldRow icon={<span className="text-sm">⭐</span>} label="Rating">
+                  <Input value={(cf._client_rating as string) ?? ""} onChange={(e) => updateCustomField("_client_rating", e.target.value)}
+                    placeholder="No rating yet" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                </FieldRow>
+                <FieldRow icon={<span className="text-sm">💵</span>} label="Total Spent">
+                  <Input value={(cf._client_spent as string) ?? ""} onChange={(e) => updateCustomField("_client_spent", e.target.value)}
+                    placeholder="New client" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                </FieldRow>
+                <FieldRow icon={<span className="text-sm">✅</span>} label="Past Hires">
+                  <Input value={(cf._client_hires as string) ?? ""} onChange={(e) => updateCustomField("_client_hires", e.target.value)}
+                    placeholder="No hires yet" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                </FieldRow>
+              </div>
+            </div>
+
+            {/* ── Routing Info ── */}
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">🎯 Routing Info</h4>
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-0">
+                <FieldRow icon={<span className="text-sm">👤</span>} label="Agent">
+                  <Input value={(cf._assigned_agent as string) ?? ""} onChange={(e) => updateCustomField("_assigned_agent", e.target.value)}
+                    placeholder="Agent name" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                </FieldRow>
+                <FieldRow icon={<span className="text-sm">📁</span>} label="Profile">
+                  <Input value={(cf._profile_name as string) ?? ""} onChange={(e) => updateCustomField("_profile_name", e.target.value)}
+                    placeholder="Profile name" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                </FieldRow>
+                <FieldRow icon={<span className="text-sm">🏷</span>} label="Stack">
+                  <Input value={(cf._stack as string) ?? ""} onChange={(e) => updateCustomField("_stack", e.target.value)}
+                    placeholder="e.g. MERN" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                </FieldRow>
+                <FieldRow icon={<span className="text-sm">🆔</span>} label="Job ID">
+                  <Input value={(cf._job_id as string) ?? ""} onChange={(e) => updateCustomField("_job_id", e.target.value)}
+                    placeholder="~0220..." className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2" />
+                </FieldRow>
+                <FieldRow icon={<span className="text-sm">🤖</span>} label="Generated">
+                  <Input value={(cf._generated as string) ?? ""} onChange={(e) => updateCustomField("_generated", e.target.value)}
+                    placeholder="e.g. Apr 1, 2026, 06:04 PM UTC" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2" />
+                </FieldRow>
+              </div>
+            </div>
           </div>
 
           {/* ═══ COLUMN 3: Proposal ═══ */}
           <div className="xl:col-span-4 md:col-span-2 xl:border-r-0 overflow-y-auto p-5">
             <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider sticky top-0 bg-background pb-2 z-10">Proposal</h2>
-            <ProposalBox proposal={job?.proposal_text ?? (cf._proposal as string) ?? null} />
+            <ProposalBox
+              proposal={job?.proposal_text ?? (cf._proposal as string) ?? null}
+              onChange={(text) => updateCustomField("_proposal", text)}
+              readOnly={false}
+            />
           </div>
         </div>
       </div>
