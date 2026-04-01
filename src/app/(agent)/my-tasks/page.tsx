@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { auth } from "@/lib/auth";
+import { Header } from "@/components/layout/header";
 import { BoardView } from "@/components/tasks/board-view";
 import { BoardSelector } from "@/components/tasks/board-selector";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,7 @@ import {
   getUserProjectsWithMeta,
   getCustomFieldDefinitions,
 } from "@/lib/task-data";
+import { getAgentById } from "@/lib/data";
 import { BoardStoreInitializer } from "@/components/tasks/board-store-initializer";
 
 interface Props {
@@ -57,17 +59,23 @@ async function AgentBoardContent({ searchParams }: Props) {
     );
   }
 
-  const [allTasks, columns, members, customFields] = await Promise.all([
+  const [allTasks, columns, members, customFields, agentData] = await Promise.all([
     getAgentTasksAcrossBoards(agentId),
     getProjectColumns(project.id),
     getProjectMembers(project.id),
     getCustomFieldDefinitions(project.id),
+    getAgentById(agentId),
   ]);
   const boardTasks = allTasks.filter((t) => t.project_id === project!.id);
   const hasMultipleBoards = projects.length > 1;
 
+  // Build agent-scoped data for header (agent sees only themselves + their profiles)
+  const agentForHeader = agentData ? [agentData as import("@/lib/types").Agent] : [];
+  const profilesForHeader = agentData?.profiles ?? [];
+
   return (
     <>
+      <Header title="Task Board" agents={agentForHeader} profiles={profilesForHeader} />
       {/* Board header */}
       <div className="flex items-center justify-between border-b px-4 py-2.5 bg-card/50">
         <div className="flex items-center gap-3">
