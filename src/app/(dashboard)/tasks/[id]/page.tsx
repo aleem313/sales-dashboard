@@ -32,7 +32,7 @@ export default async function TaskDetailPage({ params }: Props) {
           columns={columns}
           isAdmin={isAdmin}
           agentId={agentId}
-          backUrl="/tasks"
+          backUrl={projectId ? `/tasks?board=${projectId}` : "/tasks"}
         />
       </main>
     </>

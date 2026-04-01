@@ -31,7 +31,7 @@ export default async function AgentTaskDetailPage({ params }: Props) {
         columns={columns}
         isAdmin={false}
         agentId={agentId}
-        backUrl="/my-tasks"
+        backUrl={projectId ? `/my-tasks?board=${projectId}` : "/my-tasks"}
       />
     </div>
   );
