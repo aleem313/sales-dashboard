@@ -779,6 +779,12 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 - [x] Proposal formatting: ClickUp-style hooks, bullets, emphasis rendering
 - [x] Proposal + job details read from `custom_fields` when no linked DB job
 - [x] n8n node sends `due_date`, `_stack`, `_generated` timestamp
+- [x] Boosted Connects field in task detail, create form, and migration
+- [x] Full-width create task modal with all fields (start date, labels, time, connects)
+- [x] Create task shows editable Job Snapshot / Client Intel / Routing Info / Proposal
+- [x] Agent header with scoped filters (own name, assigned profiles, date/tz/theme)
+- [x] Direct URL `/tasks/[id]` redirects to board with modal popup
+- [x] Task detail modal shows editable structured fields (same as create form)
 
 ---
 

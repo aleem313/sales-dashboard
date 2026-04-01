@@ -690,5 +690,50 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=009&secret=YOUR_CRON
 
 ---
 
-*Current Phase: Custom field definitions + auto-fill complete*
-*Next Action: Deploy → run migration 009 → verify fields appear on n8n-created task cards*
+### Boosted Connects Field (2026-04-01)
+
+Added "Boosted Connects" (⚡) field to task detail view, create task form, and migration 009 (position 14, type `number`).
+
+### Full-Width Create Task Modal with All Fields (2026-04-01)
+
+**Task:** Update create task form to show all fields matching task detail view, and open as modal.
+
+| File | Change |
+|------|--------|
+| `src/components/tasks/task-create-full.tsx` | Added: Start Date, Labels/Tags with create-new, Time Estimate, Time Tracked, Connects, Boosted Connects, assignee search dropdown. Column 2 shows editable Job Snapshot / Client Intel / Routing Info fields. Column 3 shows editable Proposal textarea. All values saved to `custom_fields`. Linking a job auto-fills all fields. Added `onClose` prop for modal mode. |
+| `src/components/tasks/task-create-modal.tsx` | Rewritten: full-width 95vw×90vh dialog wrapping `TaskCreateFull` |
+| `src/components/tasks/new-task-button.tsx` (NEW) | Client component: "New Task" button + `TaskCreateModal` for server component pages |
+| `src/components/tasks/board-view.tsx` | Column "+" opens create modal instead of navigating. Added `TaskCreateModal` to both grouped and normal views. |
+| `src/components/tasks/board-header.tsx` | "New Task" button opens create modal via internal state + `TaskCreateModal` |
+| `src/app/(agent)/my-tasks/page.tsx` | Uses `NewTaskButton` instead of `<a>` link for "New Task" |
+
+### Agent Header with Scoped Filters (2026-04-01)
+
+Added `<Header>` to agent my-tasks page with agent-scoped data:
+- Agent dropdown: only their own name
+- Profile dropdown: only profiles assigned to them
+- Date range, timezone, dark/light mode all available
+
+| File | Change |
+|------|--------|
+| `src/app/(agent)/my-tasks/page.tsx` | Added `<Header>` with agent's own data from `getAgentById()`. Agent sees only themselves in agent filter and their assigned profiles. |
+
+### Direct URL → Modal Redirect (2026-04-01)
+
+| File | Change |
+|------|--------|
+| `src/app/(dashboard)/tasks/[id]/page.tsx` | Replaced full-page view with `redirect('/tasks?board=X&task=id')` |
+| `src/app/(agent)/my-tasks/[id]/page.tsx` | Same: redirects to `/my-tasks?board=X&task=id` |
+| `src/components/tasks/board-view.tsx` | Reads `?task=` param on mount, auto-opens detail modal, cleans URL |
+| `src/components/tasks/task-full-view.tsx` | "Copy link" generates `?task=` URL format instead of `/tasks/[id]` |
+
+### Editable Structured Fields in Task Detail Modal (2026-04-01)
+
+| File | Change |
+|------|--------|
+| `src/components/tasks/task-full-view.tsx` | Replaced `JobDetails` component in column 2 with editable structured fields (Job Snapshot, Client Intel, Routing Info) reading from/writing to `custom_fields`. Proposal column is now editable with auto-save. |
+
+---
+
+*Current Phase: All structured fields complete in both create and view modals*
+*Next Action: Deploy → run migration 009 → test n8n auto-fill + manual editing*

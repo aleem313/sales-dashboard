@@ -183,9 +183,11 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 - **Auto-seed**: `getDefaultProject()` auto-creates default workspace + project + columns on first access if tables exist but are empty.
 - **Board switching**: Admin uses `?board=<id>` URL param + localStorage; agent currently sees only first assigned board (FN-1 audit item).
 - **Task creation**: Modal supports external trigger via `triggerOpen` prop + `defaultColumnId` for per-column "+" buttons.
-- **Task detail**: Card click opens a modal overlay (`TaskDetailModal`) instead of navigating to `/tasks/[id]`. The modal renders `TaskFullView` with `onClose` prop.
+- **Task detail**: Card click opens a modal overlay (`TaskDetailModal`) instead of navigating to `/tasks/[id]`. Direct URL `/tasks/[id]` redirects to `/tasks?task=[id]` which auto-opens the modal.
+- **Task create**: "New Task" and column "+" open a full-width create modal with all fields (same layout as detail view).
 - **Webhook auto-assignment**: When `_source === "n8n"`, the webhook auto-assigns agent (by name lookup), sets 24h due date, and creates profile + `vollna-auto` tags.
-- **Job details sections**: `JobDetails` component reads from both linked DB job and `custom_fields` (fallback for n8n-created tasks). Displays 3 sections: Job Details, Client Info, Routing Info.
+- **Structured fields**: Both create and detail views show editable Job Snapshot (link, budget, skills, posted), Client Intel (location, rating, spent, hires), Routing Info (agent, profile, stack, job ID, generated), and Proposal — all stored in `custom_fields`.
+- **Agent header**: Agent my-tasks page shows the same header as admin with agent-scoped filters (own name, assigned profiles, date range, timezone, theme).
 - **Member removal**: Uses browser `confirm()` instead of styled dialog (UX-5 audit item); auto-unassigns from tasks.
 
 ## Key Reference Files
