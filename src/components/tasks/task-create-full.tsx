@@ -13,14 +13,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, X, Search, Loader2, ExternalLink, Copy } from "lucide-react";
+import {
+  ArrowLeft,
+  Plus,
+  X,
+  Search,
+  Loader2,
+  Flag,
+  Calendar,
+  CalendarClock,
+  User,
+  Tag,
+  Clock,
+  Timer,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { createTaskAction } from "@/lib/task-actions";
 import { RichTextEditor } from "./rich-text-editor";
 import { JobDetails } from "./job-details";
 import { ProposalBox } from "./proposal-box";
-import type { BoardColumn, ProjectMember } from "@/lib/task-data";
+import type { BoardColumn, ProjectMember, TaskTag } from "@/lib/task-data";
 import type { Job } from "@/lib/types";
 
 type JobWithMeta = Job & { agent_name?: string | null; profile_name?: string | null };
@@ -31,9 +44,21 @@ interface TaskCreateFullProps {
   members?: ProjectMember[];
   defaultColumnId?: string;
   backUrl: string;
+  onClose?: () => void;
 }
 
-export function TaskCreateFull({ projectId, columns, members, defaultColumnId, backUrl }: TaskCreateFullProps) {
+function getInitials(name: string): string {
+  return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+}
+
+function hashColor(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  const colors = ["bg-blue-500", "bg-green-500", "bg-purple-500", "bg-pink-500", "bg-indigo-500", "bg-teal-500", "bg-amber-500", "bg-cyan-500"];
+  return colors[Math.abs(hash) % colors.length];
+}
+
+export function TaskCreateFull({ projectId, columns, members, defaultColumnId, backUrl, onClose }: TaskCreateFullProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -42,8 +67,22 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
   const [columnId, setColumnId] = useState(defaultColumnId ?? columns[0]?.id ?? "");
   const [priority, setPriority] = useState<string>("");
   const [dueDate, setDueDate] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [description, setDescription] = useState("");
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
+  const [timeEstimate, setTimeEstimate] = useState("");
+  const [timeTracked, setTimeTracked] = useState("");
+  const [connectsUsed, setConnectsUsed] = useState("");
+
+  // Tags
+  const [projectTags, setProjectTags] = useState<TaskTag[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
+
+  // Assignee dropdown
+  const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
+  const [assigneeSearch, setAssigneeSearch] = useState("");
 
   // Job linking
   const [job, setJob] = useState<JobWithMeta | null>(null);
@@ -51,6 +90,11 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
   const [jobSearchQuery, setJobSearchQuery] = useState("");
   const [jobSearchResults, setJobSearchResults] = useState<Job[]>([]);
   const [jobSearching, setJobSearching] = useState(false);
+
+  // Load project tags
+  useEffect(() => {
+    fetch(`/api/projects/${projectId}/tags`).then((r) => r.json()).then(setProjectTags).catch(() => {});
+  }, [projectId]);
 
   // Job search debounce
   useEffect(() => {
@@ -69,6 +113,24 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
     return () => clearTimeout(timeout);
   }, [jobSearchQuery]);
 
+  function parseTimeToMinutes(value: string): number | undefined {
+    if (!value.trim()) return undefined;
+    const hm = value.match(/^(\d+)h\s*(\d+)m$/i);
+    if (hm) return parseInt(hm[1]) * 60 + parseInt(hm[2]);
+    const hOnly = value.match(/^(\d+)h$/i);
+    if (hOnly) return parseInt(hOnly[1]) * 60;
+    const mOnly = value.match(/^(\d+)m$/i);
+    if (mOnly) return parseInt(mOnly[1]);
+    const num = parseInt(value);
+    if (!isNaN(num)) return num;
+    return undefined;
+  }
+
+  function goBack() {
+    if (onClose) onClose();
+    else router.push(backUrl);
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) {
@@ -79,6 +141,11 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
       try {
         const customFields: Record<string, unknown> = {};
         if (job) customFields._job_id = job.id;
+        const estMins = parseTimeToMinutes(timeEstimate);
+        if (estMins !== undefined) customFields._time_estimate_minutes = estMins;
+        const trkMins = parseTimeToMinutes(timeTracked);
+        if (trkMins !== undefined) customFields._time_tracked_minutes = trkMins;
+        if (connectsUsed) customFields._connects_used = parseInt(connectsUsed) || 0;
 
         await createTaskAction({
           project_id: projectId,
@@ -87,50 +154,78 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
           description: description.trim() || null,
           priority: priority || null,
           due_date: dueDate || null,
+          start_date: startDate || null,
           assignee_ids: assigneeIds.length > 0 ? assigneeIds : undefined,
+          tag_ids: selectedTagIds.length > 0 ? selectedTagIds : undefined,
           custom_fields: Object.keys(customFields).length > 0 ? customFields : undefined,
         });
         toast.success("Task created");
-        router.push(backUrl);
+        goBack();
       } catch {
         toast.error("Failed to create task");
       }
     });
   }
 
-  function addAssignee(agentId: string) {
-    if (!assigneeIds.includes(agentId)) setAssigneeIds([...assigneeIds, agentId]);
+  function toggleAssignee(agentId: string) {
+    setAssigneeIds((prev) =>
+      prev.includes(agentId) ? prev.filter((id) => id !== agentId) : [...prev, agentId]
+    );
   }
 
-  function removeAssignee(agentId: string) {
-    setAssigneeIds(assigneeIds.filter((id) => id !== agentId));
+  function toggleTag(tagId: string) {
+    setSelectedTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+    );
+  }
+
+  async function handleCreateTag() {
+    if (!newTagName.trim()) return;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/tags`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newTagName.trim() }),
+      });
+      if (res.ok) {
+        const tag = await res.json();
+        setProjectTags((prev) => [...prev, tag]);
+        setSelectedTagIds((prev) => [...prev, tag.id]);
+        setNewTagName("");
+      }
+    } catch {
+      toast.error("Failed to create tag");
+    }
   }
 
   function linkJob(jobData: Job) {
     setJob(jobData as JobWithMeta);
     setJobSearchOpen(false);
     setJobSearchQuery("");
-    // Auto-fill title from job if empty
     if (!title.trim()) setTitle(jobData.job_title);
   }
 
-  const availableMembers = (members ?? []).filter((m) => !assigneeIds.includes(m.agent_id));
-  const selectedMembers = (members ?? []).filter((m) => assigneeIds.includes(m.agent_id));
+  const filteredMembers = (members ?? []).filter((m) =>
+    m.name.toLowerCase().includes(assigneeSearch.toLowerCase()) ||
+    (m.email ?? "").toLowerCase().includes(assigneeSearch.toLowerCase())
+  );
+
+  const currentColumn = columns.find((c) => c.id === columnId);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Top Bar */}
       <div className="flex items-center justify-between border-b px-6 py-3 bg-card/50 shrink-0">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => router.push(backUrl)}>
+          <Button type="button" variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={goBack}>
             <ArrowLeft className="h-4 w-4" />
-            Back
+            {onClose ? "Close" : "Back"}
           </Button>
           <Separator orientation="vertical" className="h-5" />
           <h2 className="text-sm font-semibold">New Task</h2>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => router.push(backUrl)}>Cancel</Button>
+          <Button type="button" variant="outline" size="sm" onClick={goBack}>Cancel</Button>
           <Button size="sm" onClick={handleSubmit} disabled={isPending || !title.trim()}>
             {isPending ? "Creating..." : "Create Task"}
           </Button>
@@ -146,98 +241,213 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
             <div className="xl:col-span-4 md:col-span-1 border-r overflow-y-auto p-5 space-y-4">
               <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Task Details</h2>
 
-              <div className="space-y-4">
-                {/* Title */}
-                <div className="space-y-2">
-                  <Label htmlFor="title">Title *</Label>
-                  <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Task title..." autoFocus />
-                </div>
+              {/* Title */}
+              <div className="space-y-2">
+                <Label htmlFor="title">Title *</Label>
+                <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Task title..." autoFocus />
+              </div>
 
-                {/* Column + Priority */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="column">Status</Label>
-                    <Select value={columnId} onValueChange={setColumnId}>
-                      <SelectTrigger id="column">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {columns.map((col) => (
-                          <SelectItem key={col.id} value={col.id}>
-                            <span className="flex items-center gap-2">
-                              <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
-                              {col.name}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+              {/* Field rows matching task detail view */}
+              <div className="space-y-0">
+                {/* Status */}
+                <FieldRow icon={<span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: currentColumn?.color ?? "#6b7280" }} />} label="Status">
+                  <Select value={columnId} onValueChange={setColumnId}>
+                    <SelectTrigger className="h-7 w-[150px] text-xs border-0 bg-transparent hover:bg-muted/50 px-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {columns.map((col) => (
+                        <SelectItem key={col.id} value={col.id}>
+                          <span className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
+                            {col.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldRow>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="priority">Priority</Label>
-                    <Select value={priority} onValueChange={setPriority}>
-                      <SelectTrigger id="priority">
-                        <SelectValue placeholder="None" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="urgent">Urgent</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="low">Low</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                {/* Priority */}
+                <FieldRow icon={<Flag className="h-4 w-4" />} label="Priority">
+                  <Select value={priority || "none"} onValueChange={(v) => setPriority(v === "none" ? "" : v)}>
+                    <SelectTrigger className="h-7 w-[120px] text-xs border-0 bg-transparent hover:bg-muted/50 px-2">
+                      <SelectValue placeholder="Set priority" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No priority</SelectItem>
+                      <SelectItem value="urgent"><span className="text-red-600">Urgent</span></SelectItem>
+                      <SelectItem value="high"><span className="text-orange-600">High</span></SelectItem>
+                      <SelectItem value="medium"><span className="text-yellow-600">Medium</span></SelectItem>
+                      <SelectItem value="low"><span className="text-blue-600">Low</span></SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldRow>
 
                 {/* Assignees */}
-                {members && members.length > 0 && (
-                  <div className="space-y-2">
-                    <Label>Assignees</Label>
-                    {selectedMembers.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mb-2">
-                        {selectedMembers.map((m) => (
-                          <span key={m.agent_id} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                            {m.name}
-                            <button type="button" onClick={() => removeAssignee(m.agent_id)} className="hover:text-destructive transition-colors">
-                              <X className="h-3 w-3" />
-                            </button>
+                <FieldRow icon={<User className="h-4 w-4" />} label="Assignees">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {assigneeIds.map((id) => {
+                      const m = (members ?? []).find((m) => m.agent_id === id);
+                      if (!m) return null;
+                      return (
+                        <button key={id} type="button" onClick={() => toggleAssignee(id)}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-primary/8 text-primary border border-primary/20 px-2 py-0.5 text-xs font-medium hover:bg-primary/15 transition-colors">
+                          <span className={cn("flex h-4 w-4 items-center justify-center rounded-full text-[7px] font-bold text-white", hashColor(id))}>
+                            {getInitials(m.name)}
                           </span>
-                        ))}
-                      </div>
-                    )}
-                    {availableMembers.length > 0 && (
-                      <Select value="" onValueChange={addAssignee}>
-                        <SelectTrigger className="h-8 text-sm">
-                          <SelectValue placeholder="Add assignee..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableMembers.map((m) => (
-                            <SelectItem key={m.agent_id} value={m.agent_id}>
-                              {m.name} {m.email ? `(${m.email})` : ""}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
+                          {m.name}
+                          <X className="h-3 w-3 opacity-50 hover:opacity-100" />
+                        </button>
+                      );
+                    })}
+                    <div className="relative">
+                      <button type="button" onClick={() => setAssigneeDropdownOpen(!assigneeDropdownOpen)}
+                        className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/30 hover:border-primary hover:text-primary transition-colors" title="Add assignee">
+                        <Plus className="h-3 w-3" />
+                      </button>
+                      {assigneeDropdownOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => { setAssigneeDropdownOpen(false); setAssigneeSearch(""); }} />
+                          <div className="absolute left-0 top-8 z-50 w-[220px] rounded-lg border bg-popover shadow-lg p-1.5">
+                            <Input placeholder="Search..." value={assigneeSearch} onChange={(e) => setAssigneeSearch(e.target.value)} className="h-7 text-xs mb-1.5" autoFocus />
+                            <div className="max-h-[180px] overflow-y-auto space-y-0.5">
+                              {filteredMembers.map((m) => {
+                                const isAssigned = assigneeIds.includes(m.agent_id);
+                                return (
+                                  <button key={m.agent_id} type="button" onClick={() => toggleAssignee(m.agent_id)}
+                                    className={cn("flex items-center gap-2 w-full rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors", isAssigned && "bg-primary/5")}>
+                                    <span className={cn("flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-bold text-white shrink-0", hashColor(m.agent_id))}>
+                                      {getInitials(m.name)}
+                                    </span>
+                                    <span className="flex-1 text-left truncate">{m.name}</span>
+                                    {isAssigned && <span className="text-primary">&#10003;</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
-                )}
+                </FieldRow>
 
                 {/* Due Date */}
-                <div className="space-y-2">
-                  <Label htmlFor="due_date">Due Date</Label>
-                  <Input id="due_date" type="datetime-local" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-                </div>
+                <FieldRow icon={<Calendar className="h-4 w-4" />} label="Due Date">
+                  <Input type="datetime-local" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
+                    className="h-7 text-xs w-[190px] border-0 bg-transparent hover:bg-muted/50 px-2" />
+                  {dueDate && (
+                    <button type="button" onClick={() => setDueDate("")} className="text-muted-foreground hover:text-foreground">
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </FieldRow>
 
-                {/* Description */}
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <RichTextEditor
-                    content={description}
-                    onChange={setDescription}
-                    placeholder="Add a description..."
-                  />
-                </div>
+                {/* Start Date */}
+                <FieldRow icon={<CalendarClock className="h-4 w-4" />} label="Start Date">
+                  <Input type="datetime-local" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+                    className="h-7 text-xs w-[190px] border-0 bg-transparent hover:bg-muted/50 px-2" />
+                  {startDate && (
+                    <button type="button" onClick={() => setStartDate("")} className="text-muted-foreground hover:text-foreground">
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </FieldRow>
+
+                {/* Time Estimate */}
+                <FieldRow icon={<Clock className="h-4 w-4" />} label="Time Est.">
+                  <Input value={timeEstimate} onChange={(e) => setTimeEstimate(e.target.value)}
+                    placeholder="e.g. 2h 30m" className="h-7 text-xs w-[120px] border-0 bg-transparent hover:bg-muted/50 px-2" />
+                </FieldRow>
+
+                {/* Time Tracked */}
+                <FieldRow icon={<Timer className="h-4 w-4" />} label="Tracked">
+                  <Input value={timeTracked} onChange={(e) => setTimeTracked(e.target.value)}
+                    placeholder="e.g. 1h 15m" className="h-7 text-xs w-[120px] border-0 bg-transparent hover:bg-muted/50 px-2" />
+                </FieldRow>
+
+                {/* Labels/Tags */}
+                <FieldRow icon={<Tag className="h-4 w-4" />} label="Labels">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {selectedTagIds.map((tagId) => {
+                      const tag = projectTags.find((t) => t.id === tagId);
+                      if (!tag) return null;
+                      return (
+                        <button key={tagId} type="button" onClick={() => toggleTag(tagId)}
+                          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors hover:opacity-80"
+                          style={{ backgroundColor: tag.color + "22", color: tag.color }}>
+                          {tag.name}
+                          <X className="h-2.5 w-2.5 opacity-50 hover:opacity-100" />
+                        </button>
+                      );
+                    })}
+                    <div className="relative">
+                      <button type="button" onClick={() => setTagDropdownOpen(!tagDropdownOpen)}
+                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary transition-colors" title="Add label">
+                        <Plus className="h-2.5 w-2.5" />
+                      </button>
+                      {tagDropdownOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setTagDropdownOpen(false)} />
+                          <div className="absolute top-7 left-0 z-50 w-56 rounded-lg border bg-popover shadow-lg p-1.5">
+                            <div className="px-1.5 pb-1.5">
+                              <Input value={newTagName} onChange={(e) => setNewTagName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && newTagName.trim()) { e.preventDefault(); handleCreateTag(); }
+                                  if (e.key === "Escape") setTagDropdownOpen(false);
+                                }}
+                                placeholder="Search or create..." className="h-7 text-xs" autoFocus />
+                            </div>
+                            <div className="max-h-[160px] overflow-y-auto">
+                              {projectTags
+                                .filter((t) => !newTagName || t.name.toLowerCase().includes(newTagName.toLowerCase()))
+                                .map((tag) => {
+                                  const isSelected = selectedTagIds.includes(tag.id);
+                                  return (
+                                    <button key={tag.id} type="button" onClick={() => toggleTag(tag.id)}
+                                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-muted transition-colors">
+                                      <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
+                                      <span className="truncate">{tag.name}</span>
+                                      {isSelected && <span className="ml-auto text-primary">&#10003;</span>}
+                                    </button>
+                                  );
+                                })}
+                            </div>
+                            {newTagName.trim() && !projectTags.some((t) => t.name.toLowerCase() === newTagName.toLowerCase()) && (
+                              <>
+                                <Separator className="my-1" />
+                                <button type="button" onClick={handleCreateTag}
+                                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-primary hover:bg-muted transition-colors">
+                                  <Plus className="h-3 w-3" />
+                                  Create &ldquo;{newTagName.trim()}&rdquo;
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </FieldRow>
+
+                {/* Connects Used */}
+                <FieldRow icon={<span className="h-4 w-4 flex items-center justify-center text-xs font-bold text-muted-foreground">#</span>} label="Connects">
+                  <Input type="number" min={0} value={connectsUsed} onChange={(e) => setConnectsUsed(e.target.value)}
+                    placeholder="0" className="h-7 text-xs w-[80px] border-0 bg-transparent hover:bg-muted/50 px-2" />
+                </FieldRow>
+              </div>
+
+              <Separator />
+
+              {/* Description */}
+              <div>
+                <p className="text-sm font-medium mb-2">Description</p>
+                <RichTextEditor
+                  content={description}
+                  onChange={setDescription}
+                  placeholder="Add a description..."
+                />
               </div>
             </div>
 
@@ -245,44 +455,44 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
             <div className="xl:col-span-4 md:col-span-1 border-r overflow-y-auto p-5">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Job Details</h2>
-                <div className="relative">
-                  <Button type="button" variant="outline" size="sm" className="h-6 text-xs gap-1" onClick={() => setJobSearchOpen(!jobSearchOpen)}>
-                    <Search className="h-3 w-3" />
-                    {job ? "Change Job" : "Link Job"}
-                  </Button>
-                  {jobSearchOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => { setJobSearchOpen(false); setJobSearchQuery(""); }} />
-                      <div className="absolute right-0 top-8 z-50 w-[320px] rounded-lg border bg-popover shadow-lg p-2">
-                        <Input value={jobSearchQuery} onChange={(e) => setJobSearchQuery(e.target.value)}
-                          placeholder="Search jobs by title..." className="h-8 text-xs mb-2" autoFocus />
-                        <div className="max-h-[250px] overflow-y-auto space-y-0.5">
-                          {jobSearching && <p className="text-xs text-muted-foreground text-center py-3"><Loader2 className="h-3 w-3 animate-spin inline mr-1" />Searching...</p>}
-                          {!jobSearching && jobSearchResults.length === 0 && jobSearchQuery && (
-                            <p className="text-xs text-muted-foreground text-center py-3">No jobs found</p>
-                          )}
-                          {jobSearchResults.map((j) => (
-                            <button type="button" key={j.id} onClick={() => linkJob(j)}
-                              className="flex flex-col w-full rounded-md px-2.5 py-2 text-left hover:bg-muted transition-colors gap-0.5">
-                              <span className="text-xs font-medium line-clamp-1">{j.job_title}</span>
-                              <span className="text-[10px] text-muted-foreground">
-                                {j.budget_type} &middot; {j.client_country ?? "Unknown"} &middot; {j.clickup_status}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </>
+                <div className="flex items-center gap-1">
+                  {job && (
+                    <Button type="button" variant="ghost" size="sm" className="h-6 text-[10px] text-muted-foreground" onClick={() => setJob(null)}>
+                      Unlink
+                    </Button>
                   )}
+                  <div className="relative">
+                    <Button type="button" variant="outline" size="sm" className="h-6 text-xs gap-1" onClick={() => setJobSearchOpen(!jobSearchOpen)}>
+                      <Search className="h-3 w-3" />
+                      {job ? "Change" : "Link Job"}
+                    </Button>
+                    {jobSearchOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => { setJobSearchOpen(false); setJobSearchQuery(""); }} />
+                        <div className="absolute right-0 top-8 z-50 w-[320px] rounded-lg border bg-popover shadow-lg p-2">
+                          <Input value={jobSearchQuery} onChange={(e) => setJobSearchQuery(e.target.value)}
+                            placeholder="Search jobs by title..." className="h-8 text-xs mb-2" autoFocus />
+                          <div className="max-h-[250px] overflow-y-auto space-y-0.5">
+                            {jobSearching && <p className="text-xs text-muted-foreground text-center py-3"><Loader2 className="h-3 w-3 animate-spin inline mr-1" />Searching...</p>}
+                            {!jobSearching && jobSearchResults.length === 0 && jobSearchQuery && (
+                              <p className="text-xs text-muted-foreground text-center py-3">No jobs found</p>
+                            )}
+                            {jobSearchResults.map((j) => (
+                              <button type="button" key={j.id} onClick={() => linkJob(j)}
+                                className="flex flex-col w-full rounded-md px-2.5 py-2 text-left hover:bg-muted transition-colors gap-0.5">
+                                <span className="text-xs font-medium line-clamp-1">{j.job_title}</span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {j.budget_type} &middot; {j.client_country ?? "Unknown"} &middot; {j.clickup_status}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-              {job && (
-                <div className="mb-2">
-                  <Button type="button" variant="ghost" size="sm" className="h-6 text-[10px] text-muted-foreground" onClick={() => setJob(null)}>
-                    Unlink Job
-                  </Button>
-                </div>
-              )}
               <JobDetails job={job} />
             </div>
 
@@ -294,6 +504,17 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+/* ── Field Row (matching task detail view style) ── */
+function FieldRow({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 py-1.5 min-h-[36px]">
+      <span className="text-muted-foreground shrink-0">{icon}</span>
+      <span className="text-xs text-muted-foreground w-[80px] shrink-0">{label}</span>
+      <div className="flex items-center gap-1 flex-1 min-w-0">{children}</div>
     </div>
   );
 }

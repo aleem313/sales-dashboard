@@ -1,11 +1,10 @@
 import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { BoardView } from "@/components/tasks/board-view";
-import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
 import { BoardSelector } from "@/components/tasks/board-selector";
 import { Badge } from "@/components/ui/badge";
 import { KanbanSquare } from "lucide-react";
+import { NewTaskButton } from "@/components/tasks/new-task-button";
 import {
   getDefaultProject,
   getProjectById,
@@ -91,12 +90,7 @@ async function AgentBoardContent({ searchParams }: Props) {
             </span>
           )}
         </div>
-        <a href={`/my-tasks/new?board=${project.id}`}>
-          <Button size="sm" className="gap-1.5">
-            <Plus className="h-4 w-4" />
-            New Task
-          </Button>
-        </a>
+        <NewTaskButton projectId={project.id} columns={columns} members={members} />
       </div>
       <BoardStoreInitializer customFields={customFields} savedViews={[]} />
       <BoardView columns={columns} tasks={boardTasks} projectId={project.id} members={members} agentId={agentId} customFields={customFields} />

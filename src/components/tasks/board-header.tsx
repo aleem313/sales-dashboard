@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { updateBoardAction, deleteBoardAction } from "@/lib/task-actions";
+import { TaskCreateModal } from "./task-create-modal";
 import type { Project, ProjectMember, TaskAssignee, ProjectWithMeta, CustomFieldDefinition } from "@/lib/task-data";
 import { BoardSelectorWrapper } from "./board-selector-wrapper";
 import { BoardMembersPanel } from "./board-members-panel";
@@ -43,6 +44,7 @@ interface BoardHeaderProps {
   availableAgents: TaskAssignee[];
   isAdmin: boolean;
   customFields?: CustomFieldDefinition[];
+  onNewTask?: () => void;
 }
 
 function getInitials(name: string): string {
@@ -68,6 +70,7 @@ export function BoardHeader({
   availableAgents,
   isAdmin,
   customFields,
+  onNewTask,
 }: BoardHeaderProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -76,6 +79,7 @@ export function BoardHeader({
   const [newName, setNewName] = useState(project.name);
   const [confirmName, setConfirmName] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   // Count tasks for delete warning
   const totalTasks = columns.reduce((sum, c) => sum + (c.task_count ?? 0), 0);
@@ -168,7 +172,7 @@ export function BoardHeader({
             onFieldsChange={() => router.refresh()}
           />
         )}
-        <Button size="sm" className="gap-1.5" onClick={() => router.push(`/tasks/new?board=${project.id}`)}>
+        <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" />
           New Task
         </Button>
@@ -274,6 +278,15 @@ export function BoardHeader({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Create Task Modal */}
+      <TaskCreateModal
+        open={createOpen}
+        projectId={project.id}
+        columns={columns}
+        members={members}
+        onClose={() => setCreateOpen(false)}
+      />
     </div>
   );
 }
