@@ -632,5 +632,31 @@ Format ClickUp Task
 
 ---
 
-*Current Phase: Milestone 5 complete + n8n dual-delivery integration*
-*Next Action: Push to Vercel → verify M5 features + board task creation → then start Milestone 6*
+### Board UX Overhaul + Webhook Auto-Assignment (2026-04-01)
+
+**Task:** Auto-assign agents/due dates/labels from n8n, card click opens modal, structured job/client/routing sections, ClickUp-style proposal formatting.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `src/app/api/v1/webhooks/tasks/route.ts` | Auto-assign agent by name lookup (`agents` table + `project_members` join), auto-set 24h due date for n8n tasks, auto-create/find tags (`_profile_name` + `vollna-auto`) |
+| `src/components/tasks/task-detail-modal.tsx` (NEW) | Dialog wrapper for TaskFullView — opens as 95vw x 90vh overlay on card click |
+| `src/components/tasks/board-view.tsx` | Card click opens `TaskDetailModal` instead of navigating to `/tasks/[id]`; added `agentId` prop; renders modal in both grouped and normal views |
+| `src/components/tasks/task-full-view.tsx` | Added `onClose` prop for modal mode; Back button says "Close" and calls onClose in modal; proposal reads from `custom_fields._proposal` fallback; passes `customFields` to `JobDetails` |
+| `src/components/tasks/job-details.tsx` | Restructured into 3 sections: Job Details (link, budget, skills, posted), Client Info (location, rating, total spent, past hires), Routing Info (agent, profile, stack, job ID, generated); reads from `custom_fields` when no linked job |
+| `src/components/tasks/proposal-box.tsx` | ClickUp-style formatting: hook headers (--- Hook A ---) rendered as centered dividers, bullets as styled list items, emphasis lines (BUT..., P.S:) bolded, section headers detected; copy button copies raw text only |
+| `src/app/(dashboard)/tasks/page.tsx` | Pass `agentId` to `BoardView` |
+| `src/app/(agent)/my-tasks/page.tsx` | Pass `agentId` to `BoardView` |
+
+**n8n workflow update:** "Create Board Task" node now sends `due_date` (24h from now), `_stack`, and `_generated` timestamp in `custom_fields`.
+
+**Webhook auto-assignment logic:**
+1. Agent: `custom_fields._assigned_agent` → look up by name in `agents` (case-insensitive) + verify `project_members` membership → `assignee_ids`
+2. Due date: Auto-set to 24h from now if `_source === "n8n"` and no explicit `due_date`
+3. Labels: Auto-create/find tags for `_profile_name` value + `"vollna-auto"` if `_source === "n8n"`
+
+---
+
+*Current Phase: Board UX overhaul complete*
+*Next Action: Push to Vercel → verify modal, auto-assignment, structured sections → then start Milestone 6*

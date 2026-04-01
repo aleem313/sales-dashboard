@@ -99,7 +99,7 @@ async function AgentBoardContent({ searchParams }: Props) {
         </a>
       </div>
       <BoardStoreInitializer customFields={customFields} savedViews={[]} />
-      <BoardView columns={columns} tasks={boardTasks} projectId={project.id} members={members} customFields={customFields} />
+      <BoardView columns={columns} tasks={boardTasks} projectId={project.id} members={members} agentId={agentId} customFields={customFields} />
     </>
   );
 }

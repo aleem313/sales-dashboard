@@ -12,6 +12,74 @@ interface ProposalBoxProps {
   readOnly?: boolean;
 }
 
+/** Format proposal text with ClickUp-style section rendering */
+function FormatProposal({ text }: { text: string }) {
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Hook headers: --- Hook A ---, --- Hook B ---
+    if (/^-{2,}\s*.+\s*-{2,}$/.test(trimmed)) {
+      const hookTitle = trimmed.replace(/^-+\s*/, "").replace(/\s*-+$/, "");
+      elements.push(
+        <div key={i} className="mt-4 mb-2 first:mt-0">
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs font-semibold text-primary uppercase tracking-wider px-1">{hookTitle}</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+        </div>
+      );
+      continue;
+    }
+
+    // Section headers: ALL CAPS lines or lines ending with :
+    if (/^[A-Z][A-Z\s]{3,}:?$/.test(trimmed) && trimmed.length < 60) {
+      elements.push(
+        <div key={i} className="mt-4 mb-1 first:mt-0">
+          <p className="text-xs font-bold text-foreground uppercase tracking-wider">{trimmed}</p>
+        </div>
+      );
+      continue;
+    }
+
+    // Bullet points
+    if (/^[-•]\s/.test(trimmed)) {
+      elements.push(
+        <div key={i} className="flex gap-2 py-0.5 pl-1">
+          <span className="text-primary shrink-0 mt-0.5">&#8226;</span>
+          <span className="text-sm leading-relaxed">{trimmed.replace(/^[-•]\s*/, "")}</span>
+        </div>
+      );
+      continue;
+    }
+
+    // Emphasis lines (BUT..., P.S:, etc.)
+    if (/^(BUT|P\.S|NOTE|IMPORTANT)/i.test(trimmed)) {
+      elements.push(
+        <p key={i} className="text-sm leading-relaxed py-1 font-semibold">{line}</p>
+      );
+      continue;
+    }
+
+    // Empty lines → spacing
+    if (trimmed === "") {
+      elements.push(<div key={i} className="h-2" />);
+      continue;
+    }
+
+    // Regular text
+    elements.push(
+      <p key={i} className="text-sm leading-relaxed">{line}</p>
+    );
+  }
+
+  return <>{elements}</>;
+}
+
 export function ProposalBox({ proposal, onChange, readOnly = true }: ProposalBoxProps) {
   const [copied, setCopied] = useState(false);
 
@@ -64,9 +132,7 @@ export function ProposalBox({ proposal, onChange, readOnly = true }: ProposalBox
       {/* Proposal Content */}
       {readOnly ? (
         <div className="rounded-lg border bg-muted/20 p-4 max-h-[calc(100vh-280px)] overflow-y-auto">
-          <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap leading-relaxed text-sm">
-            {proposal}
-          </div>
+          <FormatProposal text={proposal ?? ""} />
         </div>
       ) : (
         <textarea

@@ -83,6 +83,56 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // --- Auto-assign agent by name from custom_fields ---
+  let assigneeIds: string[] = body.assignee_ids ?? [];
+  const cf = body.custom_fields ?? {};
+  const agentName = cf._assigned_agent as string | undefined;
+
+  if (agentName && assigneeIds.length === 0) {
+    const agentResult = await sql`
+      SELECT a.id FROM agents a
+      INNER JOIN project_members pm ON pm.agent_id = a.id AND pm.project_id = ${projectId}
+      WHERE LOWER(a.name) = LOWER(${agentName}) AND a.active = true
+      LIMIT 1
+    `;
+    if (agentResult.rows.length > 0) {
+      assigneeIds = [agentResult.rows[0].id as string];
+    }
+  }
+
+  // --- Auto-set due_date (24h from now) if not provided ---
+  let dueDate = body.due_date ?? null;
+  if (!dueDate && cf._source === "n8n") {
+    dueDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  // --- Auto-create/find tags from profile_name + 'vollna-auto' ---
+  let tagIds: string[] = body.tag_ids ?? [];
+  if (tagIds.length === 0 && cf._source === "n8n") {
+    const tagNames: string[] = [];
+    if (cf._profile_name) tagNames.push(String(cf._profile_name));
+    tagNames.push("vollna-auto");
+
+    for (const tagName of tagNames) {
+      // Find or create tag
+      const existingTag = await sql`
+        SELECT id FROM task_tags
+        WHERE project_id = ${projectId} AND LOWER(name) = LOWER(${tagName})
+        LIMIT 1
+      `;
+      if (existingTag.rows.length > 0) {
+        tagIds.push(existingTag.rows[0].id as string);
+      } else {
+        const newTag = await sql`
+          INSERT INTO task_tags (project_id, name, color)
+          VALUES (${projectId}, ${tagName}, ${tagName === "vollna-auto" ? "#8b5cf6" : "#3b82f6"})
+          RETURNING id
+        `;
+        tagIds.push(newTag.rows[0].id as string);
+      }
+    }
+  }
+
   try {
     const task = await createTask({
       project_id: projectId,
@@ -90,10 +140,10 @@ export async function POST(request: NextRequest) {
       title: body.title.trim(),
       description: body.description ?? null,
       priority: body.priority ?? null,
-      due_date: body.due_date ?? null,
-      assignee_ids: body.assignee_ids ?? [],
-      tag_ids: body.tag_ids ?? [],
-      custom_fields: body.custom_fields ?? {},
+      due_date: dueDate,
+      assignee_ids: assigneeIds,
+      tag_ids: tagIds,
+      custom_fields: cf,
     });
 
     const responsePayload = { ok: true, task_id: task.id, task };

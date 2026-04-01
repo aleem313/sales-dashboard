@@ -160,6 +160,7 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 | `src/components/tasks/board-view.tsx` | Horizontal scrolling kanban board; groups tasks by column; per-column "+" button |
 | `src/components/tasks/board-column.tsx` | Column with header (color dot, name, WIP count), task cards, empty state |
 | `src/components/tasks/task-card.tsx` | Task card: priority badge, assignee avatars, due date, tags, checklist %, counts |
+| `src/components/tasks/task-detail-modal.tsx` | Dialog overlay for task detail view — opens on card click instead of navigating |
 | `src/components/tasks/task-create-modal.tsx` | Task creation form (title, column, priority, due date, description); supports external trigger from column "+" |
 | `src/components/tasks/board-selector.tsx` | Board dropdown with task counts + "New Board" (admin) |
 | `src/components/tasks/board-create-dialog.tsx` | Create board dialog (name + description) |
@@ -180,6 +181,9 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 - **Auto-seed**: `getDefaultProject()` auto-creates default workspace + project + columns on first access if tables exist but are empty.
 - **Board switching**: Admin uses `?board=<id>` URL param + localStorage; agent currently sees only first assigned board (FN-1 audit item).
 - **Task creation**: Modal supports external trigger via `triggerOpen` prop + `defaultColumnId` for per-column "+" buttons.
+- **Task detail**: Card click opens a modal overlay (`TaskDetailModal`) instead of navigating to `/tasks/[id]`. The modal renders `TaskFullView` with `onClose` prop.
+- **Webhook auto-assignment**: When `_source === "n8n"`, the webhook auto-assigns agent (by name lookup), sets 24h due date, and creates profile + `vollna-auto` tags.
+- **Job details sections**: `JobDetails` component reads from both linked DB job and `custom_fields` (fallback for n8n-created tasks). Displays 3 sections: Job Details, Client Info, Routing Info.
 - **Member removal**: Uses browser `confirm()` instead of styled dialog (UX-5 audit item); auto-unassigns from tasks.
 
 ## Key Reference Files

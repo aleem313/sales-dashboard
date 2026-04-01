@@ -95,7 +95,7 @@ async function BoardContent({ searchParams }: Props) {
         customFields={customFields}
       />
       <BoardFilterBar columns={columns} members={members} tags={tags} customFields={customFields} />
-      <BoardView columns={columns} tasks={tasks} projectId={project.id} members={members} isAdmin={isAdmin} customFields={customFields} />
+      <BoardView columns={columns} tasks={tasks} projectId={project.id} members={members} isAdmin={isAdmin} agentId={agentId} customFields={customFields} />
     </>
   );
 }

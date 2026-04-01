@@ -73,6 +73,7 @@ interface TaskFullViewProps {
   isAdmin: boolean;
   agentId?: string | null;
   backUrl: string;
+  onClose?: () => void;
 }
 
 const priorityOptions = [
@@ -115,7 +116,7 @@ function parseTimeInput(value: string): number | null {
   return null;
 }
 
-export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId, backUrl }: TaskFullViewProps) {
+export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId, backUrl, onClose }: TaskFullViewProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -560,7 +561,8 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
         await deleteTaskAction(task.id);
         store.removeTask(task.id);
         toast.success("Task deleted");
-        router.push(backUrl);
+        if (onClose) onClose();
+        else router.push(backUrl);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to delete task");
       }
@@ -602,9 +604,9 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3">
         <p className="text-muted-foreground">Task not found</p>
-        <Button variant="outline" onClick={() => router.push(backUrl)}>
+        <Button variant="outline" onClick={() => onClose ? onClose() : router.push(backUrl)}>
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Board
+          {onClose ? "Close" : "Back to Board"}
         </Button>
       </div>
     );
@@ -615,9 +617,9 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
       {/* Top Bar */}
       <div className="flex items-center justify-between border-b px-6 py-3 bg-card/50 shrink-0">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => router.push(backUrl)}>
+          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => onClose ? onClose() : router.push(backUrl)}>
             <ArrowLeft className="h-4 w-4" />
-            Back
+            {onClose ? "Close" : "Back"}
           </Button>
           <Separator orientation="vertical" className="h-5" />
           {/* Status badge */}
@@ -1153,13 +1155,13 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
                 </div>
               </div>
             </div>
-            <JobDetails job={job} loading={jobLoading} error={jobError} />
+            <JobDetails job={job} loading={jobLoading} error={jobError} customFields={task.custom_fields as Record<string, unknown> | null} />
           </div>
 
           {/* ═══ COLUMN 3: Proposal ═══ */}
           <div className="xl:col-span-4 md:col-span-2 xl:border-r-0 overflow-y-auto p-5">
             <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider sticky top-0 bg-background pb-2 z-10">Proposal</h2>
-            <ProposalBox proposal={job?.proposal_text ?? null} />
+            <ProposalBox proposal={job?.proposal_text ?? (cf._proposal as string) ?? null} />
           </div>
         </div>
       </div>

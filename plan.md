@@ -769,8 +769,16 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 - [x] Error handling: `continueOnFail` on new node, `neverError` in response options
 - [x] Verified workflow structure (28 nodes, parallel connections confirmed)
 - [x] Updated documentation: `CLAUDE.md`, `cline.md`, `plan.md`
-- [ ] Test end-to-end: job appears in both ClickUp and custom board
-- [ ] Configure proper Bearer token (optional: add `webhook_configs` row for targeted project)
+- [x] Test end-to-end: job appears in both ClickUp and custom board
+- [x] Configure proper Bearer token (migration 008: `webhook_configs` row for targeted project)
+- [x] Auto-assign agent by name from `custom_fields._assigned_agent`
+- [x] Auto-set 24h due date for n8n-sourced tasks
+- [x] Auto-create/find tags (profile name + `vollna-auto`)
+- [x] Card click opens modal overlay instead of full-page navigation
+- [x] Job details restructured: Job Details / Client Info / Routing Info sections
+- [x] Proposal formatting: ClickUp-style hooks, bullets, emphasis rendering
+- [x] Proposal + job details read from `custom_fields` when no linked DB job
+- [x] n8n node sends `due_date`, `_stack`, `_generated` timestamp
 
 ---
 

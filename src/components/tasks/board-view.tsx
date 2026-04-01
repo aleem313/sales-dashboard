@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Undo2, Plus, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TaskDetailModal } from "./task-detail-modal";
 import type { BoardColumn, Task, ProjectMember, CustomFieldDefinition } from "@/lib/task-data";
 
 interface BoardViewProps {
@@ -37,6 +38,7 @@ interface BoardViewProps {
   projectId?: string;
   members?: ProjectMember[];
   isAdmin?: boolean;
+  agentId?: string | null;
   customFields?: CustomFieldDefinition[];
 }
 
@@ -89,10 +91,11 @@ function SortableColumn({
   );
 }
 
-export function BoardView({ columns: serverColumns, tasks, projectId, members, isAdmin, customFields }: BoardViewProps) {
+export function BoardView({ columns: serverColumns, tasks, projectId, members, isAdmin, agentId, customFields }: BoardViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [addToColumn, setAddToColumn] = useState<string | null>(null);
+  const [modalTaskId, setModalTaskId] = useState<string | null>(null);
 
   // Local column order state — synced from server, reorderable by DnD
   const [columnOrder, setColumnOrder] = useState<BoardColumn[]>(serverColumns);
@@ -298,9 +301,7 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
   );
 
   function handleTaskClick(taskId: string) {
-    // Navigate to full-page task view
-    const basePath = window.location.pathname.startsWith("/my-") ? "/my-tasks" : "/tasks";
-    router.push(`${basePath}/${taskId}`);
+    setModalTaskId(taskId);
   }
 
   // Context menu: move task to another column
@@ -407,6 +408,13 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
             </div>
           )}
         </div>
+        <TaskDetailModal
+          taskId={modalTaskId}
+          columns={serverColumns}
+          isAdmin={isAdmin ?? false}
+          agentId={agentId}
+          onClose={() => setModalTaskId(null)}
+        />
       </>
     );
   }
@@ -506,6 +514,13 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
         </DragOverlay>
       </DndContext>
 
+      <TaskDetailModal
+        taskId={modalTaskId}
+        columns={serverColumns}
+        isAdmin={isAdmin ?? false}
+        agentId={agentId}
+        onClose={() => setModalTaskId(null)}
+      />
     </>
   );
 }
