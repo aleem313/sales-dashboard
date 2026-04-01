@@ -23,13 +23,13 @@ import {
   MoreHorizontal,
   Users,
   KanbanSquare,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { updateBoardAction, deleteBoardAction } from "@/lib/task-actions";
 import type { Project, ProjectMember, TaskAssignee, ProjectWithMeta, CustomFieldDefinition } from "@/lib/task-data";
 import { BoardSelectorWrapper } from "./board-selector-wrapper";
 import { BoardMembersPanel } from "./board-members-panel";
-import { TaskCreateModal } from "./task-create-modal";
 import { CustomFieldsPanel } from "./custom-fields-panel";
 import { GroupSelector } from "./group-selector";
 import { ViewsDropdown } from "./views-dropdown";
@@ -168,7 +168,10 @@ export function BoardHeader({
             onFieldsChange={() => router.refresh()}
           />
         )}
-        <TaskCreateModal projectId={project.id} columns={columns} members={members} />
+        <Button size="sm" className="gap-1.5" onClick={() => router.push(`/tasks/new?board=${project.id}`)}>
+          <Plus className="h-4 w-4" />
+          New Task
+        </Button>
 
         {isAdmin && (
           <Popover open={menuOpen} onOpenChange={setMenuOpen}>

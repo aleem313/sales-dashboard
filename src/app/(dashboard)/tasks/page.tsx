@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { BoardView } from "@/components/tasks/board-view";
 import { BoardHeader } from "@/components/tasks/board-header";
 import { BoardSelectorWrapper } from "@/components/tasks/board-selector-wrapper";
-import { TaskDetailDrawer } from "@/components/tasks/task-detail-drawer";
+// TaskDetailDrawer replaced by full-page /tasks/[id] route
 import { BoardFilterBar } from "@/components/tasks/board-filter-bar";
 import { BoardStoreInitializer } from "@/components/tasks/board-store-initializer";
 import {
@@ -96,7 +96,6 @@ async function BoardContent({ searchParams }: Props) {
       />
       <BoardFilterBar columns={columns} members={members} tags={tags} customFields={customFields} />
       <BoardView columns={columns} tasks={tasks} projectId={project.id} members={members} isAdmin={isAdmin} customFields={customFields} />
-      <TaskDetailDrawer columns={columns} isAdmin={isAdmin} agentId={agentId} />
     </>
   );
 }

@@ -23,7 +23,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { BoardColumnComponent } from "./board-column";
 import { TaskCardContent } from "./task-card";
-import { TaskCreateModal } from "./task-create-modal";
 import { useBoardStore } from "@/lib/stores/board-store";
 import { moveTaskAction, deleteTaskAction, updateColumnAction, deleteColumnAction, createColumnAction, reorderColumnsAction } from "@/lib/task-actions";
 import { toast } from "sonner";
@@ -112,6 +111,15 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverColumns, tasks, members, projectId]);
+
+  // Navigate to full-page create when column "+" is clicked
+  useEffect(() => {
+    if (addToColumn && projectId) {
+      const basePath = window.location.pathname.startsWith("/my-") ? "/my-tasks" : "/tasks";
+      router.push(`${basePath}/new?board=${projectId}&column=${addToColumn}`);
+      setAddToColumn(null);
+    }
+  }, [addToColumn, projectId, router]);
 
   // DnD sensors
   const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 8 } });
@@ -290,9 +298,9 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
   );
 
   function handleTaskClick(taskId: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("task", taskId);
-    router.push(`?${params.toString()}`, { scroll: false });
+    // Navigate to full-page task view
+    const basePath = window.location.pathname.startsWith("/my-") ? "/my-tasks" : "/tasks";
+    router.push(`${basePath}/${taskId}`);
   }
 
   // Context menu: move task to another column
@@ -498,17 +506,6 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
         </DragOverlay>
       </DndContext>
 
-      {/* Per-column task creation modal */}
-      {projectId && addToColumn && (
-        <TaskCreateModal
-          projectId={projectId}
-          columns={columnOrder}
-          defaultColumnId={addToColumn}
-          members={members}
-          triggerOpen={!!addToColumn}
-          onClose={() => setAddToColumn(null)}
-        />
-      )}
     </>
   );
 }

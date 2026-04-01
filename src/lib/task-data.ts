@@ -807,6 +807,11 @@ export async function getProjectTasks(
   return tasks;
 }
 
+export async function getTaskProjectId(taskId: string): Promise<string | null> {
+  const result = await sql`SELECT project_id FROM tasks WHERE id = ${taskId} LIMIT 1`;
+  return result.rows[0]?.project_id ?? null;
+}
+
 export async function getTaskById(taskId: string): Promise<Task | null> {
   const result = await sql`
     SELECT t.*,
