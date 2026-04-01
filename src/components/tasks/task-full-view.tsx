@@ -884,6 +884,21 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
                   placeholder="0" className="h-7 text-xs w-[80px] border-0 bg-transparent hover:bg-muted/50 px-2"
                 />
               </FieldRow>
+
+              {/* Boosted Connects */}
+              <FieldRow icon={<span className="h-4 w-4 flex items-center justify-center text-xs font-bold text-muted-foreground">⚡</span>} label="Boosted">
+                <Input
+                  type="number" min={0}
+                  value={((task.custom_fields as Record<string, unknown>)?._boosted_connects as number) ?? ""}
+                  onChange={(e) => {
+                    const val = e.target.value === "" ? undefined : parseInt(e.target.value);
+                    const newCf = { ...(task.custom_fields ?? {}), _boosted_connects: val };
+                    setTask((prev) => prev ? { ...prev, custom_fields: newCf } : prev);
+                  }}
+                  onBlur={() => updateField("custom_fields", task.custom_fields)}
+                  placeholder="0" className="h-7 text-xs w-[80px] border-0 bg-transparent hover:bg-muted/50 px-2"
+                />
+              </FieldRow>
             </div>
 
             <Separator />

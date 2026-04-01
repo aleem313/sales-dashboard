@@ -233,8 +233,10 @@ async function run009() {
       { name: "Stack",        field_type: "text", position: 11, show_on_card: false, group: "routing" },
       { name: "Job ID",       field_type: "text", position: 12, show_on_card: false, group: "routing" },
       { name: "Generated",    field_type: "text", position: 13, show_on_card: false, group: "routing" },
+      // ── Connects ──
+      { name: "Boosted Connects", field_type: "number", position: 14, show_on_card: false, group: "connects" },
       // ── Proposal ──
-      { name: "Proposal",     field_type: "text", position: 14, show_on_card: false, group: "proposal" },
+      { name: "Proposal",     field_type: "text", position: 15, show_on_card: false, group: "proposal" },
     ];
 
     const createdIds: Record<string, string> = {};

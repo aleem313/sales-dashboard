@@ -73,6 +73,7 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
   const [timeEstimate, setTimeEstimate] = useState("");
   const [timeTracked, setTimeTracked] = useState("");
   const [connectsUsed, setConnectsUsed] = useState("");
+  const [boostedConnects, setBoostedConnects] = useState("");
 
   // Tags
   const [projectTags, setProjectTags] = useState<TaskTag[]>([]);
@@ -146,6 +147,7 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
         const trkMins = parseTimeToMinutes(timeTracked);
         if (trkMins !== undefined) customFields._time_tracked_minutes = trkMins;
         if (connectsUsed) customFields._connects_used = parseInt(connectsUsed) || 0;
+        if (boostedConnects) customFields._boosted_connects = parseInt(boostedConnects) || 0;
 
         await createTaskAction({
           project_id: projectId,
@@ -434,6 +436,12 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
                 {/* Connects Used */}
                 <FieldRow icon={<span className="h-4 w-4 flex items-center justify-center text-xs font-bold text-muted-foreground">#</span>} label="Connects">
                   <Input type="number" min={0} value={connectsUsed} onChange={(e) => setConnectsUsed(e.target.value)}
+                    placeholder="0" className="h-7 text-xs w-[80px] border-0 bg-transparent hover:bg-muted/50 px-2" />
+                </FieldRow>
+
+                {/* Boosted Connects */}
+                <FieldRow icon={<span className="h-4 w-4 flex items-center justify-center text-xs font-bold text-muted-foreground">⚡</span>} label="Boosted">
+                  <Input type="number" min={0} value={boostedConnects} onChange={(e) => setBoostedConnects(e.target.value)}
                     placeholder="0" className="h-7 text-xs w-[80px] border-0 bg-transparent hover:bg-muted/50 px-2" />
                 </FieldRow>
               </div>
