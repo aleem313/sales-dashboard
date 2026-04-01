@@ -151,6 +151,9 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
     if (overData?.type === "column") {
       targetColumnId = overData.columnId as string;
       targetIndex = store.getTasksByColumn(targetColumnId).length;
+    } else if (overData?.type === "column-sortable") {
+      targetColumnId = overData.columnId as string;
+      targetIndex = store.getTasksByColumn(targetColumnId).length;
     } else if (overData?.type === "task") {
       const overTask = overData.task as Task;
       targetColumnId = overTask.column_id;
@@ -172,9 +175,9 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
       const { active, over } = event;
       setActiveTask(null);
       setActiveColumn(null);
-      store.setActiveTask(null);
 
       if (!over || !active) {
+        store.setActiveTask(null);
         store.revertMove();
         return;
       }
@@ -183,6 +186,7 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
 
       // ── Column reorder ──
       if (activeData?.type === "column-sortable") {
+        store.setActiveTask(null);
         const overData = over.data.current;
         if (overData?.type !== "column-sortable" || active.id === over.id) return;
 
@@ -220,6 +224,9 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
       if (overData?.type === "column") {
         targetColumnId = overData.columnId as string;
         targetIndex = store.getTasksByColumn(targetColumnId).length;
+      } else if (overData?.type === "column-sortable") {
+        targetColumnId = overData.columnId as string;
+        targetIndex = store.getTasksByColumn(targetColumnId).length;
       } else if (overData?.type === "task") {
         const overTask = overData.task as Task;
         targetColumnId = overTask.column_id;
@@ -247,6 +254,9 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
       try {
         await moveTaskAction(task.id, targetColumnId, newPosition);
 
+        // Clear drag lock so initBoard can run with fresh server data
+        store.setActiveTask(null);
+
         // Update the store position to match what was persisted
         store.updateTask(task.id, { position: newPosition, column_id: targetColumnId });
 
@@ -270,6 +280,7 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
           });
         }
       } catch {
+        store.setActiveTask(null);
         store.revertMove();
         toast.error("Failed to move task");
       }

@@ -9,6 +9,7 @@ interface BoardState {
   projectId: string | null;
 
   // Drag state
+  isDragging: boolean;
   activeTaskId: string | null;
   previousState: { taskId: string; columnId: string; position: number } | null;
 
@@ -86,6 +87,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   tasks: [],
   members: [],
   projectId: null,
+  isDragging: false,
   activeTaskId: null,
   previousState: null,
   filters: {},
@@ -96,12 +98,14 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   activeViewId: null,
 
   initBoard: (data) => {
+    // Skip re-init during active drag to prevent optimistic state from being reset
+    if (get().isDragging) return;
     set({
       columns: data.columns,
       tasks: data.tasks,
       members: data.members,
       projectId: data.projectId,
-      customFields: data.customFields ?? [],
+      customFields: data.customFields ?? get().customFields,
       activeTaskId: null,
       previousState: null,
     });
@@ -165,7 +169,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   setActiveTask: (taskId) => {
-    set({ activeTaskId: taskId });
+    set({ activeTaskId: taskId, isDragging: taskId !== null });
   },
 
   savePreviousState: (taskId) => {
