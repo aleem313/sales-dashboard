@@ -31,7 +31,6 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { createTaskAction } from "@/lib/task-actions";
 import { RichTextEditor } from "./rich-text-editor";
-import { JobDetails } from "./job-details";
 import { ProposalBox } from "./proposal-box";
 import type { BoardColumn, ProjectMember, TaskTag } from "@/lib/task-data";
 import type { Job } from "@/lib/types";
@@ -85,7 +84,26 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
   const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
   const [assigneeSearch, setAssigneeSearch] = useState("");
 
-  // Job linking
+  // Job Details fields
+  const [jobLink, setJobLink] = useState("");
+  const [jobBudget, setJobBudget] = useState("");
+  const [jobSkills, setJobSkills] = useState("");
+  const [jobPosted, setJobPosted] = useState("");
+  // Client Info fields
+  const [clientLocation, setClientLocation] = useState("");
+  const [clientRating, setClientRating] = useState("");
+  const [clientSpent, setClientSpent] = useState("");
+  const [clientHires, setClientHires] = useState("");
+  // Routing Info fields
+  const [routingAgent, setRoutingAgent] = useState("");
+  const [routingProfile, setRoutingProfile] = useState("");
+  const [routingStack, setRoutingStack] = useState("");
+  const [routingJobId, setRoutingJobId] = useState("");
+  const [routingGenerated, setRoutingGenerated] = useState("");
+  // Proposal
+  const [proposal, setProposal] = useState("");
+
+  // Job linking (from DB)
   const [job, setJob] = useState<JobWithMeta | null>(null);
   const [jobSearchOpen, setJobSearchOpen] = useState(false);
   const [jobSearchQuery, setJobSearchQuery] = useState("");
@@ -148,6 +166,21 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
         if (trkMins !== undefined) customFields._time_tracked_minutes = trkMins;
         if (connectsUsed) customFields._connects_used = parseInt(connectsUsed) || 0;
         if (boostedConnects) customFields._boosted_connects = parseInt(boostedConnects) || 0;
+        // Job Details / Client / Routing / Proposal fields
+        if (jobLink) customFields._job_url = jobLink;
+        if (jobBudget) customFields._budget = jobBudget;
+        if (jobSkills) customFields._skills = jobSkills.split(",").map((s) => s.trim()).filter(Boolean);
+        if (jobPosted) customFields._posted = jobPosted;
+        if (clientLocation) customFields._client_country = clientLocation;
+        if (clientRating) customFields._client_rating = clientRating;
+        if (clientSpent) customFields._client_spent = clientSpent;
+        if (clientHires) customFields._client_hires = clientHires;
+        if (routingAgent) customFields._assigned_agent = routingAgent;
+        if (routingProfile) customFields._profile_name = routingProfile;
+        if (routingStack) customFields._stack = routingStack;
+        if (routingJobId) customFields._job_id = customFields._job_id || routingJobId;
+        if (routingGenerated) customFields._generated = routingGenerated;
+        if (proposal) customFields._proposal = proposal;
 
         await createTaskAction({
           project_id: projectId,
@@ -201,10 +234,27 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
   }
 
   function linkJob(jobData: Job) {
-    setJob(jobData as JobWithMeta);
+    const j = jobData as JobWithMeta;
+    setJob(j);
     setJobSearchOpen(false);
     setJobSearchQuery("");
-    if (!title.trim()) setTitle(jobData.job_title);
+    if (!title.trim()) setTitle(j.job_title);
+    // Auto-fill fields from linked job
+    if (j.job_url) setJobLink(j.job_url);
+    const budget = j.budget_type === "fixed"
+      ? (j.budget_max != null ? `$${j.budget_max}` : "Not specified")
+      : (j.hourly_min != null ? `$${j.hourly_min}-$${j.hourly_max}/hr` : "Not specified");
+    setJobBudget(budget);
+    if (j.skills?.length) setJobSkills(j.skills.join(", "));
+    if (j.posted_at) setJobPosted(new Date(j.posted_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }));
+    if (j.client_country) setClientLocation(j.client_country);
+    if (j.client_rating != null) setClientRating(String(j.client_rating));
+    if (j.client_total_spent != null) setClientSpent(`$${j.client_total_spent}`);
+    if (j.client_hires != null) setClientHires(String(j.client_hires));
+    if (j.agent_name) setRoutingAgent(j.agent_name);
+    if (j.profile_name) setRoutingProfile(j.profile_name);
+    if (j.job_id) setRoutingJobId(j.job_id);
+    if (j.proposal_text) setProposal(j.proposal_text);
   }
 
   const filteredMembers = (members ?? []).filter((m) =>
@@ -460,8 +510,8 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
             </div>
 
             {/* ═══ COLUMN 2: Job Details ═══ */}
-            <div className="xl:col-span-4 md:col-span-1 border-r overflow-y-auto p-5">
-              <div className="flex items-center justify-between mb-3">
+            <div className="xl:col-span-4 md:col-span-1 border-r overflow-y-auto p-5 space-y-5">
+              <div className="flex items-center justify-between">
                 <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Job Details</h2>
                 <div className="flex items-center gap-1">
                   {job && (
@@ -501,13 +551,72 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
                   </div>
                 </div>
               </div>
-              <JobDetails job={job} />
+
+              {/* ── Job Snapshot ── */}
+              <div>
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">📌 Job Snapshot</h4>
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-0">
+                  <FieldRow icon={<span className="text-sm">🔗</span>} label="Job Link">
+                    <Input value={jobLink} onChange={(e) => setJobLink(e.target.value)} placeholder="https://upwork.com/jobs/..." className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2" />
+                  </FieldRow>
+                  <FieldRow icon={<span className="text-sm">💰</span>} label="Budget">
+                    <Input value={jobBudget} onChange={(e) => setJobBudget(e.target.value)} placeholder="Not specified" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                  </FieldRow>
+                  <FieldRow icon={<span className="text-sm">🛠</span>} label="Skills">
+                    <Input value={jobSkills} onChange={(e) => setJobSkills(e.target.value)} placeholder="e.g. React, Node.js" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2" />
+                  </FieldRow>
+                  <FieldRow icon={<span className="text-sm">📅</span>} label="Posted">
+                    <Input value={jobPosted} onChange={(e) => setJobPosted(e.target.value)} placeholder="e.g. Apr 1, 2026" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                  </FieldRow>
+                </div>
+              </div>
+
+              {/* ── Client Intel ── */}
+              <div>
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">👤 Client Intel</h4>
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-0">
+                  <FieldRow icon={<span className="text-sm">🌍</span>} label="Location">
+                    <Input value={clientLocation} onChange={(e) => setClientLocation(e.target.value)} placeholder="e.g. Netherlands" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                  </FieldRow>
+                  <FieldRow icon={<span className="text-sm">⭐</span>} label="Rating">
+                    <Input value={clientRating} onChange={(e) => setClientRating(e.target.value)} placeholder="No rating yet" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                  </FieldRow>
+                  <FieldRow icon={<span className="text-sm">💵</span>} label="Total Spent">
+                    <Input value={clientSpent} onChange={(e) => setClientSpent(e.target.value)} placeholder="New client" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                  </FieldRow>
+                  <FieldRow icon={<span className="text-sm">✅</span>} label="Past Hires">
+                    <Input value={clientHires} onChange={(e) => setClientHires(e.target.value)} placeholder="No hires yet" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                  </FieldRow>
+                </div>
+              </div>
+
+              {/* ── Routing Info ── */}
+              <div>
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">🎯 Routing Info</h4>
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-0">
+                  <FieldRow icon={<span className="text-sm">👤</span>} label="Agent">
+                    <Input value={routingAgent} onChange={(e) => setRoutingAgent(e.target.value)} placeholder="Agent name" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                  </FieldRow>
+                  <FieldRow icon={<span className="text-sm">📁</span>} label="Profile">
+                    <Input value={routingProfile} onChange={(e) => setRoutingProfile(e.target.value)} placeholder="Profile name" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                  </FieldRow>
+                  <FieldRow icon={<span className="text-sm">🏷</span>} label="Stack">
+                    <Input value={routingStack} onChange={(e) => setRoutingStack(e.target.value)} placeholder="e.g. MERN" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2 w-[140px]" />
+                  </FieldRow>
+                  <FieldRow icon={<span className="text-sm">🆔</span>} label="Job ID">
+                    <Input value={routingJobId} onChange={(e) => setRoutingJobId(e.target.value)} placeholder="~0220..." className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2" />
+                  </FieldRow>
+                  <FieldRow icon={<span className="text-sm">🤖</span>} label="Generated">
+                    <Input value={routingGenerated} onChange={(e) => setRoutingGenerated(e.target.value)} placeholder="e.g. Apr 1, 2026, 06:04 PM UTC" className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2" />
+                  </FieldRow>
+                </div>
+              </div>
             </div>
 
             {/* ═══ COLUMN 3: Proposal ═══ */}
             <div className="xl:col-span-4 md:col-span-2 overflow-y-auto p-5">
               <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Proposal</h2>
-              <ProposalBox proposal={job?.proposal_text ?? null} />
+              <ProposalBox proposal={proposal || null} onChange={setProposal} readOnly={false} />
             </div>
           </div>
         </form>
