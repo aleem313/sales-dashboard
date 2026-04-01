@@ -100,6 +100,18 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createDefaultColumn, setCreateDefaultColumn] = useState<string | undefined>(undefined);
 
+  // Auto-open modal from ?task= URL param (e.g. shared link)
+  useEffect(() => {
+    const taskParam = searchParams.get("task");
+    if (taskParam && !modalTaskId) {
+      setModalTaskId(taskParam);
+      // Clean up URL param without navigation
+      const url = new URL(window.location.href);
+      url.searchParams.delete("task");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [searchParams, modalTaskId]);
+
   // Local column order state — synced from server, reorderable by DnD
   const [columnOrder, setColumnOrder] = useState<BoardColumn[]>(serverColumns);
   useEffect(() => {

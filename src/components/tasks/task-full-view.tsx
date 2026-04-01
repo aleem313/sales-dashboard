@@ -570,7 +570,8 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
   }
 
   function handleCopyLink() {
-    const url = `${window.location.origin}/tasks/${task?.id}`;
+    const basePath = window.location.pathname.startsWith("/my-") ? "/my-tasks" : "/tasks";
+    const url = `${window.location.origin}${basePath}?task=${task?.id}`;
     navigator.clipboard.writeText(url).then(() => toast.success("Link copied"));
   }
 
