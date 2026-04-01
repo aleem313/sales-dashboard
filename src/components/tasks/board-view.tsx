@@ -30,7 +30,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Undo2, Plus, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { BoardColumn, Task, ProjectMember } from "@/lib/task-data";
+import type { BoardColumn, Task, ProjectMember, CustomFieldDefinition } from "@/lib/task-data";
 
 interface BoardViewProps {
   columns: BoardColumn[];
@@ -38,6 +38,7 @@ interface BoardViewProps {
   projectId?: string;
   members?: ProjectMember[];
   isAdmin?: boolean;
+  customFields?: CustomFieldDefinition[];
 }
 
 /** Sortable wrapper for a column — only renders drag handle for admins */
@@ -89,7 +90,7 @@ function SortableColumn({
   );
 }
 
-export function BoardView({ columns: serverColumns, tasks, projectId, members, isAdmin }: BoardViewProps) {
+export function BoardView({ columns: serverColumns, tasks, projectId, members, isAdmin, customFields }: BoardViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [addToColumn, setAddToColumn] = useState<string | null>(null);
@@ -350,6 +351,46 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
       .filter((t) => t.column_id === columnId)
       .sort((a, b) => a.position - b.position);
   };
+
+  // Grouping support
+  const isGroupedView = store.groupBy !== "status";
+  const groupedData = isGroupedView ? store.getGroupedTasks() : [];
+
+  if (isGroupedView) {
+    return (
+      <>
+        <div className="flex h-full gap-4 overflow-x-auto px-6 py-4">
+          {groupedData.map((group) => (
+            <BoardColumnComponent
+              key={group.id}
+              column={{
+                id: group.id,
+                project_id: projectId ?? "",
+                name: group.label,
+                position: 0,
+                color: group.color ?? "#6b7280",
+                is_done: false,
+                wip_limit: null,
+                created_at: "",
+                task_count: group.tasks.length,
+              }}
+              tasks={group.tasks}
+              readOnly
+              onTaskClick={handleTaskClick}
+            />
+          ))}
+          {groupedData.length === 0 && (
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+              <div className="rounded-xl bg-muted/50 p-8">
+                <h3 className="text-lg font-semibold">No tasks match</h3>
+                <p className="mt-1 text-sm text-muted-foreground">Try adjusting your filters.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </>
+    );
+  }
 
   // Column sortable IDs
   const columnSortableIds = columnOrder.map((c) => `sortable-col-${c.id}`);

@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, MoreHorizontal, Pencil, Palette, Gauge, CheckCircle2, Trash2 } from "lucide-react";
-import { SortableTaskCard } from "./task-card";
+import { SortableTaskCard, TaskCardContent } from "./task-card";
 import { toast } from "sonner";
 import type { BoardColumn as ColumnType, Task } from "@/lib/task-data";
 
@@ -42,6 +42,7 @@ interface BoardColumnProps {
   tasks: Task[];
   allColumns?: ColumnType[];
   isAdmin?: boolean;
+  readOnly?: boolean;
   onTaskClick?: (taskId: string) => void;
   onAddTask?: (columnId: string) => void;
   onMoveTask?: (taskId: string, columnId: string) => void;
@@ -51,10 +52,39 @@ interface BoardColumnProps {
 }
 
 export function BoardColumnComponent({
-  column, tasks, allColumns, isAdmin,
+  column, tasks, allColumns, isAdmin, readOnly,
   onTaskClick, onAddTask, onMoveTask, onDeleteTask,
   onUpdateColumn, onDeleteColumn,
 }: BoardColumnProps) {
+  // Read-only mode for non-status grouping
+  if (readOnly) {
+    return (
+      <div className="flex h-full w-[280px] shrink-0 flex-col">
+        <div className="flex items-center gap-2 px-1 pb-3">
+          <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: column.color }} />
+          <h3 className="text-sm font-semibold truncate">{column.name}</h3>
+          <span className="ml-auto text-xs text-muted-foreground rounded-full bg-muted px-2 py-0.5">
+            {tasks.length}
+          </span>
+        </div>
+        <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+          {tasks.map((task) => (
+            <TaskCardContent
+              key={task.id}
+              task={task}
+              columnColor={column.color}
+              onClick={() => onTaskClick?.(task.id)}
+            />
+          ))}
+          {tasks.length === 0 && (
+            <div className="rounded-lg border border-dashed p-4 text-center">
+              <p className="text-xs text-muted-foreground">No tasks</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
   const isOverWip = column.wip_limit != null && tasks.length > column.wip_limit;
   const isAtWip = column.wip_limit != null && tasks.length === column.wip_limit;
 

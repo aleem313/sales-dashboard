@@ -13,15 +13,17 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, X } from "lucide-react";
 import { useBoardStore } from "@/lib/stores/board-store";
-import type { BoardColumn, ProjectMember, TaskTag } from "@/lib/task-data";
+import { MoreFilters } from "./custom-field-filter";
+import type { BoardColumn, ProjectMember, TaskTag, CustomFieldDefinition } from "@/lib/task-data";
 
 interface BoardFilterBarProps {
   columns: BoardColumn[];
   members: ProjectMember[];
   tags?: TaskTag[];
+  customFields?: CustomFieldDefinition[];
 }
 
-export function BoardFilterBar({ columns, members, tags }: BoardFilterBarProps) {
+export function BoardFilterBar({ columns, members, tags, customFields }: BoardFilterBarProps) {
   const store = useBoardStore();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -144,6 +146,7 @@ export function BoardFilterBar({ columns, members, tags }: BoardFilterBarProps) 
           className="h-8 text-xs gap-1 text-muted-foreground"
           onClick={() => {
             store.clearFilters();
+            store.clearCustomFieldFilters();
             const params = new URLSearchParams(searchParams.toString());
             ["search", "column", "priority", "assignee", "tag"].forEach((k) => params.delete(k));
             router.push(`?${params.toString()}`, { scroll: false });
@@ -153,6 +156,8 @@ export function BoardFilterBar({ columns, members, tags }: BoardFilterBarProps) 
           Clear
         </Button>
       )}
+
+      <MoreFilters customFields={customFields ?? []} />
     </div>
   );
 }

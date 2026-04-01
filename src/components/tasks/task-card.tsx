@@ -29,7 +29,8 @@ import {
   Link2,
   Trash2,
 } from "lucide-react";
-import type { Task, BoardColumn } from "@/lib/task-data";
+import { CustomFieldRenderer } from "./custom-field-renderer";
+import type { Task, BoardColumn, CustomFieldDefinition } from "@/lib/task-data";
 
 const priorityConfig: Record<string, { color: string; bg: string; label: string }> = {
   urgent: { color: "text-red-600 dark:text-red-400", bg: "bg-red-500/15", label: "Urgent" },
@@ -80,10 +81,11 @@ interface TaskCardProps {
   isAdmin?: boolean;
   onMoveTask?: (taskId: string, columnId: string) => void;
   onDeleteTask?: (taskId: string) => void;
+  customFields?: CustomFieldDefinition[];
 }
 
 export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { style?: React.CSSProperties }>(
-  ({ task, columnColor, onClick, isDragging, style, columns, isAdmin, onMoveTask, onDeleteTask, ...props }, ref) => {
+  ({ task, columnColor, onClick, isDragging, style, columns, isAdmin, onMoveTask, onDeleteTask, customFields, ...props }, ref) => {
     const [menuOpen, setMenuOpen] = useState(false);
     const dueStatus = task.due_date ? isDueWarning(task.due_date) : null;
     const assignees = task.assignees ?? [];
@@ -282,6 +284,31 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
               </div>
             )}
 
+            {/* Custom fields on card */}
+            {(() => {
+              const showFields = (customFields ?? []).filter((f) => f.show_on_card).slice(0, 3);
+              if (showFields.length === 0) return null;
+              const cfValues = (task.custom_fields ?? {}) as Record<string, unknown>;
+              const visibleFields = showFields.filter((f) => {
+                const v = cfValues[f.id];
+                return v !== null && v !== undefined && v !== "";
+              });
+              if (visibleFields.length === 0) return null;
+              return (
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  {visibleFields.map((f) => (
+                    <CustomFieldRenderer
+                      key={f.id}
+                      field={f}
+                      value={cfValues[f.id]}
+                      onChange={() => {}}
+                      compact
+                    />
+                  ))}
+                </div>
+              );
+            })()}
+
             {/* Bottom row: assignees + counts */}
             {hasBottomRow && (
               <div className="flex items-center justify-between mt-1">
@@ -352,7 +379,7 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
 TaskCardContent.displayName = "TaskCardContent";
 
 /** Sortable wrapper for dnd-kit — entire card is draggable */
-export function SortableTaskCard({ task, columnColor, onClick, columns, isAdmin, onMoveTask, onDeleteTask }: TaskCardProps) {
+export function SortableTaskCard({ task, columnColor, onClick, columns, isAdmin, onMoveTask, onDeleteTask, customFields }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -379,6 +406,7 @@ export function SortableTaskCard({ task, columnColor, onClick, columns, isAdmin,
       isAdmin={isAdmin}
       onMoveTask={onMoveTask}
       onDeleteTask={onDeleteTask}
+      customFields={customFields}
       {...attributes}
       {...listeners}
     />

@@ -6,6 +6,7 @@ import { BoardHeader } from "@/components/tasks/board-header";
 import { BoardSelectorWrapper } from "@/components/tasks/board-selector-wrapper";
 import { TaskDetailDrawer } from "@/components/tasks/task-detail-drawer";
 import { BoardFilterBar } from "@/components/tasks/board-filter-bar";
+import { BoardStoreInitializer } from "@/components/tasks/board-store-initializer";
 import {
   getDefaultProject,
   getProjectById,
@@ -16,6 +17,8 @@ import {
   getProjectMembers,
   getAvailableAgents,
   getProjectTags,
+  getCustomFieldDefinitions,
+  getSavedViews,
 } from "@/lib/task-data";
 
 interface Props {
@@ -69,16 +72,19 @@ async function BoardContent({ searchParams }: Props) {
 
   const finalProjects = projects.length > 0 ? projects : await getAllProjects();
 
-  const [columns, tasks, members, available, tags] = await Promise.all([
+  const [columns, tasks, members, available, tags, customFields, savedViews] = await Promise.all([
     getProjectColumns(project.id),
     getProjectTasks(project.id),
     getProjectMembers(project.id),
     isAdmin ? getAvailableAgents(project.id) : Promise.resolve([]),
     getProjectTags(project.id),
+    getCustomFieldDefinitions(project.id),
+    getSavedViews(project.id),
   ]);
 
   return (
     <>
+      <BoardStoreInitializer customFields={customFields} savedViews={savedViews} />
       <BoardHeader
         project={project}
         projects={finalProjects}
@@ -86,9 +92,11 @@ async function BoardContent({ searchParams }: Props) {
         members={members}
         availableAgents={available}
         isAdmin={isAdmin}
+        customFields={customFields}
+        onCustomFieldsChange={() => {}}
       />
-      <BoardFilterBar columns={columns} members={members} tags={tags} />
-      <BoardView columns={columns} tasks={tasks} projectId={project.id} members={members} isAdmin={isAdmin} />
+      <BoardFilterBar columns={columns} members={members} tags={tags} customFields={customFields} />
+      <BoardView columns={columns} tasks={tasks} projectId={project.id} members={members} isAdmin={isAdmin} customFields={customFields} />
       <TaskDetailDrawer columns={columns} isAdmin={isAdmin} agentId={agentId} />
     </>
   );

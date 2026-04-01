@@ -13,7 +13,9 @@ import {
   getProjectMembers,
   getAgentTasksAcrossBoards,
   getUserProjectsWithMeta,
+  getCustomFieldDefinitions,
 } from "@/lib/task-data";
+import { BoardStoreInitializer } from "@/components/tasks/board-store-initializer";
 
 interface Props {
   searchParams: Promise<{ board?: string }>;
@@ -56,10 +58,11 @@ async function AgentBoardContent({ searchParams }: Props) {
     );
   }
 
-  const [allTasks, columns, members] = await Promise.all([
+  const [allTasks, columns, members, customFields] = await Promise.all([
     getAgentTasksAcrossBoards(agentId),
     getProjectColumns(project.id),
     getProjectMembers(project.id),
+    getCustomFieldDefinitions(project.id),
   ]);
   const boardTasks = allTasks.filter((t) => t.project_id === project!.id);
   const hasMultipleBoards = projects.length > 1;
@@ -90,7 +93,8 @@ async function AgentBoardContent({ searchParams }: Props) {
         </div>
         <TaskCreateModal projectId={project.id} columns={columns} members={members} />
       </div>
-      <BoardView columns={columns} tasks={boardTasks} projectId={project.id} members={members} />
+      <BoardStoreInitializer customFields={customFields} savedViews={[]} />
+      <BoardView columns={columns} tasks={boardTasks} projectId={project.id} members={members} customFields={customFields} />
       <TaskDetailDrawer columns={columns} isAdmin={false} agentId={agentId} />
     </>
   );

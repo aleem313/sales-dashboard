@@ -26,10 +26,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { updateBoardAction, deleteBoardAction } from "@/lib/task-actions";
-import type { Project, ProjectMember, TaskAssignee, ProjectWithMeta } from "@/lib/task-data";
+import type { Project, ProjectMember, TaskAssignee, ProjectWithMeta, CustomFieldDefinition } from "@/lib/task-data";
 import { BoardSelectorWrapper } from "./board-selector-wrapper";
 import { BoardMembersPanel } from "./board-members-panel";
 import { TaskCreateModal } from "./task-create-modal";
+import { CustomFieldsPanel } from "./custom-fields-panel";
+import { GroupSelector } from "./group-selector";
+import { ViewsDropdown } from "./views-dropdown";
 import type { BoardColumn } from "@/lib/task-data";
 
 interface BoardHeaderProps {
@@ -39,6 +42,8 @@ interface BoardHeaderProps {
   members: ProjectMember[];
   availableAgents: TaskAssignee[];
   isAdmin: boolean;
+  customFields?: CustomFieldDefinition[];
+  onCustomFieldsChange?: () => void;
 }
 
 function getInitials(name: string): string {
@@ -63,6 +68,8 @@ export function BoardHeader({
   members,
   availableAgents,
   isAdmin,
+  customFields,
+  onCustomFieldsChange,
 }: BoardHeaderProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -154,6 +161,15 @@ export function BoardHeader({
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
+        <GroupSelector />
+        <ViewsDropdown projectId={project.id} isAdmin={isAdmin} />
+        {isAdmin && customFields && onCustomFieldsChange && (
+          <CustomFieldsPanel
+            projectId={project.id}
+            fields={customFields}
+            onFieldsChange={onCustomFieldsChange}
+          />
+        )}
         <TaskCreateModal projectId={project.id} columns={columns} members={members} />
 
         {isAdmin && (

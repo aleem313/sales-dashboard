@@ -59,7 +59,8 @@ import {
 import type { TaskTag } from "@/lib/task-data";
 import { useBoardStore } from "@/lib/stores/board-store";
 import { RichTextEditor } from "./rich-text-editor";
-import type { Task, BoardColumn, ProjectMember, ChecklistItem, Comment, ActivityLogEntry } from "@/lib/task-data";
+import { CustomFieldRenderer } from "./custom-field-renderer";
+import type { Task, BoardColumn, ProjectMember, ChecklistItem, Comment, ActivityLogEntry, CustomFieldDefinition } from "@/lib/task-data";
 
 interface TaskDetailDrawerProps {
   columns: BoardColumn[];
@@ -140,6 +141,9 @@ export function TaskDetailDrawer({ columns, isAdmin, agentId: currentAgentId }: 
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
   const [newTagName, setNewTagName] = useState("");
 
+  // Custom field definitions
+  const [customFieldDefs, setCustomFieldDefs] = useState<CustomFieldDefinition[]>([]);
+
   // Collapsible sections
   const [fieldsExpanded, setFieldsExpanded] = useState(true);
   const [checklistExpanded, setChecklistExpanded] = useState(true);
@@ -179,6 +183,15 @@ export function TaskDetailDrawer({ columns, isAdmin, agentId: currentAgentId }: 
   useEffect(() => {
     if (!task?.project_id) return;
     fetch(`/api/projects/${task.project_id}/tags`).then((r) => r.json()).then(setProjectTags).catch(() => {});
+  }, [task?.project_id]);
+
+  // Fetch custom field definitions
+  useEffect(() => {
+    if (!task?.project_id) return;
+    fetch(`/api/projects/${task.project_id}/custom-fields`)
+      .then((r) => r.json())
+      .then(setCustomFieldDefs)
+      .catch(() => {});
   }, [task?.project_id]);
 
   // Update title draft when task loads
@@ -885,6 +898,39 @@ export function TaskDetailDrawer({ columns, isAdmin, agentId: currentAgentId }: 
                 onBlur={() => updateField("description", task.description)}
               />
             </div>
+
+            {/* ── Custom Fields ── */}
+            {customFieldDefs.length > 0 && (
+              <>
+                <Separator />
+                <div className="px-6 py-3 space-y-2">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Custom Fields
+                  </h4>
+                  <div className="space-y-2">
+                    {customFieldDefs.map((field) => {
+                      const cfValues = (task.custom_fields ?? {}) as Record<string, unknown>;
+                      const val = cfValues[field.id];
+                      return (
+                        <div key={field.id} className="flex items-center gap-3">
+                          <span className="text-xs text-muted-foreground w-28 shrink-0 truncate" title={field.name}>
+                            {field.name}
+                            {field.required && <span className="text-red-500 ml-0.5">*</span>}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <CustomFieldRenderer
+                              field={field}
+                              value={val}
+                              onChange={(newVal) => updateCustomField(field.id, newVal)}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
 
             <Separator />
 
