@@ -87,6 +87,30 @@ export interface TaskTag {
   color: string;
 }
 
+export interface CustomFieldDefinition {
+  id: string;
+  project_id: string;
+  name: string;
+  field_type: "text" | "number" | "dropdown" | "multi_select" | "date" | "boolean";
+  options: string[] | null;
+  required: boolean;
+  position: number;
+  archived: boolean;
+  show_on_card: boolean;
+  created_at: string;
+}
+
+export interface SavedView {
+  id: string;
+  project_id: string;
+  owner_id: string;
+  name: string;
+  filters: Record<string, unknown>;
+  sort: Record<string, unknown>;
+  created_at: string;
+  owner_name?: string;
+}
+
 export interface ChecklistItem {
   id: string;
   task_id: string;
@@ -1244,4 +1268,95 @@ export async function setTaskTags(taskId: string, tagIds: string[]): Promise<voi
       ON CONFLICT DO NOTHING
     `;
   }
+}
+
+// ============================================================
+// CUSTOM FIELD DEFINITIONS
+// ============================================================
+
+export async function getCustomFieldDefinitions(projectId: string, includeArchived = false): Promise<CustomFieldDefinition[]> {
+  const result = includeArchived
+    ? await sql`SELECT * FROM custom_field_definitions WHERE project_id = ${projectId} ORDER BY position ASC, created_at ASC`
+    : await sql`SELECT * FROM custom_field_definitions WHERE project_id = ${projectId} AND archived = false ORDER BY position ASC, created_at ASC`;
+  return result.rows as CustomFieldDefinition[];
+}
+
+export async function createCustomFieldDefinition(projectId: string, data: {
+  name: string;
+  field_type: CustomFieldDefinition["field_type"];
+  options?: string[] | null;
+  required?: boolean;
+  show_on_card?: boolean;
+}): Promise<CustomFieldDefinition> {
+  const posResult = await sql`SELECT COALESCE(MAX(position), 0) + 1 AS next_pos FROM custom_field_definitions WHERE project_id = ${projectId}`;
+  const nextPos = posResult.rows[0].next_pos as number;
+  const result = await sql`
+    INSERT INTO custom_field_definitions (project_id, name, field_type, options, required, position, show_on_card)
+    VALUES (${projectId}, ${data.name}, ${data.field_type}, ${data.options ? JSON.stringify(data.options) : null}, ${data.required ?? false}, ${nextPos}, ${data.show_on_card ?? false})
+    RETURNING *`;
+  return result.rows[0] as CustomFieldDefinition;
+}
+
+export async function updateCustomFieldDefinition(fieldId: string, fields: {
+  name?: string;
+  options?: string[] | null;
+  required?: boolean;
+  show_on_card?: boolean;
+}): Promise<CustomFieldDefinition | null> {
+  const result = await sql`
+    UPDATE custom_field_definitions SET
+      name = COALESCE(${fields.name ?? null}, name),
+      options = COALESCE(${fields.options !== undefined ? JSON.stringify(fields.options) : null}, options),
+      required = COALESCE(${fields.required ?? null}, required),
+      show_on_card = COALESCE(${fields.show_on_card ?? null}, show_on_card)
+    WHERE id = ${fieldId} AND archived = false
+    RETURNING *`;
+  return (result.rows[0] as CustomFieldDefinition) ?? null;
+}
+
+export async function archiveCustomFieldDefinition(fieldId: string): Promise<boolean> {
+  const result = await sql`UPDATE custom_field_definitions SET archived = true WHERE id = ${fieldId} RETURNING id`;
+  return result.rows.length > 0;
+}
+
+export async function restoreCustomFieldDefinition(fieldId: string): Promise<boolean> {
+  const result = await sql`UPDATE custom_field_definitions SET archived = false WHERE id = ${fieldId} RETURNING id`;
+  return result.rows.length > 0;
+}
+
+export async function reorderCustomFieldDefinitions(projectId: string, orderedIds: string[]): Promise<void> {
+  for (let i = 0; i < orderedIds.length; i++) {
+    await sql`UPDATE custom_field_definitions SET position = ${i + 1} WHERE id = ${orderedIds[i]} AND project_id = ${projectId}`;
+  }
+}
+
+// ============================================================
+// SAVED VIEWS
+// ============================================================
+
+export async function getSavedViews(projectId: string): Promise<SavedView[]> {
+  const result = await sql`
+    SELECT sv.*, a.name AS owner_name FROM saved_views sv
+    LEFT JOIN agents a ON a.id = sv.owner_id
+    WHERE sv.project_id = ${projectId} ORDER BY sv.created_at ASC`;
+  return result.rows as SavedView[];
+}
+
+export async function createSavedView(data: {
+  project_id: string;
+  owner_id: string;
+  name: string;
+  filters: Record<string, unknown>;
+  sort: Record<string, unknown>;
+}): Promise<SavedView> {
+  const result = await sql`
+    INSERT INTO saved_views (project_id, owner_id, name, filters, sort)
+    VALUES (${data.project_id}, ${data.owner_id}, ${data.name}, ${JSON.stringify(data.filters)}, ${JSON.stringify(data.sort)})
+    RETURNING *`;
+  return result.rows[0] as SavedView;
+}
+
+export async function deleteSavedView(viewId: string): Promise<boolean> {
+  const result = await sql`DELETE FROM saved_views WHERE id = ${viewId} RETURNING id`;
+  return result.rows.length > 0;
 }
