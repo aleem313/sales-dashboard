@@ -25,6 +25,9 @@ import {
   reorderColumns,
   createTag,
   getProjectTags,
+  getCustomFieldDefinitions, createCustomFieldDefinition, updateCustomFieldDefinition,
+  archiveCustomFieldDefinition, restoreCustomFieldDefinition, reorderCustomFieldDefinitions,
+  getSavedViews, createSavedView, deleteSavedView,
 } from "@/lib/task-data";
 
 function revalidateBoard() {
@@ -323,4 +326,113 @@ export async function getProjectTagsAction(projectId: string) {
   if (!session?.user) throw new Error("Unauthorized");
 
   return await getProjectTags(projectId);
+}
+
+// ============================================================
+// CUSTOM FIELD ACTIONS
+// ============================================================
+
+export async function getCustomFieldDefinitionsAction(projectId: string, includeArchived = false) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  return await getCustomFieldDefinitions(projectId, includeArchived);
+}
+
+export async function createCustomFieldAction(
+  projectId: string,
+  data: {
+    name: string;
+    field_type: "text" | "number" | "dropdown" | "multi_select" | "date" | "boolean";
+    options?: string[] | null;
+    required?: boolean;
+    show_on_card?: boolean;
+  }
+) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+  if (!data.name?.trim()) throw new Error("Name is required");
+  const field = await createCustomFieldDefinition(projectId, { ...data, name: data.name.trim() });
+  revalidateBoard();
+  return field;
+}
+
+export async function updateCustomFieldAction(
+  fieldId: string,
+  fields: { name?: string; options?: string[] | null; required?: boolean; show_on_card?: boolean; }
+) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+  const field = await updateCustomFieldDefinition(fieldId, fields);
+  if (!field) throw new Error("Field not found");
+  revalidateBoard();
+  return field;
+}
+
+export async function archiveCustomFieldAction(fieldId: string) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+  const archived = await archiveCustomFieldDefinition(fieldId);
+  if (!archived) throw new Error("Field not found");
+  revalidateBoard();
+}
+
+export async function restoreCustomFieldAction(fieldId: string) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+  const restored = await restoreCustomFieldDefinition(fieldId);
+  if (!restored) throw new Error("Field not found");
+  revalidateBoard();
+}
+
+export async function reorderCustomFieldsAction(projectId: string, orderedIds: string[]) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+  await reorderCustomFieldDefinitions(projectId, orderedIds);
+  revalidateBoard();
+}
+
+// ============================================================
+// SAVED VIEW ACTIONS
+// ============================================================
+
+export async function getSavedViewsAction(projectId: string) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  return await getSavedViews(projectId);
+}
+
+export async function createSavedViewAction(data: {
+  project_id: string;
+  name: string;
+  filters: Record<string, unknown>;
+  sort: Record<string, unknown>;
+}) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+  if (!data.name?.trim()) throw new Error("Name is required");
+  let ownerId = session.user.agentId;
+  if (!ownerId) {
+    const { sql } = await import("@vercel/postgres");
+    const agent = await sql`SELECT id FROM agents WHERE active = true LIMIT 1`;
+    if (agent.rows.length === 0) throw new Error("No active agents");
+    ownerId = agent.rows[0].id as string;
+  }
+  const view = await createSavedView({ ...data, name: data.name.trim(), owner_id: ownerId });
+  revalidateBoard();
+  return view;
+}
+
+export async function deleteSavedViewAction(viewId: string) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+  const deleted = await deleteSavedView(viewId);
+  if (!deleted) throw new Error("View not found");
+  revalidateBoard();
 }
