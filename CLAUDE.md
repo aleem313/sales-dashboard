@@ -116,6 +116,7 @@ Migrations in `src/lib/migrations/`.
 | 008 | (in migrate route) | — | Webhook config: Bearer token `n8n-board-sync` → target project |
 | 009 | (in migrate route) | — | 14 custom field definitions for n8n job data (Job Details, Client Info, Routing Info, Proposal) |
 | 010 | `010_profile_platform.sql` | — | Add `platform` column to profiles table (default: 'Upwork') |
+| 011 | `011_fix_profile_assignments.sql` | — | Fix profile-to-agent assignments to match n8n flow |
 
 ## Migration Execution
 

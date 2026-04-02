@@ -13,8 +13,12 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
+  }
+
+  if (migration === "011") {
+    return run011();
   }
 
   if (migration === "010") {
@@ -346,6 +350,62 @@ async function run008() {
     return NextResponse.json({
       success: false,
       migration: "008_webhook_config",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run011() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 011: Fix profile-to-agent assignments to match n8n flow...");
+
+    // n8n source of truth (from "Process Job" node PROFILES map):
+    //   Sana   → Mubashir
+    //   Laiba  → Muqadass
+    //   Khansa → Shayan
+    //   Saim   → Shayan
+    //   Shayan → Abu Bakher
+    //   Craig  → Mubashir
+    const mappings = [
+      { profile: "Sana",   agent: "Mubashir" },
+      { profile: "Craig",  agent: "Mubashir" },
+      { profile: "Laiba",  agent: "Muqadass" },
+      { profile: "Khansa", agent: "Shayan" },
+      { profile: "Saim",   agent: "Shayan" },
+      { profile: "Shayan", agent: "Abu Bakher" },
+    ];
+
+    for (const m of mappings) {
+      const agentResult = await sql`SELECT id FROM agents WHERE LOWER(name) = LOWER(${m.agent}) LIMIT 1`;
+      if (agentResult.rows.length === 0) {
+        results.push(`⚠ Agent "${m.agent}" not found — skipped profile "${m.profile}"`);
+        continue;
+      }
+      const agentId = agentResult.rows[0].id;
+
+      const updateResult = await sql`
+        UPDATE profiles SET agent_id = ${agentId}
+        WHERE LOWER(profile_name) = LOWER(${m.profile})
+      `;
+      if (updateResult.rowCount && updateResult.rowCount > 0) {
+        results.push(`✓ ${m.profile} → ${m.agent}`);
+      } else {
+        results.push(`⚠ Profile "${m.profile}" not found`);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      migration: "011_fix_profile_assignments",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "011_fix_profile_assignments",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });
