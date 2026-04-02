@@ -793,33 +793,62 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=010&secret=YOUR_CRON
 
 | File | Purpose |
 |------|---------|
-| `src/app/api/profiles/mapping/route.ts` | Public GET endpoint returning profile→agent mapping as JSON. 60s cache. |
+| `src/app/api/profiles/mapping/route.ts` | Public GET endpoint returning profile→agent mapping as JSON. `force-dynamic` (no cache). |
+| `src/app/api/profiles/sync-n8n/route.ts` | POST endpoint that auto-creates webhook + respond nodes in n8n when a new profile is created. Requires `N8N_API_URL` + `N8N_API_KEY` env vars. |
 | `src/components/agents/create-agent-button.tsx` | Reusable "Create Agent" button with credentials modal (used on /agents page) |
 | `src/components/profiles/create-profile-button.tsx` | Reusable "Create Profile" button (used on /profiles page) |
 
-**n8n workflow change:**
-- Updated "Process Job" node in workflow `EWnZg3svZWwcIRs4`
-- Removed hardcoded `PROFILES` map
-- Added `fetch('https://sales-dashboard-snowy-beta.vercel.app/api/profiles/mapping')` at top of node
-- If fetch fails, returns `_result: 'rejected'` with error reason
-- All downstream logic unchanged — `profile.assigned_agent`, `profile.agent_clickup_id`, `profile.stack`, `profile.clickup_list_id` now come from API response
+**n8n workflow changes (workflow `EWnZg3svZWwcIRs4`, 30 nodes):**
+- Updated "Process Job" node: removed hardcoded `PROFILES` map, now fetches from dashboard API using `this.helpers.httpRequest()` (NOT `fetch()` — n8n Code nodes run in a sandbox without the global `fetch` API)
+- `PATH_TO_PROFILE` built dynamically from API response keys (pattern: `<lowercase-name>-profile-webhook`)
+- Added "Webhook - Rebekah" + "Respond - Rebekah" nodes
+- Merge All Webhooks: `numberInputs: 7`, **must stay on typeVersion 3** (v3.2 breaks multi-input passthrough — waits for ALL inputs instead of passing ANY)
+- Respond connections: each on a dedicated index (Sana=0, Laiba=1, Khansa=2, Saim=3, Shayan=4, Craig=5, Rebekah=6)
+- All webhook nodes have `onError: continueRegularOutput`
+
+**Critical n8n gotchas discovered:**
+1. **No `fetch()` in Code nodes** — use `this.helpers.httpRequest()` instead
+2. **Merge node v3 vs v3.2** — v3.2 waits for ALL inputs; v3 passes through on ANY input. Do NOT upgrade the Merge node.
+3. **Merge `numberInputs` must match webhook count** — if you add a new webhook, increment `numberInputs`
+4. **Each Respond node needs a unique Merge input index** — don't share indices
 
 **API response format:**
 ```json
 {
   "Sana": { "assigned_agent": "Mubashir", "agent_clickup_id": "107686249", "profile_id": "sana", "stack": "", "clickup_list_id": "" },
-  "Craig": { "assigned_agent": "Mubashir", ... },
+  "Rebekah": { "assigned_agent": "Abu Bakher", ... },
   ...
 }
 ```
 
-**How it works:**
+**How it works (verified working in production):**
 1. Admin changes profile assignment in dashboard → DB updated immediately
-2. Next n8n job execution → fetches `/api/profiles/mapping` → gets latest mapping
-3. Job routed to correct agent based on current DB state
-4. Cache TTL: 60s (changes propagate within 1 minute)
+2. Next Vollna job triggers n8n webhook → "Process Job" calls `this.helpers.httpRequest()` to `GET /api/profiles/mapping`
+3. API returns live DB state (no cache — `force-dynamic`)
+4. Job routed to correct agent based on current mapping
+5. Full pipeline executes: Process Job → Route Job → Build GPT Input → AI Agent → ClickUp + Dashboard
+
+**Dashboard webhook fix:**
+- Non-proposal outcomes (no_profile, rejected, weekend, inactive, duplicate) now return `{ ok: true, skipped: true }` instead of failing with "Missing job_id"
+- Settings page shows webhook URL per profile with copy button
+- Settings link added to admin sidebar
 
 ---
 
-*Current Phase: Dynamic n8n profile sync complete*
-*Next Action: Deploy → run migrations 010, 011 → test profile reassignment reflects in n8n*
+### n8n Debugging Session (2026-04-02)
+
+**Issues found and fixed during n8n integration:**
+
+| # | Issue | Root Cause | Fix |
+|---|-------|-----------|-----|
+| 1 | `fetch is not defined` | n8n Code nodes run in sandbox without global `fetch` | Changed to `this.helpers.httpRequest()` |
+| 2 | Merge node blocking all data | Autofix upgraded Merge from v3 to v3.2 (different behavior) | Reverted to v3 |
+| 3 | Merge input index overflow | Respond nodes connected to indices 2-5, but Merge only had 2 inputs configured | Set `numberInputs: 7`, restored original indices 0-6 |
+| 4 | Duplicate Merge connections | Failed partial updates left duplicate connections | Removed duplicates, clean re-add |
+| 5 | Dashboard sync showing "failed" | Non-proposal n8n outcomes (no_profile etc.) had no job_id | Skip gracefully with `{ ok: true, skipped: true }` |
+| 6 | Profile mapping API returning stale data | `revalidate = 60` ISR cache | Changed to `dynamic = "force-dynamic"` |
+
+---
+
+*Current Phase: Full n8n integration working — dynamic profile sync verified in production*
+*Next Action: Add N8N_API_URL + N8N_API_KEY to Vercel env vars for auto-provisioning of webhook nodes on new profile creation*

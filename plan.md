@@ -648,6 +648,18 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 - [x] Bulk assignment API: `PUT /api/agents/[id]/assign-profiles`
 - [x] Reassignment removes profile from previous agent
 
+### Dynamic n8n Profile Sync (completed 2026-04-02)
+- [x] `GET /api/profiles/mapping` — public endpoint, `force-dynamic`, returns live DB mapping
+- [x] n8n "Process Job" node fetches mapping via `this.helpers.httpRequest()` (not `fetch()` — sandbox limitation)
+- [x] `PATH_TO_PROFILE` built dynamically from API response keys
+- [x] Profile reassignment in dashboard reflected in n8n immediately (next job execution)
+- [x] Non-proposal outcomes (no_profile, rejected, etc.) handled gracefully by dashboard webhook
+- [x] Webhook URL displayed per profile in Settings with copy button
+- [x] Settings link added to admin sidebar
+- [x] `POST /api/profiles/sync-n8n` auto-provisions webhook + respond nodes in n8n (requires N8N_API_URL + N8N_API_KEY)
+- [x] Rebekah webhook + respond nodes added to n8n workflow
+- [x] Merge node stays on v3 (v3.2 breaks multi-input passthrough), `numberInputs: 7`
+
 ---
 
 ## Milestone 6: n8n Automation & Webhooks (Sprint 6)

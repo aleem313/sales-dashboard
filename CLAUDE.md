@@ -161,8 +161,18 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 - **Profile creation**: Admin creates profile via Settings → "Create Profile". Fields: name, unique identifier (used in n8n routing), platform (Upwork/Freelancer/Fiverr/LinkedIn/Other), stack, assigned agent.
 - **Agent ↔ Profile assignment**: One agent → many profiles. One profile → only one agent (enforced). Reassignment removes profile from previous agent with confirmation dialog.
 - **Bulk assignment**: `PUT /api/agents/[id]/assign-profiles` with `{ profileIds: string[] }` — unassigns profiles not in list, assigns new ones.
-- **Dynamic n8n sync**: `GET /api/profiles/mapping` returns profile→agent mapping. n8n "Process Job" node fetches this on every execution instead of using hardcoded map. Admin changes to assignments are reflected in n8n automatically (within 60s cache TTL).
+- **Dynamic n8n sync**: `GET /api/profiles/mapping` returns profile→agent mapping (`force-dynamic`, no cache). n8n "Process Job" node fetches this via `this.helpers.httpRequest()` on every execution. Admin changes to assignments are reflected in n8n immediately on next job.
+- **n8n webhook auto-provisioning**: `POST /api/profiles/sync-n8n` creates webhook + respond nodes in n8n workflow when a new profile is created. Requires `N8N_API_URL` + `N8N_API_KEY` env vars.
+- **Webhook URL display**: Settings profile table shows auto-generated webhook URL per profile with copy button (format: `https://ikonicdev.app.n8n.cloud/webhook/<slug>-profile-webhook`).
+- **Non-proposal outcome handling**: Dashboard webhook (`/api/webhook/n8n`) gracefully skips non-proposal outcomes (no_profile, rejected, weekend, inactive, duplicate) instead of failing with "Missing job_id".
 - **Password hashing**: `hashPassword()` in `actions.ts` uses PBKDF2-SHA256. Format: `<32-hex-salt>:<128-hex-hash>`. Verified by `verifyPassword()` in `auth.ts`.
+
+### n8n Integration Gotchas (CRITICAL)
+
+- **No `fetch()` in Code nodes** — n8n Code nodes run in a sandbox. Use `this.helpers.httpRequest()` instead.
+- **Merge node must stay on v3** — v3.2 waits for ALL inputs; v3 passes through on ANY input. Do NOT upgrade.
+- **Merge `numberInputs` must equal webhook count** — currently 7 (Sana, Laiba, Khansa, Saim, Shayan, Craig, Rebekah).
+- **Each Respond node needs a unique Merge input index** — Sana=0, Laiba=1, Khansa=2, Saim=3, Shayan=4, Craig=5, Rebekah=6.
 
 ### Task Management Key Files
 
