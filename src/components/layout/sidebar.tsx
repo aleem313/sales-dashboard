@@ -20,6 +20,7 @@ import {
   Briefcase,
   TrendingUp,
   KanbanSquare,
+  Settings,
 } from "lucide-react";
 import { useState, Suspense } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -68,6 +69,12 @@ const adminNavSections: NavSection[] = [
     label: "Tasks",
     items: [
       { href: "/tasks", label: "Task Board", icon: KanbanSquare },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { href: "/settings", label: "Settings", icon: Settings },
     ],
   },
 ];
