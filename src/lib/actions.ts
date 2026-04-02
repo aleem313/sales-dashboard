@@ -198,8 +198,10 @@ export async function createProfileAction(data: {
   let n8nSync: { success: boolean; webhookUrl: string; error: string; alreadyExists?: boolean } = { success: false, webhookUrl: "", error: "" };
   try {
     n8nSync = await syncProfileToN8n(data.profile_name);
-  } catch {
+  } catch (err) {
     // n8n sync is best-effort — profile is already created in DB
+    n8nSync.error = err instanceof Error ? err.message : "Unknown n8n sync error";
+    console.error("n8n sync failed:", n8nSync.error);
   }
 
   revalidatePath("/settings");
