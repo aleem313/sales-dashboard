@@ -221,6 +221,19 @@ async function processWebhook(data: Record<string, unknown>) {
   const n8nOutcome = data.outcome as string | undefined;
 
   try {
+    // Non-proposal outcomes (no_profile, rejected, weekend, inactive, duplicate)
+    // don't have a valid job_id — acknowledge them without creating a job record
+    const outcome = n8nOutcome || (data.outcome as string);
+    const nonJobOutcomes = ["no_profile", "rejected", "weekend", "inactive", "duplicate"];
+    if (outcome && nonJobOutcomes.includes(outcome)) {
+      await completeSyncLog(syncLog.id, {
+        records_synced: 0,
+        records_updated: 0,
+        status: "success",
+      });
+      return NextResponse.json({ ok: true, skipped: true, outcome });
+    }
+
     const normalized = await normalizePayload(data);
 
     if (!normalized.job_id) {
