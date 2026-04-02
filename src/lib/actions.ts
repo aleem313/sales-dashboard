@@ -30,6 +30,79 @@ function generatePassword(): string {
   return Array.from(arr, (b) => chars[b % chars.length]).join("");
 }
 
+// Sync a new profile to n8n by creating webhook + respond nodes
+const N8N_WORKFLOW_ID = process.env.N8N_WORKFLOW_ID || "EWnZg3svZWwcIRs4";
+
+async function syncProfileToN8n(profileName: string): Promise<{ success: boolean; webhookUrl: string; error: string; alreadyExists?: boolean }> {
+  const n8nUrl = process.env.N8N_API_URL;
+  const n8nKey = process.env.N8N_API_KEY;
+
+  if (!n8nUrl || !n8nKey) {
+    return { success: false, webhookUrl: "", error: "N8N_API_URL or N8N_API_KEY not configured" };
+  }
+
+  const webhookPath = profileName.toLowerCase().replace(/\s+/g, "-") + "-profile-webhook";
+  const webhookNodeName = `Webhook - ${profileName}`;
+  const respondNodeName = `Respond - ${profileName}`;
+  const webhookUrl = `https://ikonicdev.app.n8n.cloud/webhook/${webhookPath}`;
+
+  const headers = { "Content-Type": "application/json", "X-N8N-API-KEY": n8nKey };
+
+  // 1. Get current workflow
+  const wfRes = await fetch(`${n8nUrl}/api/v1/workflows/${N8N_WORKFLOW_ID}`, { headers });
+  if (!wfRes.ok) throw new Error(`n8n GET failed: ${wfRes.status}`);
+  const workflow = await wfRes.json();
+
+  // 2. Check if nodes already exist
+  if (workflow.nodes.some((n: { name: string }) => n.name === webhookNodeName)) {
+    return { success: true, webhookUrl, error: "", alreadyExists: true };
+  }
+
+  // 3. Position below last webhook node
+  const webhookNodes = workflow.nodes.filter((n: { type: string }) => n.type === "n8n-nodes-base.webhook");
+  const maxY = webhookNodes.reduce((max: number, n: { position: number[] }) => Math.max(max, n.position[1]), 0);
+  const newY = maxY + 224;
+
+  // 4. Add nodes
+  workflow.nodes.push(
+    { name: webhookNodeName, type: "n8n-nodes-base.webhook", typeVersion: 2, position: [-1408, newY], parameters: { httpMethod: "POST", path: webhookPath, responseMode: "responseNode", options: {} }, onError: "continueRegularOutput" },
+    { name: respondNodeName, type: "n8n-nodes-base.respondToWebhook", typeVersion: 1.1, position: [-1216, newY], parameters: { options: {} } }
+  );
+
+  // 5. Add connections
+  workflow.connections[webhookNodeName] = { main: [[{ node: respondNodeName, type: "main", index: 0 }]] };
+
+  // Find next Merge input index
+  const mergeInputs = Object.values(workflow.connections)
+    .flatMap((conn: any) => conn.main?.flat() || [])
+    .filter((c: any) => c.node === "Merge All Webhooks")
+    .map((c: any) => c.index);
+  const nextIndex = mergeInputs.length > 0 ? Math.max(...mergeInputs as number[]) + 1 : 0;
+
+  workflow.connections[respondNodeName] = { main: [[{ node: "Merge All Webhooks", type: "main", index: nextIndex }]] };
+
+  // 6. Update Merge numberInputs
+  const mergeNode = workflow.nodes.find((n: { name: string }) => n.name === "Merge All Webhooks");
+  if (mergeNode) {
+    mergeNode.parameters.numberInputs = Math.max(mergeNode.parameters.numberInputs || 0, nextIndex + 1);
+  }
+
+  // 7. Save workflow
+  const putRes = await fetch(`${n8nUrl}/api/v1/workflows/${N8N_WORKFLOW_ID}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ name: workflow.name, nodes: workflow.nodes, connections: workflow.connections, settings: workflow.settings }),
+  });
+  if (!putRes.ok) throw new Error(`n8n PUT failed: ${putRes.status}`);
+
+  // 8. Re-activate
+  if (workflow.active) {
+    await fetch(`${n8nUrl}/api/v1/workflows/${N8N_WORKFLOW_ID}/activate`, { method: "POST", headers });
+  }
+
+  return { success: true, webhookUrl, error: "", alreadyExists: false };
+}
+
 export async function toggleAgentActiveAction(id: string, active: boolean) {
   await toggleAgentActive(id, active);
   revalidatePath("/settings");
@@ -124,18 +197,7 @@ export async function createProfileAction(data: {
   // Auto-provision webhook nodes in n8n (best-effort, don't block profile creation)
   let n8nSync: { success: boolean; webhookUrl: string; error: string; alreadyExists?: boolean } = { success: false, webhookUrl: "", error: "" };
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:3000");
-
-    const res = await fetch(`${baseUrl}/api/profiles/sync-n8n`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ profileName: data.profile_name }),
-    });
-    if (res.ok) {
-      n8nSync = await res.json();
-    }
+    n8nSync = await syncProfileToN8n(data.profile_name);
   } catch {
     // n8n sync is best-effort — profile is already created in DB
   }
