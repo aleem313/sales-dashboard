@@ -1,6 +1,7 @@
 import { Header } from "@/components/layout/header";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { AgentDetailCard } from "@/components/agents/agent-detail-card";
+import { CreateAgentButton } from "@/components/agents/create-agent-button";
 import {
   getEnhancedAgentStats,
   getKPIMetricsWithDeltas,
@@ -74,6 +75,10 @@ export default async function AgentsPage({
           profiles={allProfiles}
         />
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">All Agents</h2>
+          <CreateAgentButton />
+        </div>
         <StatRow className="mb-5">
           <StatCard
             label="Avg Time to Apply"

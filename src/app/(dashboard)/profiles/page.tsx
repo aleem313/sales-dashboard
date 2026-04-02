@@ -1,6 +1,7 @@
 import { Header } from "@/components/layout/header";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { ProfileGridCard } from "@/components/profiles/profile-grid-card";
+import { CreateProfileButton } from "@/components/profiles/create-profile-button";
 import { getEnhancedProfileStats, getAllAgents, getAllProfiles } from "@/lib/data";
 import { parseDateRange } from "@/lib/date-utils";
 
@@ -55,6 +56,10 @@ export default async function ProfilesPage({
           profiles={allProfiles}
         />
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">All Profiles</h2>
+          <CreateProfileButton agents={allAgents} />
+        </div>
         <StatRow className="mb-5">
           <StatCard label="Active Profiles" value={active} variant="accent" delta="All operational" />
           <StatCard
