@@ -31,13 +31,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   toggleProfileActiveAction,
   updateProfileAgentAction,
   createProfileAction,
 } from "@/lib/actions";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, Copy, Check } from "lucide-react";
 import type { Agent, Profile } from "@/lib/types";
+
+const N8N_WEBHOOK_BASE = "https://ikonicdev.app.n8n.cloud/webhook";
+
+function getWebhookUrl(profileName: string) {
+  const slug = profileName.toLowerCase().replace(/\s+/g, "-");
+  return `${N8N_WEBHOOK_BASE}/${slug}-profile-webhook`;
+}
 
 export function ProfileManagement({
   profiles,
@@ -49,6 +62,7 @@ export function ProfileManagement({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   async function handleToggle(id: string, active: boolean) {
     setLoading(id);
@@ -65,7 +79,6 @@ export function ProfileManagement({
   async function handleAgentChange(profileId: string, agentId: string) {
     const newAgentId = agentId === "none" ? null : agentId;
 
-    // Warn if profile is being reassigned from another agent
     if (newAgentId) {
       const profile = profiles.find((p) => p.id === profileId);
       if (profile?.agent_id && profile.agent_id !== newAgentId) {
@@ -105,7 +118,7 @@ export function ProfileManagement({
 
     setCreating(true);
     try {
-      await createProfileAction({
+      const result = await createProfileAction({
         profile_id,
         profile_name,
         platform: platform || "Upwork",
@@ -113,6 +126,21 @@ export function ProfileManagement({
         agent_id: agent_id && agent_id !== "none" ? agent_id : null,
       });
       toast.success("Profile created");
+
+      // Show n8n sync result
+      const sync = result.n8nSync as { success?: boolean; alreadyExists?: boolean; error?: string } | undefined;
+      if (sync?.success) {
+        toast.success(`n8n webhook created: ${profile_name}`, {
+          description: sync.alreadyExists
+            ? "Webhook already existed"
+            : "Webhook + respond nodes added to workflow",
+        });
+      } else if (sync?.error) {
+        toast.warning("Profile created but n8n sync failed", {
+          description: sync.error,
+        });
+      }
+
       setOpen(false);
     } catch {
       toast.error("Failed to create profile");
@@ -121,9 +149,12 @@ export function ProfileManagement({
     }
   }
 
-  function getAgentName(agentId: string | null) {
-    if (!agentId) return null;
-    return agents.find((a) => a.id === agentId)?.name ?? null;
+  async function copyWebhookUrl(profileName: string, profileId: string) {
+    const url = getWebhookUrl(profileName);
+    await navigator.clipboard.writeText(url);
+    setCopiedId(profileId);
+    toast.success("Webhook URL copied");
+    setTimeout(() => setCopiedId(null), 2000);
   }
 
   return (
@@ -142,7 +173,7 @@ export function ProfileManagement({
             <DialogHeader>
               <DialogTitle>Create New Profile</DialogTitle>
               <DialogDescription>
-                Each profile can only be assigned to one agent at a time.
+                Each profile can only be assigned to one agent. A webhook node will be auto-created in n8n.
               </DialogDescription>
             </DialogHeader>
             <form action={handleCreate} className="space-y-4">
@@ -216,62 +247,90 @@ export function ProfileManagement({
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead className="hidden sm:table-cell">Platform</TableHead>
-                <TableHead className="hidden md:table-cell">Stack</TableHead>
+                <TableHead className="hidden lg:table-cell">Webhook URL</TableHead>
                 <TableHead>Agent</TableHead>
                 <TableHead>Active</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {profiles.map((profile) => (
-                <TableRow key={profile.id}>
-                  <TableCell>
-                    <div>
-                      <span className="font-medium">{profile.profile_name}</span>
-                      <p className="text-xs text-muted-foreground font-mono">
-                        {profile.profile_id}
-                      </p>
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    <Badge variant="outline" className="text-xs">
-                      {profile.platform ?? "Upwork"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground">
-                    {profile.stack ?? "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Select
-                      value={profile.agent_id ?? "none"}
-                      onValueChange={(val) =>
-                        handleAgentChange(profile.id, val)
-                      }
-                      disabled={loading === profile.id}
-                    >
-                      <SelectTrigger className="w-[140px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {agents.map((a) => (
-                          <SelectItem key={a.id} value={a.id}>
-                            {a.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={profile.active}
-                      disabled={loading === profile.id}
-                      onCheckedChange={(checked) =>
-                        handleToggle(profile.id, checked)
-                      }
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
+              <TooltipProvider>
+                {profiles.map((profile) => {
+                  const webhookUrl = getWebhookUrl(profile.profile_name);
+                  return (
+                    <TableRow key={profile.id}>
+                      <TableCell>
+                        <div>
+                          <span className="font-medium">{profile.profile_name}</span>
+                          <p className="text-xs text-muted-foreground font-mono">
+                            {profile.profile_id}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <Badge variant="outline" className="text-xs">
+                          {profile.platform ?? "Upwork"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <div className="flex items-center gap-1.5">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <code className="max-w-[280px] truncate text-xs text-muted-foreground block">
+                                {webhookUrl}
+                              </code>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-md">
+                              <p className="font-mono text-xs break-all">{webhookUrl}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 shrink-0"
+                            onClick={() => copyWebhookUrl(profile.profile_name, profile.id)}
+                          >
+                            {copiedId === profile.id ? (
+                              <Check className="h-3 w-3 text-green-500" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={profile.agent_id ?? "none"}
+                          onValueChange={(val) =>
+                            handleAgentChange(profile.id, val)
+                          }
+                          disabled={loading === profile.id}
+                        >
+                          <SelectTrigger className="w-[140px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            {agents.map((a) => (
+                              <SelectItem key={a.id} value={a.id}>
+                                {a.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={profile.active}
+                          disabled={loading === profile.id}
+                          onCheckedChange={(checked) =>
+                            handleToggle(profile.id, checked)
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TooltipProvider>
             </TableBody>
           </Table>
         )}

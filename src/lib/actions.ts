@@ -120,10 +120,30 @@ export async function createProfileAction(data: {
   clickup_list_id?: string | null;
 }) {
   const profile = await createProfile(data);
+
+  // Auto-provision webhook nodes in n8n (best-effort, don't block profile creation)
+  let n8nSync: { success: boolean; webhookUrl: string; error: string; alreadyExists?: boolean } = { success: false, webhookUrl: "", error: "" };
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000");
+
+    const res = await fetch(`${baseUrl}/api/profiles/sync-n8n`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profileName: data.profile_name }),
+    });
+    if (res.ok) {
+      n8nSync = await res.json();
+    }
+  } catch {
+    // n8n sync is best-effort — profile is already created in DB
+  }
+
   revalidatePath("/settings");
   revalidatePath("/profiles");
   revalidatePath("/agents");
-  return profile;
+  return { profile, n8nSync };
 }
 
 export async function triggerClickUpSync() {
