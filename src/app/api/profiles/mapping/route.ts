@@ -4,9 +4,9 @@ import { sql } from "@vercel/postgres";
 // Public endpoint — n8n fetches this on every execution to get
 // the current profile → agent mapping. No auth required so n8n
 // can call it without credentials beyond what it already has.
-// Cache for 60s to avoid DB hits on every job.
+// Always fresh — revalidated when profile assignments change.
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   const result = await sql`
