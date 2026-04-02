@@ -161,6 +161,7 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 - **Profile creation**: Admin creates profile via Settings → "Create Profile". Fields: name, unique identifier (used in n8n routing), platform (Upwork/Freelancer/Fiverr/LinkedIn/Other), stack, assigned agent.
 - **Agent ↔ Profile assignment**: One agent → many profiles. One profile → only one agent (enforced). Reassignment removes profile from previous agent with confirmation dialog.
 - **Bulk assignment**: `PUT /api/agents/[id]/assign-profiles` with `{ profileIds: string[] }` — unassigns profiles not in list, assigns new ones.
+- **Dynamic n8n sync**: `GET /api/profiles/mapping` returns profile→agent mapping. n8n "Process Job" node fetches this on every execution instead of using hardcoded map. Admin changes to assignments are reflected in n8n automatically (within 60s cache TTL).
 - **Password hashing**: `hashPassword()` in `actions.ts` uses PBKDF2-SHA256. Format: `<32-hex-salt>:<128-hex-hash>`. Verified by `verifyPassword()` in `auth.ts`.
 
 ### Task Management Key Files

@@ -783,7 +783,43 @@ Added `<Header>` to agent my-tasks page with agent-scoped data:
 https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=010&secret=YOUR_CRON_SECRET
 ```
 
+### Dynamic n8n Profile Sync (2026-04-02)
+
+**Task:** When admin assigns/reassigns profiles to agents in the dashboard, automatically reflect changes in n8n routing — without manual n8n edits.
+
+**Approach:** Pull model — n8n fetches mapping from dashboard API on every execution.
+
+**New files created:**
+
+| File | Purpose |
+|------|---------|
+| `src/app/api/profiles/mapping/route.ts` | Public GET endpoint returning profile→agent mapping as JSON. 60s cache. |
+| `src/components/agents/create-agent-button.tsx` | Reusable "Create Agent" button with credentials modal (used on /agents page) |
+| `src/components/profiles/create-profile-button.tsx` | Reusable "Create Profile" button (used on /profiles page) |
+
+**n8n workflow change:**
+- Updated "Process Job" node in workflow `EWnZg3svZWwcIRs4`
+- Removed hardcoded `PROFILES` map
+- Added `fetch('https://sales-dashboard-snowy-beta.vercel.app/api/profiles/mapping')` at top of node
+- If fetch fails, returns `_result: 'rejected'` with error reason
+- All downstream logic unchanged — `profile.assigned_agent`, `profile.agent_clickup_id`, `profile.stack`, `profile.clickup_list_id` now come from API response
+
+**API response format:**
+```json
+{
+  "Sana": { "assigned_agent": "Mubashir", "agent_clickup_id": "107686249", "profile_id": "sana", "stack": "", "clickup_list_id": "" },
+  "Craig": { "assigned_agent": "Mubashir", ... },
+  ...
+}
+```
+
+**How it works:**
+1. Admin changes profile assignment in dashboard → DB updated immediately
+2. Next n8n job execution → fetches `/api/profiles/mapping` → gets latest mapping
+3. Job routed to correct agent based on current DB state
+4. Cache TTL: 60s (changes propagate within 1 minute)
+
 ---
 
-*Current Phase: Agent & profile management complete*
-*Next Action: Deploy → run migration 010 → create agents/profiles from admin panel*
+*Current Phase: Dynamic n8n profile sync complete*
+*Next Action: Deploy → run migrations 010, 011 → test profile reassignment reflects in n8n*
