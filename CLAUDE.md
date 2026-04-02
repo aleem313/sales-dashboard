@@ -115,6 +115,7 @@ Migrations in `src/lib/migrations/`.
 | 006 | `006_task_management_schema.sql` | M1 | 18 task management tables, 14 indexes, 3 triggers, default seed |
 | 008 | (in migrate route) | — | Webhook config: Bearer token `n8n-board-sync` → target project |
 | 009 | (in migrate route) | — | 14 custom field definitions for n8n job data (Job Details, Client Info, Routing Info, Proposal) |
+| 010 | `010_profile_platform.sql` | — | Add `platform` column to profiles table (default: 'Upwork') |
 
 ## Migration Execution
 
@@ -151,6 +152,15 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 | GET/POST | `/api/projects/[id]/saved-views` | Member+ / Admin |
 | DELETE | `/api/projects/[id]/saved-views/[vid]` | Admin |
 | GET | `/api/migrate` | CRON_SECRET |
+| PUT | `/api/agents/[id]/assign-profiles` | Admin |
+
+### Agent & Profile Management
+
+- **Agent creation**: Admin creates agent via Settings → "Create Agent". Email + random password are auto-generated. Password is hashed with PBKDF2-SHA256 (100k iterations, 16-byte salt, 64-byte key = 128 hex chars). Stored as `salt:hash` in `password_hash` column (TEXT). Plain password shown once in a modal with copy button — never stored.
+- **Profile creation**: Admin creates profile via Settings → "Create Profile". Fields: name, unique identifier (used in n8n routing), platform (Upwork/Freelancer/Fiverr/LinkedIn/Other), stack, assigned agent.
+- **Agent ↔ Profile assignment**: One agent → many profiles. One profile → only one agent (enforced). Reassignment removes profile from previous agent with confirmation dialog.
+- **Bulk assignment**: `PUT /api/agents/[id]/assign-profiles` with `{ profileIds: string[] }` — unassigns profiles not in list, assigns new ones.
+- **Password hashing**: `hashPassword()` in `actions.ts` uses PBKDF2-SHA256. Format: `<32-hex-salt>:<128-hex-hash>`. Verified by `verifyPassword()` in `auth.ts`.
 
 ### Task Management Key Files
 

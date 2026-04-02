@@ -32,7 +32,7 @@ export default async function SettingsPage() {
 
       <SyncLogTable logs={syncLogs as SyncLog[]} />
 
-      <AgentManagement agents={agents} />
+      <AgentManagement agents={agents} profiles={profiles} />
 
       <ProfileManagement profiles={profiles} agents={agents} />
 

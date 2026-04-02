@@ -597,15 +597,25 @@ export async function toggleAgentActive(
 
 export async function createAgent(data: {
   name: string;
-  email?: string | null;
-  clickup_user_id: string;
+  email: string;
+  password_hash: string;
+  clickup_user_id?: string | null;
 }): Promise<Agent> {
+  // Auto-generate clickup_user_id if not provided (format: agent-<uuid-prefix>)
+  const clickupId = data.clickup_user_id || `agent-${crypto.randomUUID().slice(0, 8)}`;
   const result = await sql`
-    INSERT INTO agents (name, email, clickup_user_id)
-    VALUES (${data.name}, ${data.email ?? null}, ${data.clickup_user_id})
+    INSERT INTO agents (name, email, clickup_user_id, password_hash, role)
+    VALUES (${data.name}, ${data.email}, ${clickupId}, ${data.password_hash}, 'agent')
     RETURNING *
   `;
   return result.rows[0] as Agent;
+}
+
+export async function getAgentByEmailExists(email: string): Promise<boolean> {
+  const result = await sql`
+    SELECT 1 FROM agents WHERE LOWER(email) = LOWER(${email}) LIMIT 1
+  `;
+  return result.rows.length > 0;
 }
 
 export async function toggleProfileActive(
@@ -625,16 +635,17 @@ export async function updateProfileAgent(
 export async function createProfile(data: {
   profile_id: string;
   profile_name: string;
+  platform?: string | null;
   stack?: string | null;
   vollna_filter_tag?: string | null;
   agent_id?: string | null;
   clickup_list_id?: string | null;
 }): Promise<Profile> {
   const result = await sql`
-    INSERT INTO profiles (profile_id, profile_name, stack, vollna_filter_tag, agent_id, clickup_list_id)
+    INSERT INTO profiles (profile_id, profile_name, platform, stack, vollna_filter_tag, agent_id, clickup_list_id)
     VALUES (
-      ${data.profile_id}, ${data.profile_name}, ${data.stack ?? null},
-      ${data.vollna_filter_tag ?? null}, ${data.agent_id ?? null}, ${data.clickup_list_id ?? null}
+      ${data.profile_id}, ${data.profile_name}, ${data.platform ?? 'Upwork'},
+      ${data.stack ?? null}, ${data.vollna_filter_tag ?? null}, ${data.agent_id ?? null}, ${data.clickup_list_id ?? null}
     )
     RETURNING *
   `;

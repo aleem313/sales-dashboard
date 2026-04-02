@@ -13,8 +13,12 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
+  }
+
+  if (migration === "010") {
+    return run010();
   }
 
   if (migration === "009") {
@@ -342,6 +346,33 @@ async function run008() {
     return NextResponse.json({
       success: false,
       migration: "008_webhook_config",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run010() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 010: Add platform column to profiles...");
+
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS platform TEXT DEFAULT 'Upwork'`;
+    results.push("✓ Added platform column");
+
+    await sql`UPDATE profiles SET platform = 'Upwork' WHERE platform IS NULL`;
+    results.push("✓ Backfilled existing profiles with 'Upwork'");
+
+    return NextResponse.json({
+      success: true,
+      migration: "010_profile_platform",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "010_profile_platform",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });

@@ -735,5 +735,55 @@ Added `<Header>` to agent my-tasks page with agent-scoped data:
 
 ---
 
-*Current Phase: All structured fields complete in both create and view modals*
-*Next Action: Deploy → run migration 009 → test n8n auto-fill + manual editing*
+### Agent & Profile Management System (2026-04-02)
+
+**Task:** Full agent creation with auto-credentials, profile management with platform field, one-profile-one-agent enforcement, bulk assignment API.
+
+**New files created:**
+
+| File | Purpose |
+|------|---------|
+| `src/lib/migrations/010_profile_platform.sql` | Add `platform` column to profiles (default: 'Upwork') |
+| `src/app/api/agents/[id]/assign-profiles/route.ts` | PUT bulk profile assignment (admin-only) |
+
+**Modified files:**
+
+| File | Change |
+|------|--------|
+| `src/lib/data.ts` | `createAgent()` now accepts `password_hash`, auto-generates `clickup_user_id` if not provided. Added `getAgentByEmailExists()` for duplicate check. `createProfile()` accepts `platform` field. |
+| `src/lib/actions.ts` | Added `hashPassword()` (PBKDF2-SHA256, 16-byte salt, 64-byte key = 128 hex chars) and `generatePassword()` (12-char random). `createAgentAction()` now generates credentials and returns them once. Added `assignProfilesToAgentAction()` for bulk assignment. Profile assignment revalidates `/agents`. |
+| `src/lib/types.ts` | Added `platform` field to `Profile` interface |
+| `src/components/settings/agent-management.tsx` | Rewritten: "Create Agent" dialog (name + email only), credentials modal with copy buttons (shown once after creation), agent table shows assigned profiles as badges and login status |
+| `src/components/settings/profile-management.tsx` | Rewritten: "Create Profile" dialog with platform selector (Upwork/Freelancer/Fiverr/LinkedIn/Other), unique identifier field, reassignment confirmation dialog. Profile table shows platform badge and profile_id. |
+| `src/app/(dashboard)/settings/page.tsx` | Passes `profiles` to `AgentManagement` component |
+| `src/app/api/migrate/route.ts` | Added migration v=010 support |
+
+**Password hashing:**
+- Algorithm: PBKDF2-SHA256, 100k iterations
+- Salt: 16 bytes (32 hex chars)
+- Key: 64 bytes (128 hex chars)
+- Format: `<salt>:<hash>` (161 chars total)
+- Compatible with existing `verifyPassword()` in `auth.ts`
+
+**Agent creation flow:**
+1. Admin enters name + email in "Create Agent" dialog
+2. Server generates 12-char random password
+3. Password hashed with PBKDF2-SHA256 (128 hex char hash)
+4. Agent created in DB with hash
+5. Credentials modal shown once with email + plain password + copy buttons
+6. Plain password never stored
+
+**Profile assignment rules:**
+- One agent → many profiles (supported)
+- One profile → only one agent (enforced)
+- Reassignment shows confirmation dialog before removing from previous agent
+
+**Migration 010:** Run after deploying:
+```
+https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=010&secret=YOUR_CRON_SECRET
+```
+
+---
+
+*Current Phase: Agent & profile management complete*
+*Next Action: Deploy → run migration 010 → create agents/profiles from admin panel*

@@ -27,6 +27,7 @@ export interface Profile {
   id: string;
   profile_id: string;
   profile_name: string;
+  platform: string | null;
   stack: string | null;
   vollna_filter_tag: string | null;
   agent_id: string | null;

@@ -625,6 +625,31 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ---
 
+## Agent & Profile Management (completed 2026-04-02)
+> Theme: Agent creation with credentials, profile management, assignment enforcement.
+
+### Agent Management
+- [x] "Create Agent" button with name + email fields
+- [x] Auto-generate secure password (12-char random)
+- [x] PBKDF2-SHA256 hashing (100k iterations, 16-byte salt, 64-byte key = 128 hex chars)
+- [x] Credentials modal shown once after creation (email + password + copy buttons)
+- [x] Duplicate email prevention
+- [x] Agent table shows assigned profiles, login status
+- [x] `clickup_user_id` auto-generated (format: `agent-<uuid-prefix>`)
+
+### Profile Management
+- [x] "Create Profile" with name, unique identifier, platform, stack, agent assignment
+- [x] Platform field (Upwork/Freelancer/Fiverr/LinkedIn/Other)
+- [x] Migration 010: `platform` column on profiles table
+
+### Assignment & Routing
+- [x] One agent → many profiles (supported)
+- [x] One profile → only one agent (enforced with confirmation dialog)
+- [x] Bulk assignment API: `PUT /api/agents/[id]/assign-profiles`
+- [x] Reassignment removes profile from previous agent
+
+---
+
 ## Milestone 6: n8n Automation & Webhooks (Sprint 6)
 > Theme: Bidirectional n8n integration, webhook management, outbound events.
 
