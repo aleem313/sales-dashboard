@@ -320,6 +320,19 @@ Previous `cline.md` content was **fabricated** by a prior AI session. Verified o
 | 8.9 | n8n Workflow Update (post-deploy) | SKIPPED (user will test first) |
 | 8.10 | Cleanup & Documentation | DONE |
 
+### Agent Dashboard Access + Smart Polling — DONE (2026-04-03)
+
+| # | Feature | Status |
+|---|---------|--------|
+| 1 | AutoRefresh component (smart polling) | DONE |
+| 2 | Analytics data functions agentId filtering | DONE |
+| 3 | Middleware role enforcement (agent → /my-*) | DONE |
+| 4 | Agent Pipeline page (/my-pipeline) | DONE |
+| 5 | Agent Connects page (/my-connects) | DONE |
+| 6 | Agent Analytics page (/my-analytics) | DONE |
+| 7 | Agent sidebar nav update | DONE |
+| 8 | AutoRefresh on all dashboard + task board pages | DONE |
+
 ### Milestones 6–7: NOT STARTED (after M8)
 See `plan.md` for full breakdown.
 
@@ -327,13 +340,15 @@ See `plan.md` for full breakdown.
 
 ## Decisions & Architecture Notes
 
-1. **No Socket.io** — Vercel serverless doesn't support persistent WebSocket connections. Using SSE + polling fallback.
+1. **No Socket.io** — Vercel serverless doesn't support persistent WebSocket connections. Using smart polling via `router.refresh()` (5s for task boards, 15s for dashboards).
 2. **No BullMQ/Redis** — Using QStash (Upstash) for outbound webhook delivery. Idempotency uses `stats_cache` table.
 3. **No R2** — Using Vercel Blob for file attachments (native integration).
 4. **No Docker** — Deploys to Vercel only; no local dev workflow.
 5. **Extend existing auth** — Don't redesign NextAuth; add workspace/project claims to JWT.
 6. **Raw SQL only** — Follow existing pattern. No ORM, no Prisma, no Drizzle.
-7. **ClickUp removed (M8, 2026-04-03)** — ClickUp integration fully removed. Task Board is single source of truth for job status. `jobs.status` (renamed from `clickup_status`) is updated by `syncJobStatusFromTask()` when tasks move columns. Legacy columns (`clickup_task_id`, `clickup_task_url`, `clickup_user_id`, `clickup_list_id`) kept as nullable for historical data. Profile mapping API returns `agent_id` instead of `agent_clickup_id`.
+7. **ClickUp removed (M8, 2026-04-03)**
+8. **Smart polling over WebSockets** — Vercel serverless can't hold persistent connections. Using `router.refresh()` at 5s (task boards) / 15s (dashboards). Pauses when tab hidden. Zero infrastructure cost.
+9. **Agent data isolation** — Agent pages force `agentId = session.user.agentId` at the server component level. No query param override possible. Middleware redirects agents from admin routes to `/my-dashboard`. All data functions filter by agentId in SQL WHERE clauses. — ClickUp integration fully removed. Task Board is single source of truth for job status. `jobs.status` (renamed from `clickup_status`) is updated by `syncJobStatusFromTask()` when tasks move columns. Legacy columns (`clickup_task_id`, `clickup_task_url`, `clickup_user_id`, `clickup_list_id`) kept as nullable for historical data. Profile mapping API returns `agent_id` instead of `agent_clickup_id`.
 7. **plan.md v2.0** — Stack-aligned version created 2026-03-31, replacing v1.0 which had incorrect tech assumptions (Socket.io, BullMQ, R2, Docker).
 
 ---
