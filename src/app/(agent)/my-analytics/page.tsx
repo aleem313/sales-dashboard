@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { auth } from "@/lib/auth";
 import { ModelComparison, CountryHeatmap, TimeHeatmap, BudgetIntelligence } from "@/components/charts";
-import { getProposalAnalytics, getCountryStats, getBestTimeToApply, getBudgetWinRate } from "@/lib/data";
+import { getProposalAnalytics, getCountryStats, getBestTimeToApply, getBudgetWinRate, getAllProfiles } from "@/lib/data";
 import { parseDateRange } from "@/lib/date-utils";
 import { AutoRefresh } from "@/components/auto-refresh";
 
@@ -20,16 +20,18 @@ export default async function MyAnalyticsPage({
   const params = await searchParams;
   const range = parseDateRange(params);
 
-  const [modelData, countryData, timeData, budgetData] = await Promise.all([
+  const [modelData, countryData, timeData, budgetData, allProfiles] = await Promise.all([
     getProposalAnalytics(range, agentId),
     getCountryStats(range, agentId),
     getBestTimeToApply(range, agentId),
     getBudgetWinRate(undefined, agentId),
+    getAllProfiles(),
   ]);
+  const agentProfiles = allProfiles.filter((p) => p.agent_id === agentId);
 
   return (
     <>
-      <Header title="My Analytics" hideFilters />
+      <Header title="My Analytics" profiles={agentProfiles} hideAgentFilter />
       <div className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
         <AutoRefresh interval={15000} />
 

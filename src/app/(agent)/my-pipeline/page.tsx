@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { PipelineKanban } from "@/components/pipeline/pipeline-kanban";
 import { PipelineTable } from "@/components/pipeline/pipeline-table";
-import { getPipelineStages, getActiveJobsInPipeline } from "@/lib/data";
+import { getPipelineStages, getActiveJobsInPipeline, getAllProfiles } from "@/lib/data";
 import { parseDateRange } from "@/lib/date-utils";
 import { AutoRefresh } from "@/components/auto-refresh";
 
@@ -22,10 +22,12 @@ export default async function MyPipelinePage({
   const params = await searchParams;
   const range = parseDateRange(params);
 
-  const [stages, jobs] = await Promise.all([
+  const [stages, jobs, allProfiles] = await Promise.all([
     getPipelineStages(range, agentId),
     getActiveJobsInPipeline(agentId),
+    getAllProfiles(),
   ]);
+  const agentProfiles = allProfiles.filter((p) => p.agent_id === agentId);
 
   const cardBuckets: Record<string, string> = {
     "to do": "todo", "todo": "todo", "new": "todo", "proposal ready": "todo",
@@ -45,7 +47,7 @@ export default async function MyPipelinePage({
 
   return (
     <>
-      <Header title="My Pipeline" hideFilters />
+      <Header title="My Pipeline" profiles={agentProfiles} hideAgentFilter />
       <div className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
         <AutoRefresh interval={15000} />
 

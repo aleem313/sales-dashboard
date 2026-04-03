@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Separator } from "@/components/ui/separator";
 import { auth } from "@/lib/auth";
-import { getJobs } from "@/lib/data";
+import { getJobs, getAllProfiles } from "@/lib/data";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -27,17 +27,21 @@ export default async function MyJobsPage({
   const params = await searchParams;
   const agentId = session.user.agentId;
 
-  const jobs = await getJobs({
-    agent_id: agentId,
-    status: params.status || undefined,
-    limit: 50,
-    sortBy: "received_at",
-    sortDir: "desc",
-  });
+  const [jobs, allProfiles] = await Promise.all([
+    getJobs({
+      agent_id: agentId,
+      status: params.status || undefined,
+      limit: 50,
+      sortBy: "received_at",
+      sortDir: "desc",
+    }),
+    getAllProfiles(),
+  ]);
+  const agentProfiles = allProfiles.filter((p) => p.agent_id === agentId);
 
   return (
     <>
-      <Header title="My Jobs" hideFilters />
+      <Header title="My Jobs" profiles={agentProfiles} hideAgentFilter />
       <div className="container mx-auto px-4 py-6 space-y-6 flex-1 overflow-y-auto">
 
       <div className="flex gap-2 flex-wrap">

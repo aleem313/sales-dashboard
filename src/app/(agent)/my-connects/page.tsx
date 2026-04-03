@@ -5,7 +5,7 @@ import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { ConnectsUsageBars } from "@/components/connects/connects-usage-bars";
 import { ConnectROITable } from "@/components/connects/connect-roi-table";
 import { FilterQualityCard } from "@/components/connects/filter-quality";
-import { getConnectsUsageByProfile, getConnectROIByNiche, getFilterQualityAnalysis } from "@/lib/data";
+import { getConnectsUsageByProfile, getConnectROIByNiche, getFilterQualityAnalysis, getAllProfiles } from "@/lib/data";
 import { parseDateRange } from "@/lib/date-utils";
 import { AutoRefresh } from "@/components/auto-refresh";
 
@@ -23,11 +23,13 @@ export default async function MyConnectsPage({
   const params = await searchParams;
   const range = parseDateRange(params);
 
-  const [usage, roi, filterQuality] = await Promise.all([
+  const [usage, roi, filterQuality, allProfiles] = await Promise.all([
     getConnectsUsageByProfile(range, agentId),
     getConnectROIByNiche(range, agentId),
     getFilterQualityAnalysis(range, agentId),
+    getAllProfiles(),
   ]);
+  const agentProfiles = allProfiles.filter((p) => p.agent_id === agentId);
 
   const totalUsed = usage.reduce((s, u) => s + u.connects_used, 0);
   const totalWins = roi.reduce((s, r) => s + r.wins, 0);
@@ -36,7 +38,7 @@ export default async function MyConnectsPage({
 
   return (
     <>
-      <Header title="My Connects" hideFilters />
+      <Header title="My Connects" profiles={agentProfiles} hideAgentFilter />
       <div className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
         <AutoRefresh interval={15000} />
 

@@ -15,6 +15,7 @@ import {
   getAgentWinRateTrend,
   getJobs,
   getActiveAlerts,
+  getAllProfiles,
 } from "@/lib/data";
 import { parseDateRange } from "@/lib/date-utils";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -42,7 +43,7 @@ export default async function MyDashboardPage({
   const params = await searchParams;
   const range = parseDateRange(params);
 
-  const [kpi, avgResponseTime, funnel, pipeline, winRateTrend, recentJobs, alerts] = await Promise.all([
+  const [kpi, avgResponseTime, funnel, pipeline, winRateTrend, recentJobs, alerts, allProfiles] = await Promise.all([
     getKPIMetricsWithDeltas(range, agentId),
     getAvgResponseTime(range, agentId),
     getConversionFunnel(range, agentId),
@@ -50,7 +51,9 @@ export default async function MyDashboardPage({
     getAgentWinRateTrend(agentId),
     getJobs({ agent_id: agentId, startDate: range.startDate, endDate: range.endDate, limit: 10, sortBy: "received_at", sortDir: "desc" }),
     getActiveAlerts(),
+    getAllProfiles(),
   ]);
+  const agentProfiles = allProfiles.filter((p) => p.agent_id === agentId);
 
   const fmt = (n: number) => (n > 0 ? `+${n}` : `${n}`);
   const comparisonLabels: Record<string, string> = {
@@ -78,7 +81,7 @@ export default async function MyDashboardPage({
 
   return (
     <>
-      <Header title="My Dashboard" hideFilters />
+      <Header title="My Dashboard" profiles={agentProfiles} hideAgentFilter />
       <div className="container mx-auto px-4 py-6 space-y-6 flex-1 overflow-y-auto">
         <AutoRefresh interval={15000} />
 

@@ -9,9 +9,10 @@ interface HeaderProps {
   agents?: Agent[];
   profiles?: Profile[];
   hideFilters?: boolean;
+  hideAgentFilter?: boolean;
 }
 
-export function Header({ title, agents = [], profiles = [], hideFilters }: HeaderProps) {
+export function Header({ title, agents = [], profiles = [], hideFilters, hideAgentFilter }: HeaderProps) {
   return (
     <>
       <header className="flex shrink-0 items-center justify-between border-b border-border bg-card px-4 py-3 md:px-7">
@@ -26,7 +27,7 @@ export function Header({ title, agents = [], profiles = [], hideFilters }: Heade
             </p>
           </div>
         </div>
-        <HeaderControls agents={agents} profiles={profiles} hideFilters={hideFilters} />
+        <HeaderControls agents={agents} profiles={profiles} hideFilters={hideFilters} hideAgentFilter={hideAgentFilter} />
       </header>
       {!hideFilters && <ActiveFilterBar agents={agents} profiles={profiles} />}
     </>

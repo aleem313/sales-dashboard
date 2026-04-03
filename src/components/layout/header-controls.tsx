@@ -12,9 +12,10 @@ interface HeaderControlsProps {
   agents: Agent[];
   profiles: Profile[];
   hideFilters?: boolean;
+  hideAgentFilter?: boolean;
 }
 
-export function HeaderControls({ agents, profiles, hideFilters }: HeaderControlsProps) {
+export function HeaderControls({ agents, profiles, hideFilters, hideAgentFilter }: HeaderControlsProps) {
   const { data: session } = useSession();
   const [agentValue, setAgentValue] = useState("");
   const [profileValue, setProfileValue] = useState("");
@@ -46,26 +47,28 @@ export function HeaderControls({ agents, profiles, hideFilters }: HeaderControls
     <div className="hidden items-center gap-2 md:flex">
       {!hideFilters && (
         <>
-          {/* Agent filter */}
-          <div className="relative inline-flex items-center">
-            <Users className="pointer-events-none absolute left-2.5 z-10 h-3.5 w-3.5 text-muted-foreground" />
-            <select
-              name="agent"
-              value={agentValue}
-              onChange={handleSelectChange}
-              className="appearance-none cursor-pointer rounded-[7px] border border-border bg-transparent py-1.5 pr-7 pl-8 text-[13.5px] font-semibold text-muted-foreground transition-all hover:border-[var(--primary)] hover:text-foreground focus:border-[var(--primary)] focus:text-foreground focus:outline-none min-w-[130px]"
-            >
-              <option value="">All Agents</option>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-            <span className="pointer-events-none absolute right-2 text-[12px] text-muted-foreground">
-              ▾
-            </span>
-          </div>
+          {/* Agent filter — hidden for agents since data is session-scoped */}
+          {!hideAgentFilter && (
+            <div className="relative inline-flex items-center">
+              <Users className="pointer-events-none absolute left-2.5 z-10 h-3.5 w-3.5 text-muted-foreground" />
+              <select
+                name="agent"
+                value={agentValue}
+                onChange={handleSelectChange}
+                className="appearance-none cursor-pointer rounded-[7px] border border-border bg-transparent py-1.5 pr-7 pl-8 text-[13.5px] font-semibold text-muted-foreground transition-all hover:border-[var(--primary)] hover:text-foreground focus:border-[var(--primary)] focus:text-foreground focus:outline-none min-w-[130px]"
+              >
+                <option value="">All Agents</option>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute right-2 text-[12px] text-muted-foreground">
+                ▾
+              </span>
+            </div>
+          )}
 
           {/* Profile filter */}
           <div className="relative inline-flex items-center">
