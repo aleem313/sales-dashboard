@@ -59,8 +59,8 @@ export function PipelineTable({ jobs }: PipelineTableProps) {
                   {job.agent_name || "—"}
                 </td>
                 <td className="border-b border-border px-3 py-2.5 text-[13.5px]">
-                  <CyberBadge variant={statusBadgeVariant(job.clickup_status)}>
-                    {job.clickup_status}
+                  <CyberBadge variant={statusBadgeVariant(job.status)}>
+                    {job.status}
                   </CyberBadge>
                 </td>
                 <td className="border-b border-border px-3 py-2.5 text-[13.5px] text-accent-green">

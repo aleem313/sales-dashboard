@@ -22,7 +22,6 @@ export const config = {
     "/api/sync/sheets",
     "/api/jobs/:path*",
     "/api/settings/:path*",
-    "/api/auth/clickup",
     "/analytics/:path*",
     "/my-dashboard/:path*",
     "/my-jobs/:path*",

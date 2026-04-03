@@ -540,7 +540,7 @@ export function TaskCreateFull({ projectId, columns, members, defaultColumnId, b
                                 className="flex flex-col w-full rounded-md px-2.5 py-2 text-left hover:bg-muted transition-colors gap-0.5">
                                 <span className="text-xs font-medium line-clamp-1">{j.job_title}</span>
                                 <span className="text-[10px] text-muted-foreground">
-                                  {j.budget_type} &middot; {j.client_country ?? "Unknown"} &middot; {j.clickup_status}
+                                  {j.budget_type} &middot; {j.client_country ?? "Unknown"} &middot; {j.status}
                                 </span>
                               </button>
                             ))}

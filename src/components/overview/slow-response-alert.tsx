@@ -66,7 +66,7 @@ export function SlowResponseAlert({ jobs }: { jobs: SlowJob[] }) {
                   {job.profile_name ?? "—"}
                 </td>
                 <td className="border-b border-destructive/10 px-3 py-2 text-[13.5px] text-muted-foreground">
-                  {job.clickup_status}
+                  {job.status}
                 </td>
                 <td className="border-b border-destructive/10 px-3 py-2 text-[13.5px] font-bold text-destructive">
                   {formatWaitTime(job.response_minutes)}

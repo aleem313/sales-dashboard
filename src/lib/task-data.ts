@@ -1371,3 +1371,111 @@ export async function deleteSavedView(viewId: string): Promise<boolean> {
   const result = await sql`DELETE FROM saved_views WHERE id = ${viewId} RETURNING id`;
   return result.rows.length > 0;
 }
+
+// ============================================================
+// JOB-TASK STATUS SYNC
+// ============================================================
+
+/**
+ * Get the linked job_id from a task's custom_fields._job_id.
+ * Returns null if no linked job.
+ */
+export async function getLinkedJobId(taskId: string): Promise<string | null> {
+  const result = await sql`
+    SELECT custom_fields->>'_job_id' AS job_id
+    FROM tasks WHERE id = ${taskId}
+  `;
+  return result.rows[0]?.job_id ?? null;
+}
+
+/**
+ * Sync job status when a task moves columns on the board.
+ * - Updates jobs.status to the new column name
+ * - Sets outcome to 'won'/'lost' when moving to terminal columns
+ * - Clears outcome when moving OUT of terminal columns (reversal)
+ * - Sets proposal_sent_at when entering post-sent columns
+ */
+export async function syncJobStatusFromTask(
+  taskId: string,
+  newColumnName: string,
+  oldColumnName?: string
+): Promise<boolean> {
+  // Find linked job via custom_fields._job_id or jobs.task_id
+  const result = await sql`
+    SELECT j.id, j.job_id, j.outcome
+    FROM jobs j
+    WHERE j.task_id = ${taskId}
+       OR j.job_id = (SELECT custom_fields->>'_job_id' FROM tasks WHERE id = ${taskId})
+    LIMIT 1
+  `;
+  if (result.rows.length === 0) return false;
+
+  const job = result.rows[0];
+  const lowerCol = newColumnName.toLowerCase();
+  const lowerOld = oldColumnName?.toLowerCase();
+
+  // Terminal columns
+  const isWon = lowerCol === 'won';
+  const isLost = lowerCol === 'lost';
+  const wasTerminal = lowerOld === 'won' || lowerOld === 'lost';
+
+  // Post-sent columns (proposal has been sent)
+  const postSentStatuses = [
+    'sent', 'following up', 'prototype required', 'prototype done',
+    'prototype sent', 'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost'
+  ];
+  const isPostSent = postSentStatuses.includes(lowerCol);
+
+  if (isWon) {
+    await sql`
+      UPDATE jobs SET status = ${newColumnName}, outcome = 'won', outcome_at = NOW(), updated_at = NOW()
+      WHERE id = ${job.id}
+    `;
+  } else if (isLost) {
+    await sql`
+      UPDATE jobs SET status = ${newColumnName}, outcome = 'lost', outcome_at = NOW(), updated_at = NOW()
+      WHERE id = ${job.id}
+    `;
+  } else if (wasTerminal) {
+    // Reversal: moving out of Won/Lost → clear outcome
+    await sql`
+      UPDATE jobs SET status = ${newColumnName}, outcome = NULL, outcome_at = NULL, updated_at = NOW()
+      WHERE id = ${job.id}
+    `;
+  } else {
+    await sql`
+      UPDATE jobs SET status = ${newColumnName}, updated_at = NOW()
+      WHERE id = ${job.id}
+    `;
+  }
+
+  // Set proposal_sent_at when first entering a post-sent column
+  if (isPostSent) {
+    await sql`
+      UPDATE jobs SET proposal_sent_at = COALESCE(proposal_sent_at, NOW())
+      WHERE id = ${job.id} AND proposal_sent_at IS NULL
+    `;
+  }
+
+  return true;
+}
+
+/**
+ * Bulk-update job statuses when a column is renamed.
+ * All tasks in the column with linked jobs get their job.status updated.
+ */
+export async function syncAllJobsInColumn(columnId: string, newColumnName: string): Promise<number> {
+  const result = await sql`
+    UPDATE jobs SET status = ${newColumnName}, updated_at = NOW()
+    WHERE job_id IN (
+      SELECT custom_fields->>'_job_id'
+      FROM tasks
+      WHERE column_id = ${columnId}
+        AND custom_fields->>'_job_id' IS NOT NULL
+    )
+    OR task_id IN (
+      SELECT id FROM tasks WHERE column_id = ${columnId}
+    )
+  `;
+  return result.rowCount ?? 0;
+}

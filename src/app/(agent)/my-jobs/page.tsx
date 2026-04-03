@@ -28,7 +28,7 @@ export default async function MyJobsPage({
 
   const jobs = await getJobs({
     agent_id: agentId,
-    clickup_status: params.status || undefined,
+    status: params.status || undefined,
     limit: 50,
     sortBy: "received_at",
     sortDir: "desc",
@@ -99,7 +99,7 @@ export default async function MyJobsPage({
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{job.clickup_status}</Badge>
+                      <Badge variant="outline">{job.status}</Badge>
                     </TableCell>
                     <TableCell>
                       {job.outcome ? (
@@ -127,10 +127,9 @@ export default async function MyJobsPage({
                         : "—"}
                     </TableCell>
                     <TableCell>
-                      {!job.proposal_sent_at && job.clickup_status === "Proposal Ready" && (
+                      {!job.proposal_sent_at && job.status === "Proposal Ready" && (
                         <MarkAsSentButton
                           jobId={job.id}
-                          clickupTaskId={job.clickup_task_id}
                         />
                       )}
                     </TableCell>

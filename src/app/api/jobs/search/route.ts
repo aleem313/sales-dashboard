@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   const result = await sql`
     SELECT id, job_id, job_title, job_url, budget_type, budget_min, budget_max,
            client_country, posted_at, outcome, skills, proposal_text,
-           clickup_status, agent_id
+           status, agent_id
     FROM jobs
     WHERE (${q}::text = '' OR job_title ILIKE '%' || ${q}::text || '%'
            OR job_id ILIKE '%' || ${q}::text || '%')

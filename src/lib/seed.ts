@@ -21,7 +21,7 @@ export async function migrateSchema() {
   await sql`
     CREATE TABLE agents (
       id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      clickup_user_id   TEXT UNIQUE NOT NULL,
+      clickup_user_id   TEXT UNIQUE,            -- legacy, nullable after M8
       name              TEXT NOT NULL,
       email             TEXT,
       avatar_url        TEXT,
@@ -39,7 +39,7 @@ export async function migrateSchema() {
       stack             TEXT,
       vollna_filter_tag TEXT UNIQUE,
       agent_id          UUID REFERENCES agents(id),
-      clickup_list_id   TEXT,
+      clickup_list_id   TEXT,                    -- legacy, optional after M8
       active            BOOLEAN DEFAULT true,
       created_at        TIMESTAMPTZ DEFAULT NOW()
     )
@@ -67,9 +67,10 @@ export async function migrateSchema() {
       received_at       TIMESTAMPTZ DEFAULT NOW(),
       profile_id        TEXT REFERENCES profiles(profile_id),
       agent_id          UUID REFERENCES agents(id),
-      clickup_task_id   TEXT,
-      clickup_task_url  TEXT,
-      clickup_status    TEXT DEFAULT 'Proposal Ready',
+      clickup_task_id   TEXT,                    -- legacy, not written for new jobs after M8
+      clickup_task_url  TEXT,                    -- legacy, not written for new jobs after M8
+      status            TEXT DEFAULT 'Proposal Ready',
+      task_id           UUID REFERENCES tasks(id) ON DELETE SET NULL,
       proposal_text     TEXT,
       gpt_model         TEXT,
       gpt_tokens_used   INTEGER,
@@ -111,7 +112,8 @@ export async function migrateSchema() {
   await sql`CREATE INDEX idx_jobs_profile_id ON jobs(profile_id)`;
   await sql`CREATE INDEX idx_jobs_agent_id ON jobs(agent_id)`;
   await sql`CREATE INDEX idx_jobs_received_at ON jobs(received_at DESC)`;
-  await sql`CREATE INDEX idx_jobs_clickup_status ON jobs(clickup_status)`;
+  await sql`CREATE INDEX idx_jobs_status ON jobs(status)`;
+  await sql`CREATE INDEX idx_jobs_task_id ON jobs(task_id)`;
   await sql`CREATE INDEX idx_jobs_outcome ON jobs(outcome)`;
   await sql`CREATE INDEX idx_jobs_job_id ON jobs(job_id)`;
 
@@ -121,7 +123,6 @@ export async function migrateSchema() {
     SELECT
       a.id,
       a.name,
-      a.clickup_user_id,
       COUNT(j.id) AS total_jobs,
       COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL THEN 1 END) AS proposals_sent,
       COUNT(CASE WHEN j.outcome = 'won' THEN 1 END) AS won,
@@ -138,7 +139,7 @@ export async function migrateSchema() {
       ) AS avg_response_hours
     FROM agents a
     LEFT JOIN jobs j ON j.agent_id = a.id
-    GROUP BY a.id, a.name, a.clickup_user_id
+    GROUP BY a.id, a.name
   `;
 
   await sql`
@@ -320,7 +321,7 @@ export async function seedTestData() {
         job_id, job_title, job_url, budget_type, budget_min, budget_max,
         skills, client_country, client_rating, client_total_spent,
         posted_at, received_at, profile_id, agent_id,
-        clickup_task_id, clickup_status, proposal_text,
+        clickup_task_id, status, proposal_text,
         gpt_model, outcome, won_value, proposal_sent_at, outcome_at
       ) VALUES (
         ${"job_" + String(i + 1).padStart(4, "0")},
@@ -357,7 +358,7 @@ export async function seedTestData() {
     await sql`
       INSERT INTO sync_log (source, records_synced, records_updated, started_at, completed_at, status)
       VALUES (
-        'clickup',
+        'n8n_webhook',
         ${Math.floor(random() * 20 + 5)},
         ${Math.floor(random() * 10)},
         ${startedAt.toISOString()},

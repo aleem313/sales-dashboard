@@ -13,6 +13,8 @@ import {
   deleteChecklistItem,
   setTaskAssignees,
   setTaskTags,
+  syncJobStatusFromTask,
+  syncAllJobsInColumn,
   createProject,
   updateProject,
   deleteProject,
@@ -86,7 +88,24 @@ export async function moveTaskAction(
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
 
+  // Get old column name before move (for reversal detection)
+  const { sql } = await import("@vercel/postgres");
+  const oldCol = await sql`
+    SELECT c.name FROM tasks t JOIN columns c ON c.id = t.column_id WHERE t.id = ${taskId}
+  `;
+  const oldColumnName = oldCol.rows[0]?.name as string | undefined;
+
   const task = await moveTask(taskId, columnId, position, session.user.agentId ?? null);
+
+  // Sync linked job status when column changes
+  if (task && oldColumnName) {
+    const newCol = await sql`SELECT name FROM columns WHERE id = ${columnId}`;
+    const newColumnName = newCol.rows[0]?.name as string;
+    if (oldColumnName !== newColumnName) {
+      await syncJobStatusFromTask(taskId, newColumnName, oldColumnName);
+    }
+  }
+
   revalidateBoard();
   return task;
 }
@@ -252,6 +271,12 @@ export async function updateColumnAction(
   if (session.user.role !== "admin") throw new Error("Admin only");
 
   const col = await updateColumn(columnId, fields);
+
+  // When column renamed, update all linked jobs to the new name
+  if (fields.name && col) {
+    await syncAllJobsInColumn(columnId, fields.name);
+  }
+
   revalidateBoard();
   return col;
 }
@@ -261,9 +286,16 @@ export async function deleteColumnAction(columnId: string, moveTasksTo?: string)
   if (!session?.user) throw new Error("Unauthorized");
   if (session.user.role !== "admin") throw new Error("Admin only");
 
-  // If moveTasksTo is set, bulk-move tasks before deleting
+  // If moveTasksTo is set, bulk-move tasks before deleting and sync linked jobs
   if (moveTasksTo) {
     const { sql } = await import("@vercel/postgres");
+    // Get target column name for job sync
+    const targetCol = await sql`SELECT name FROM columns WHERE id = ${moveTasksTo}`;
+    const targetName = targetCol.rows[0]?.name as string;
+
+    // Sync linked jobs to target column name before moving tasks
+    await syncAllJobsInColumn(columnId, targetName);
+
     await sql`UPDATE tasks SET column_id = ${moveTasksTo} WHERE column_id = ${columnId}`;
   }
 

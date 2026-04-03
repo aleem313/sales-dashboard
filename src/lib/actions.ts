@@ -12,7 +12,6 @@ import {
   markJobAsSent,
   getAllProfiles,
 } from "./data";
-import { updateTaskStatus } from "./clickup";
 
 // Generate a PBKDF2-SHA256 hash with 16-byte salt, 64-byte key (128 hex chars)
 async function hashPassword(password: string): Promise<string> {
@@ -190,7 +189,6 @@ export async function createProfileAction(data: {
   stack?: string | null;
   vollna_filter_tag?: string | null;
   agent_id?: string | null;
-  clickup_list_id?: string | null;
 }) {
   const profile = await createProfile(data);
 
@@ -210,63 +208,18 @@ export async function createProfileAction(data: {
   return { profile, n8nSync };
 }
 
-export async function triggerClickUpSync() {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "http://localhost:3000";
-
-  const res = await fetch(`${baseUrl}/api/sync/clickup`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${process.env.CRON_SECRET ?? ""}`,
-    },
-  });
-
-  const result = await res.json();
-  revalidatePath("/settings");
-  revalidatePath("/dashboard");
-  return result;
-}
-
 export async function dismissAlertAction(id: string) {
   await dismissAlert(id);
   revalidatePath("/dashboard");
   revalidatePath("/settings");
 }
 
-export async function markProposalSentAction(jobId: string, clickupTaskId?: string | null) {
+export async function markProposalSentAction(jobId: string) {
   await markJobAsSent(jobId);
-  if (clickupTaskId) {
-    try {
-      await updateTaskStatus(clickupTaskId, "Sent");
-    } catch (err) {
-      console.error("Failed to update ClickUp status:", err);
-    }
-  }
   revalidatePath("/my-jobs");
   revalidatePath("/my-dashboard");
   revalidatePath("/jobs");
   revalidatePath("/dashboard");
-}
-
-export async function triggerClickUpFullSync() {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "http://localhost:3000";
-
-  const res = await fetch(`${baseUrl}/api/sync/clickup`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.CRON_SECRET ?? ""}`,
-    },
-  });
-
-  const result = await res.json();
-  revalidatePath("/settings");
-  revalidatePath("/dashboard");
-  revalidatePath("/pipeline");
-  revalidatePath("/jobs");
-  return result;
 }
 
 export async function triggerSheetsSync() {

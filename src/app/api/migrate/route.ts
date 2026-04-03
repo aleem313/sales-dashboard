@@ -13,8 +13,12 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
+  }
+
+  if (migration === "012") {
+    return run012();
   }
 
   if (migration === "011") {
@@ -406,6 +410,74 @@ async function run011() {
     return NextResponse.json({
       success: false,
       migration: "011_fix_profile_assignments",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run012() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 012: Remove ClickUp dependency...");
+
+    // 1. Rename clickup_status → status (skip if already renamed)
+    const colCheck = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'jobs' AND column_name = 'clickup_status'
+    `;
+    if (colCheck.rows.length > 0) {
+      await sql`ALTER TABLE jobs RENAME COLUMN clickup_status TO status`;
+      results.push("✓ Renamed clickup_status → status");
+    } else {
+      results.push("⊘ clickup_status already renamed to status");
+    }
+
+    // 2. Rename index
+    const idxCheck = await sql`SELECT indexname FROM pg_indexes WHERE indexname = 'idx_jobs_clickup_status'`;
+    if (idxCheck.rows.length > 0) {
+      await sql`ALTER INDEX idx_jobs_clickup_status RENAME TO idx_jobs_status`;
+      results.push("✓ Renamed index → idx_jobs_status");
+    } else {
+      results.push("⊘ Index already renamed or does not exist");
+    }
+
+    // 3. Add task_id FK column
+    const taskIdCheck = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'jobs' AND column_name = 'task_id'
+    `;
+    if (taskIdCheck.rows.length === 0) {
+      await sql`ALTER TABLE jobs ADD COLUMN task_id UUID REFERENCES tasks(id) ON DELETE SET NULL`;
+      results.push("✓ Added task_id column with FK to tasks");
+    } else {
+      results.push("⊘ task_id column already exists");
+    }
+    await sql`CREATE INDEX IF NOT EXISTS idx_jobs_task_id ON jobs(task_id)`;
+    results.push("✓ idx_jobs_task_id index ensured");
+
+    // 4. Make clickup_user_id nullable
+    const nullableCheck = await sql`
+      SELECT is_nullable FROM information_schema.columns
+      WHERE table_name = 'agents' AND column_name = 'clickup_user_id'
+    `;
+    if (nullableCheck.rows.length > 0 && nullableCheck.rows[0].is_nullable === 'NO') {
+      await sql`ALTER TABLE agents ALTER COLUMN clickup_user_id DROP NOT NULL`;
+      results.push("✓ Made clickup_user_id nullable");
+    } else {
+      results.push("⊘ clickup_user_id already nullable or does not exist");
+    }
+
+    return NextResponse.json({
+      success: true,
+      migration: "012_remove_clickup_dependency",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "012_remove_clickup_dependency",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });

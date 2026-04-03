@@ -1,7 +1,7 @@
 # Rising Lion Task Management — Project History & Context
 
 > **Purpose:** Single source of truth for conversation continuity. Read this file first in every new conversation to avoid re-exploring the codebase.
-> **Last Updated:** 2026-03-31
+> **Last Updated:** 2026-04-03
 
 ---
 
@@ -305,7 +305,22 @@ Previous `cline.md` content was **fabricated** by a prior AI session. Verified o
 | 5.5 | Advanced Filter System ("More Filters" for custom fields) | DONE |
 | 5.6 | Saved Views (load/save/delete) | DONE |
 
-### Milestones 6–7: NOT STARTED
+### Milestone 8: ClickUp Removal & Task Board Integration — DONE (pending migration run + n8n update)
+
+| # | Feature | Status |
+|---|---------|--------|
+| 8.1 | Database Migration (rename clickup_status → status) | DONE (code ready, needs deploy + run) |
+| 8.2 | Data Layer Refactor (data.ts SQL queries) | DONE |
+| 8.3 | Job-Task Status Sync (moveTask → update job) | DONE |
+| 8.4 | Remove ClickUp Routes & Client | DONE |
+| 8.5 | Remove ClickUp Server Actions | DONE |
+| 8.6 | Update n8n Webhook Handler | DONE |
+| 8.7 | Update Profile Mapping API | DONE |
+| 8.8 | Frontend Updates | DONE |
+| 8.9 | n8n Workflow Update (post-deploy) | SKIPPED (user will test first) |
+| 8.10 | Cleanup & Documentation | DONE |
+
+### Milestones 6–7: NOT STARTED (after M8)
 See `plan.md` for full breakdown.
 
 ---
@@ -318,6 +333,7 @@ See `plan.md` for full breakdown.
 4. **No Docker** — Deploys to Vercel only; no local dev workflow.
 5. **Extend existing auth** — Don't redesign NextAuth; add workspace/project claims to JWT.
 6. **Raw SQL only** — Follow existing pattern. No ORM, no Prisma, no Drizzle.
+7. **ClickUp removed (M8, 2026-04-03)** — ClickUp integration fully removed. Task Board is single source of truth for job status. `jobs.status` (renamed from `clickup_status`) is updated by `syncJobStatusFromTask()` when tasks move columns. Legacy columns (`clickup_task_id`, `clickup_task_url`, `clickup_user_id`, `clickup_list_id`) kept as nullable for historical data. Profile mapping API returns `agent_id` instead of `agent_clickup_id`.
 7. **plan.md v2.0** — Stack-aligned version created 2026-03-31, replacing v1.0 which had incorrect tech assumptions (Socket.io, BullMQ, R2, Docker).
 
 ---
@@ -850,5 +866,133 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=010&secret=YOUR_CRON
 
 ---
 
-*Current Phase: Full n8n integration working — dynamic profile sync verified in production*
-*Next Action: Add N8N_API_URL + N8N_API_KEY to Vercel env vars for auto-provisioning of webhook nodes on new profile creation*
+### Task Board Enhancements — Filters, Visibility & Reason Field (2026-04-03)
+
+**Task:** Improve agent board UX, fix unassigned task visibility, add conditional Reason field for N/A status.
+
+**Modified files:**
+
+| File | Change |
+|------|--------|
+| `src/app/(agent)/my-tasks/page.tsx` | Added `BoardFilterBar` so agents can use all filters (search, column, priority, assignee, labels, custom fields). Now loads tags + saved views. Uses updated `getAgentTasksAcrossBoards(agentId, projectId)`. |
+| `src/lib/task-data.ts` | `getAgentTasksAcrossBoards()` now returns unassigned tasks (no assignees) scoped to current project, in addition to agent's own tasks. New signature: `(agentId, currentProjectId?)`. |
+| `src/components/tasks/task-full-view.tsx` | Added conditional `ReasonMultiSelect` field below Boosted Connects — visible only when column name is "N/A". 14 checkbox options stored as `_reason` array in `custom_fields`. Removed duplicate "Custom Fields" section (fields already shown in dedicated sections). |
+| `src/components/tasks/custom-field-filter.tsx` | Injected virtual "Reason" field (`_reason`, type `multi_select`) into "More Filters". Added `MultiSelectFilterValue` popover component for proper multi-select value picking. Works with existing `contains_any`/`contains_all` operators. |
+
+**Reason field options:** Old job, Duplicate, Location loc, Low Higher rate, Language barrier, Too many invites, Video Proposal, Client suspended, Portfolio unavailable, Client Low spending, Bad rating client, Job unavailable, Already hired, Out of stack
+
+**Unassigned task logic:** `showTask = task.assignee === currentUser.id || task.assignee === null` — tasks with no assignees visible to all agents on that board.
+
+---
+
+## Architectural Shift: ClickUp → Internal Task Board (2026-04-03)
+
+### Reason for Change
+
+ClickUp was the original external task management system used to track Upwork job proposals through their lifecycle (Proposal Ready → Sent → Following Up → Won/Lost). With the completion of Milestones 1–5, the internal Task Board now provides full ClickUp-parity functionality:
+
+- Kanban board with 13 Upwork-specific columns (matching ClickUp statuses)
+- Custom fields for all job metadata (Job Details, Client Info, Routing Info, Proposal)
+- n8n dual-delivery already creates tasks on both ClickUp and the internal board
+- Drag-and-drop, filters, grouping, saved views, comments, activity log — all built
+
+**ClickUp is now redundant.** Maintaining two parallel systems (ClickUp + Task Board) creates sync complexity, dual-write risks, and unnecessary API dependency. The Task Board is the future.
+
+### High-Level Flow Comparison
+
+**BEFORE (ClickUp-dependent):**
+```
+Vollna → n8n → Create ClickUp Task → Format Dashboard Event → POST /api/webhook/n8n
+                                                                     ↓
+                                                            jobs table (clickup_status)
+                                                                     ↓
+ClickUp status change → POST /api/webhook/clickup → UPDATE jobs.clickup_status
+                                                                     ↓
+Daily cron → GET /api/sync/clickup → bulk UPDATE jobs.clickup_status
+                                                                     ↓
+Dashboard metrics ← SQL queries on jobs.clickup_status
+```
+
+**AFTER (Task Board only):**
+```
+Vollna → n8n → Create Board Task → POST /api/v1/webhooks/tasks
+                                         ↓
+                                   tasks table (column_id)
+                                         ↓
+Board column move (drag/drop) → moveTaskAction() → syncJobStatusFromTask()
+                                                          ↓
+                                                   UPDATE jobs.status
+                                                          ↓
+Dashboard metrics ← SQL queries on jobs.status (same values, renamed column)
+```
+
+### What Changes
+
+| Component | Before | After |
+|-----------|--------|-------|
+| Job status source | `jobs.clickup_status` (from ClickUp API) | `jobs.status` (from Task Board column) |
+| Status updates | ClickUp webhook + daily cron sync | Task Board column move → server action |
+| n8n output | ClickUp task + Board task (dual) | Board task only |
+| API client | `src/lib/clickup.ts` (ClickUp REST API) | Deleted — no external API |
+| Sync routes | `/api/sync/clickup`, `/api/webhook/clickup` | Deleted — not needed |
+| OAuth | `/api/auth/clickup/*` | Deleted — no ClickUp auth |
+| Cron | Daily ClickUp sync at 00:00 UTC | Removed — board is real-time |
+| Profile mapping | Returns `clickup_list_id`, `agent_clickup_id` | Returns `agent_id` only |
+
+### What Stays the Same
+
+- `jobs` table structure (column renamed, data preserved)
+- KPI calculation logic (same SQL, different column name)
+- n8n → Dashboard webhook (`/api/webhook/n8n`) — still works
+- Google Sheets sync — completely independent
+- Agent stats, profile stats — same queries
+- All dashboard pages — same data, same UI
+
+### Impacted Modules
+
+| Module | Impact Level | Changes Required |
+|--------|-------------|-----------------|
+| `src/lib/data.ts` | High | ~20 SQL replacements (`clickup_status` → `status`) |
+| `src/lib/actions.ts` | Medium | Remove 3 ClickUp actions, modify 1 |
+| `src/lib/types.ts` | Medium | Rename fields, mark legacy as optional |
+| `src/lib/task-actions.ts` | Medium | Add job-status sync to `moveTaskAction()` |
+| `src/lib/task-data.ts` | Low | Add `syncJobStatusFromTask()` helper |
+| `src/lib/clickup.ts` | Deleted | Entire file removed |
+| API routes | High | 5 route files deleted, 3 modified |
+| Frontend components | Medium | ~6 components updated (column name change) |
+| `vercel.json` | Low | Remove 1 cron entry |
+| n8n workflow | Medium | Remove ClickUp node, rewire dashboard event |
+
+### Migration Notes
+
+- **No data migration** — `ALTER TABLE RENAME COLUMN` preserves all historical data
+- **Rollback** — Single `git revert` + `ALTER TABLE RENAME COLUMN` back
+- **Zero downtime** — Column rename is atomic, no data rewrite
+- **Historical ClickUp data** — `clickup_task_id`, `clickup_task_url` columns preserved as nullable legacy
+- **n8n timing** — Dashboard code deployed first; n8n workflow updated second. `continueOnFail` on ClickUp node prevents breakage during gap.
+
+### Milestone 8 in plan.md
+
+Full implementation checklist added as Milestone 8 in `plan.md` (10 sub-milestones, ~45 checklist items). Priority order updated: **M8 (ClickUp removal) → M6 → M7**.
+
+---
+
+### n8n Nawal Profile Node (2026-04-03)
+
+**Task:** Add Nawal webhook + respond nodes to n8n workflow.
+
+**n8n workflow update (EWnZg3svZWwcIRs4, now 32 nodes):**
+- Added "Webhook - Nawal" (POST, path: `nawal-profile-webhook`, responseMode: responseNode)
+- Added "Respond - Nawal" (typeVersion 1.1)
+- Connected: Webhook → Respond → Merge All Webhooks (input index 7)
+- Updated Merge `numberInputs`: 7 → 8
+- Position: [-1408, 1360] (below Rebekah at [-1408, 1136])
+
+**Webhook URL:** `https://ikonicdev.app.n8n.cloud/webhook/nawal-profile-webhook`
+
+**Updated Merge input indices:** Sana=0, Laiba=1, Khansa=2, Saim=3, Shayan=4, Craig=5, Rebekah=6, Nawal=7
+
+---
+
+*Current Phase: Board UX enhancements complete, n8n Nawal profile added*
+*Next Action: Create Nawal profile in dashboard Settings and assign to agent*

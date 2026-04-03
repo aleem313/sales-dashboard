@@ -14,9 +14,8 @@ export async function GET() {
       p.profile_name,
       p.profile_id,
       p.stack,
-      p.clickup_list_id,
-      a.name AS assigned_agent,
-      a.clickup_user_id AS agent_clickup_id
+      a.id AS agent_id,
+      a.name AS assigned_agent
     FROM profiles p
     LEFT JOIN agents a ON p.agent_id = a.id
     WHERE p.active = true
@@ -26,19 +25,17 @@ export async function GET() {
   // Build the mapping object keyed by profile_name (matches n8n filter_name)
   const mapping: Record<string, {
     assigned_agent: string;
-    agent_clickup_id: string;
+    agent_id: string;
     profile_id: string;
     stack: string;
-    clickup_list_id: string;
   }> = {};
 
   for (const row of result.rows) {
     mapping[row.profile_name] = {
       assigned_agent: row.assigned_agent || "",
-      agent_clickup_id: row.agent_clickup_id || "",
+      agent_id: row.agent_id || "",
       profile_id: row.profile_id || row.profile_name,
       stack: row.stack || "",
-      clickup_list_id: row.clickup_list_id || "",
     };
   }
 

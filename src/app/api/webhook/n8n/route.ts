@@ -56,19 +56,12 @@ function parseBudgetRange(budget: unknown): { min: number | null; max: number | 
   return { min: parsed[0], max: parsed[1] };
 }
 
-// Look up agent UUID by name or clickup_user_id
+// Look up agent UUID by name
 async function resolveAgentId(
   agentName?: string | null,
   agentClickupId?: string | null
 ): Promise<string | null> {
   if (!agentName && !agentClickupId) return null;
-
-  if (agentClickupId) {
-    const result = await sql`
-      SELECT id FROM agents WHERE clickup_user_id = ${agentClickupId} LIMIT 1
-    `;
-    if (result.rows.length > 0) return result.rows[0].id;
-  }
 
   if (agentName) {
     const result = await sql`
@@ -110,8 +103,6 @@ async function normalizePayload(data: Record<string, unknown>) {
   const client = data.client as Record<string, unknown> | undefined;
   const routing = data.routing as Record<string, unknown> | undefined;
   const scores = data.scores as Record<string, unknown> | undefined;
-  const clickup = data.clickup as Record<string, unknown> | undefined;
-
   // Detect nested n8n format vs flat format
   const isNested = Boolean(job || client || routing);
 
@@ -137,7 +128,7 @@ async function normalizePayload(data: Record<string, unknown>) {
       agent_id: (data.agent_id as string) ?? null,
       clickup_task_id: (data.clickup_task_id as string) ?? null,
       clickup_task_url: (data.clickup_task_url as string) ?? null,
-      clickup_status: (data.clickup_status as string) ?? undefined,
+      status: (data.status as string) ?? undefined,
       proposal_text: (data.proposal_text as string) ?? null,
       gpt_model: (data.gpt_model as string) ?? null,
       gpt_tokens_used: (data.gpt_tokens_used as number) ?? null,
@@ -186,9 +177,9 @@ async function normalizePayload(data: Record<string, unknown>) {
     posted_at: (job?.postedDate as string) ?? null,
     profile_id: profileId,
     agent_id: agentId,
-    clickup_task_id: (clickup?.taskId as string) ?? (data.clickup_task_id as string) ?? null,
-    clickup_task_url: (clickup?.taskUrl as string) ?? (data.clickup_task_url as string) ?? null,
-    clickup_status: (clickup?.status as string) ?? (data.clickup_status as string) ?? undefined,
+    clickup_task_id: null,
+    clickup_task_url: null,
+    status: (data.status as string) ?? undefined,
     proposal_text: (data.proposal as string) ?? null,
     gpt_model:
       (data.gpt_model as string) ??
@@ -199,8 +190,8 @@ async function normalizePayload(data: Record<string, unknown>) {
   };
 }
 
-// Map n8n outcome to the appropriate clickup_status
-function outcomeToClickupStatus(outcome: string | undefined): string | undefined {
+// Map n8n outcome to the appropriate board status
+function outcomeToStatus(outcome: string | undefined): string | undefined {
   switch (outcome) {
     case "proposal_created":
       return "Proposal Ready";
@@ -246,10 +237,10 @@ async function processWebhook(data: Record<string, unknown>) {
       return NextResponse.json({ error: "Missing job_id" }, { status: 400 });
     }
 
-    // Set clickup_status based on n8n outcome if not already set
-    const derivedStatus = outcomeToClickupStatus(n8nOutcome);
-    if (!normalized.clickup_status && derivedStatus) {
-      normalized.clickup_status = derivedStatus;
+    // Set status based on n8n outcome if not already set
+    const derivedStatus = outcomeToStatus(n8nOutcome);
+    if (!normalized.status && derivedStatus) {
+      normalized.status = derivedStatus;
     }
 
     const job = await upsertJob(normalized);

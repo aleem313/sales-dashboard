@@ -1,9 +1,3 @@
 {
-  "framework": "nextjs",
-  "crons": [
-    {
-      "path": "/api/sync/clickup",
-      "schedule": "0 0 * * *"
-    }
-  ]
+  "framework": "nextjs"
 }

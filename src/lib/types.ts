@@ -12,7 +12,7 @@ export interface DateRange {
 
 export interface Agent {
   id: string;
-  clickup_user_id: string;
+  clickup_user_id?: string | null;
   name: string;
   email: string | null;
   avatar_url: string | null;
@@ -31,7 +31,7 @@ export interface Profile {
   stack: string | null;
   vollna_filter_tag: string | null;
   agent_id: string | null;
-  clickup_list_id: string | null;
+  clickup_list_id?: string | null;
   active: boolean;
   created_at: string;
 }
@@ -58,7 +58,7 @@ export interface Job {
   agent_id: string | null;
   clickup_task_id: string | null;
   clickup_task_url: string | null;
-  clickup_status: string;
+  status: string;
   proposal_text: string | null;
   gpt_model: string | null;
   gpt_tokens_used: number | null;
@@ -107,7 +107,7 @@ export interface KPIMetrics {
 export interface AgentStats {
   id: string;
   name: string;
-  clickup_user_id: string;
+  clickup_user_id?: string | null;
   total_jobs: number;
   proposals_sent: number;
   won: number;
@@ -144,7 +144,7 @@ export interface ActivityEvent {
   job_title: string;
   agent_name: string | null;
   profile_name: string | null;
-  clickup_status: string;
+  status: string;
   outcome: string | null;
   updated_at: string;
 }
@@ -159,7 +159,7 @@ export interface SystemHealth {
 export interface JobFilters {
   agent_id?: string;
   profile_id?: string;
-  clickup_status?: string;
+  status?: string;
   outcome?: string;
   budget_type?: string;
   search?: string;
@@ -294,7 +294,7 @@ export interface PipelineJob {
   job_title: string;
   profile_name: string | null;
   agent_name: string | null;
-  clickup_status: string;
+  status: string;
   time_in_stage: string;
   priority: string;
 }

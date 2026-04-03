@@ -157,7 +157,7 @@ export default async function ProfileDetailPage({
                               : "secondary"
                         }
                       >
-                        {job.outcome ?? job.clickup_status}
+                        {job.outcome ?? job.status}
                       </Badge>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-muted-foreground">

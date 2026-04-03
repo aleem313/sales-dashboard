@@ -8,17 +8,15 @@ import { toast } from "sonner";
 
 export function MarkAsSentButton({
   jobId,
-  clickupTaskId,
 }: {
   jobId: string;
-  clickupTaskId: string | null;
 }) {
   const [sending, setSending] = useState(false);
 
   async function handleClick() {
     setSending(true);
     try {
-      await markProposalSentAction(jobId, clickupTaskId);
+      await markProposalSentAction(jobId);
       toast.success("Marked as sent");
     } catch {
       toast.error("Failed to mark as sent");

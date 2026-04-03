@@ -114,7 +114,7 @@ export function JobTable({ jobs, compact }: { jobs: JobRow[]; compact?: boolean 
                 </TableCell>
                 {!compact && (
                   <TableCell>
-                    <StatusBadge outcome={job.outcome} status={job.clickup_status} />
+                    <StatusBadge outcome={job.outcome} status={job.status} />
                   </TableCell>
                 )}
                 <TableCell className="hidden lg:table-cell text-muted-foreground">
@@ -186,7 +186,7 @@ function JobDetail({ job }: { job: JobRow }) {
                 );
               }
               const preSent = ['To Do', 'New', 'Proposal Ready'];
-              if (preSent.includes(job.clickup_status)) {
+              if (preSent.includes(job.status)) {
                 const diffMin = Math.round((Date.now() - receivedAt.getTime()) / 60000);
                 const label = diffMin < 60 ? `${diffMin}m` : `${Math.floor(diffMin / 60)}h ${diffMin % 60}m`;
                 return (
@@ -273,16 +273,6 @@ function JobDetail({ job }: { job: JobRow }) {
             className="text-sm text-primary hover:underline"
           >
             View on Upwork &rarr;
-          </a>
-        )}
-        {job.clickup_task_url && (
-          <a
-            href={job.clickup_task_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:underline"
-          >
-            View in ClickUp &rarr;
           </a>
         )}
       </div>

@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Rising Lions Analytics Dashboard — a real-time analytics platform for Upwork job automation. Tracks proposals, win rates, agent performance, and revenue. Data flows in from n8n webhooks (Upwork jobs), Google Sheets imports, and ClickUp task syncs.
+Rising Lions Analytics Dashboard — a real-time analytics platform for Upwork job automation. Tracks proposals, win rates, agent performance, and revenue. Data flows in from n8n webhooks (Upwork jobs), Google Sheets imports, and the internal Task Board system.
+
+> **IMPORTANT**: ClickUp has been fully replaced by the internal Task Board (Milestone 8). The Task Board is the **single source of truth** for job status tracking. Never rely on ClickUp data, APIs, or webhooks. All ClickUp integration code has been removed.
 
 ## Commands
 
@@ -45,42 +47,40 @@ Middleware (`src/middleware.ts`) enforces auth and redirects agents away from ad
 | `src/lib/auth.ts` | NextAuth config, session callbacks, role logic |
 | `src/lib/types.ts` | TypeScript interfaces for all entities |
 | `src/lib/seed.ts` | Database schema DDL + seed data |
-| `src/lib/clickup.ts` | ClickUp API client |
 | `src/lib/sheets.ts` | Google Sheets API client |
 | `src/lib/alerts.ts` | Alert thresholds + Slack webhook integration |
 
 ### Data Flow
 
-1. **Ingestion**: Vollna (Upwork scraper) → n8n (6 per-agent webhooks) → Claude AI proposal → ClickUp task → `POST /api/webhook/n8n` (HMAC verified) → `jobs` table
-2. **ClickUp sync**: ClickUp webhook → `POST /api/webhook/clickup` (HMAC verified) → updates job status/outcome
-3. **Daily sync**: Vercel cron 00:00 UTC → `GET /api/sync/clickup` → bulk status/outcome updates
-4. **Import**: Manual trigger → `POST /api/sync/sheets` → bulk import from Google Sheets
-5. **Caching**: Stats endpoints cache results in `stats_cache` table (5-min TTL)
+1. **Ingestion**: Vollna (Upwork scraper) → n8n (8 per-agent webhooks) → Claude AI proposal → Board task (`POST /api/v1/webhooks/tasks`) + Dashboard event (`POST /api/webhook/n8n`, HMAC verified) → `tasks` + `jobs` tables
+2. **Status tracking**: Task Board column move → `moveTaskAction()` → `syncJobStatusFromTask()` → updates `jobs.status` + outcome
+3. **Import**: Manual trigger → `POST /api/sync/sheets` → bulk import from Google Sheets
+4. **Caching**: Stats endpoints cache results in `stats_cache` table (5-min TTL)
+
+> **ClickUp removed (M8)**: ClickUp webhooks, sync routes, OAuth, API client, and cron job have all been deleted. Job status (`jobs.status`) is now driven entirely by Task Board column moves.
 
 ### n8n Integration
 
 - **Instance**: ikonicdev.app.n8n.cloud (v2.42.3)
 - **MCP Server**: Connected (21 tools — can create/update/execute workflows)
-- **Active workflow**: "multiple webhooks" (EWnZg3svZWwcIRs4) — 28 nodes, 6 Vollna webhooks per agent (Sana, Laiba, Khansa, Saim, Shayan, Craig) → Claude AI proposals → **dual output** (ClickUp + Custom Board) → Dashboard webhook
-- **Webhook payload**: Nested format with `job`, `client`, `routing`, `scores`, `clickup`, `proposal`, `outcome` fields. Normalized by `/api/webhook/n8n` route.
+- **Active workflow**: "multiple webhooks" (EWnZg3svZWwcIRs4) — 8 Vollna webhooks per agent (Sana, Laiba, Khansa, Saim, Shayan, Craig, Rebekah, Nawal) → Claude AI proposals → Board task creation → Dashboard webhook
+- **Webhook payload**: Nested format with `job`, `client`, `routing`, `scores`, `proposal`, `outcome` fields. Normalized by `/api/webhook/n8n` route.
 - **Outcome values from n8n**: `proposal_created`, `gpt_error`, `rejected`, `no_profile`, `weekend`, `inactive`
 
-### Dual-Delivery Architecture (n8n → ClickUp + Custom Board)
+### n8n → Task Board Architecture
 
-The n8n workflow delivers processed jobs to **two systems in parallel** after AI proposal generation:
+The n8n workflow delivers processed jobs to the **Task Board** after AI proposal generation:
 
 ```
-Format ClickUp Task
-   ├── Create ClickUp Task (existing) → Format Dashboard Event → Send to Dashboard
-   └── Create Board Task (NEW) → POST /api/v1/webhooks/tasks
+Format Task
+   └── Create Board Task → POST /api/v1/webhooks/tasks
+   └── Format Dashboard Event → Send to Dashboard → POST /api/webhook/n8n
 ```
 
-- **Parallel execution**: Both branches run independently from "Format ClickUp Task" output
-- **Error isolation**: Each branch has `continueOnFail` enabled — ClickUp failure does NOT affect board, board failure does NOT affect ClickUp
 - **Board API**: `POST /api/v1/webhooks/tasks` with Bearer token auth (`n8n-board-sync`). Falls back to default project.
 - **Payload mapping**: Task title = `[profile] Job Title`, description = rich formatted proposal + job snapshot. Job metadata stored in `custom_fields` (`_job_id`, `_job_url`, `_budget`, `_skills`, `_proposal`, `_assigned_agent`, `_profile_name`, `_source`, client data)
 - **Task-Job linking**: `custom_fields._job_id` links board tasks to the `jobs` table, enabling the 3-column task detail view (task fields | job details | proposal)
-- **Future**: ClickUp will be removed; only custom board will remain. System designed for easy switchover.
+- **Status sync**: When a task moves columns on the board → `moveTaskAction()` → `syncJobStatusFromTask()` → `jobs.status` updated to column name
 
 ### Database Tables
 
@@ -117,6 +117,7 @@ Migrations in `src/lib/migrations/`.
 | 009 | (in migrate route) | — | 14 custom field definitions for n8n job data (Job Details, Client Info, Routing Info, Proposal) |
 | 010 | `010_profile_platform.sql` | — | Add `platform` column to profiles table (default: 'Upwork') |
 | 011 | `011_fix_profile_assignments.sql` | — | Fix profile-to-agent assignments to match n8n flow |
+| 012 | `012_remove_clickup_dependency.sql` | M8 | Rename `clickup_status` → `status`, add `jobs.task_id` FK, make `clickup_user_id` nullable |
 
 ## Migration Execution
 
@@ -128,7 +129,7 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v={VERSION}&secret=YOU
 
 **Latest migration:**
 ```
-https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON_SECRET
+https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=012&secret=YOUR_CRON_SECRET
 ```
 
 Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variables. All migrations are idempotent — safe to re-run.
@@ -171,8 +172,39 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 
 - **No `fetch()` in Code nodes** — n8n Code nodes run in a sandbox. Use `this.helpers.httpRequest()` instead.
 - **Merge node must stay on v3** — v3.2 waits for ALL inputs; v3 passes through on ANY input. Do NOT upgrade.
-- **Merge `numberInputs` must equal webhook count** — currently 7 (Sana, Laiba, Khansa, Saim, Shayan, Craig, Rebekah).
-- **Each Respond node needs a unique Merge input index** — Sana=0, Laiba=1, Khansa=2, Saim=3, Shayan=4, Craig=5, Rebekah=6.
+- **Merge `numberInputs` must equal webhook count** — currently 8 (Sana, Laiba, Khansa, Saim, Shayan, Craig, Rebekah, Nawal).
+- **Each Respond node needs a unique Merge input index** — Sana=0, Laiba=1, Khansa=2, Saim=3, Shayan=4, Craig=5, Rebekah=6, Nawal=7.
+
+### Adding a New Profile/Webhook Node to n8n
+
+When creating a new agent profile webhook in n8n workflow `EWnZg3svZWwcIRs4`, use this blueprint:
+
+**Step 1:** Use `mcp__n8n-mcp__n8n_update_partial_workflow` with these 5 operations:
+
+```
+1. addNode: Webhook - {Name}
+   - type: n8n-nodes-base.webhook, typeVersion: 2.1
+   - parameters: { httpMethod: "POST", path: "{lowercase-name}-profile-webhook", responseMode: "responseNode", options: {} }
+   - onError: continueRegularOutput
+   - position: [-1408, {previous_y + 224}]  (Rebekah=1136, Nawal=1360, next=1584)
+
+2. addNode: Respond - {Name}
+   - type: n8n-nodes-base.respondToWebhook, typeVersion: 1.1
+   - parameters: { options: {} }
+   - position: [-1216, {same_y_as_webhook}]
+
+3. addConnection: source="Webhook - {Name}", target="Respond - {Name}"
+
+4. addConnection: source="Respond - {Name}", target="Merge All Webhooks", targetIndex={next_index}
+   (Current indices: Sana=0, Laiba=1, Khansa=2, Saim=3, Shayan=4, Craig=5, Rebekah=6, Nawal=7 → next=8)
+
+5. updateNode: nodeName="Merge All Webhooks", updates: { "parameters.numberInputs": {current + 1} }
+   (Currently 8 → next would be 9)
+```
+
+**Webhook URL format:** `https://ikonicdev.app.n8n.cloud/webhook/{lowercase-name}-profile-webhook`
+
+**After adding:** Update this section's index list and `numberInputs` count. Also create the profile in dashboard Settings.
 
 ### Task Management Key Files
 
@@ -211,6 +243,31 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 - **Structured fields**: Both create and detail views show editable Job Snapshot (link, budget, skills, posted), Client Intel (location, rating, spent, hires), Routing Info (agent, profile, stack, job ID, generated), and Proposal — all stored in `custom_fields`.
 - **Agent header**: Agent my-tasks page shows the same header as admin with agent-scoped filters (own name, assigned profiles, date range, timezone, theme).
 - **Member removal**: Uses browser `confirm()` instead of styled dialog (UX-5 audit item); auto-unassigns from tasks.
+- **Job-Task status sync**: When a task moves columns → `moveTaskAction()` → `syncJobStatusFromTask()` → updates `jobs.status` to column name. This is the ONLY way job statuses change now.
+- **`jobs.status`**: Renamed from `clickup_status` (migration 012). Same values, same queries. Historical data preserved.
+- **Legacy ClickUp columns**: `clickup_task_id`, `clickup_task_url` still exist as nullable columns for historical data. Never write to them for new jobs.
+
+### ClickUp Removal (IMPORTANT — for AI/dev agents)
+
+ClickUp integration has been **fully removed** as of Milestone 8. The following no longer exist:
+
+| Removed | Was |
+|---------|-----|
+| `src/lib/clickup.ts` | ClickUp API client |
+| `src/app/api/webhook/clickup/` | ClickUp webhook handler |
+| `src/app/api/sync/clickup/` | ClickUp sync endpoint |
+| `src/app/api/auth/clickup/` | ClickUp OAuth routes |
+| ClickUp cron in `vercel.json` | Daily sync at 00:00 UTC |
+| `triggerClickUpSync()` | Server action |
+| `triggerClickUpFullSync()` | Server action |
+
+**Rules for future development:**
+1. **Never** add ClickUp API calls, webhooks, or sync logic
+2. **Never** rely on `clickup_task_id` or `clickup_task_url` for new features — they are legacy
+3. **Always** use Task Board as the source of truth for job status
+4. Job status changes happen ONLY via Task Board column moves (`moveTaskAction` → `syncJobStatusFromTask`)
+5. The `jobs.status` column contains the same values as board column names (e.g., "Proposal Ready", "Sent", "Won", "Lost")
+6. KPI calculations in `data.ts` depend on these exact status strings — if board columns are renamed, update the KPI queries
 
 ## Key Reference Files
 
@@ -231,7 +288,7 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 
 Update `cline.md` after completing each feature (status table + detail section).
 
-Execution plan lives in `plan.md` (v2.0, stack-aligned). Mark items `[x]` as they're completed.
+Execution plan lives in `plan.md` (v3.1, ClickUp removal). Mark items `[x]` as they're completed.
 
 ## Git Commits
 

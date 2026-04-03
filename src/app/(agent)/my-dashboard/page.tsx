@@ -174,7 +174,7 @@ export default async function MyDashboardPage({
                       {job.job_title}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{job.clickup_status}</Badge>
+                      <Badge variant="outline">{job.status}</Badge>
                     </TableCell>
                     <TableCell>
                       {job.outcome ? (

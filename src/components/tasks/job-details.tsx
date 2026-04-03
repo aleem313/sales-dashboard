@@ -257,17 +257,17 @@ export function JobDetails({ job, loading, error, customFields }: JobDetailsProp
       )}
 
       {/* ═══ Status & Outcome (from DB job only) ═══ */}
-      {hasJob && (job.clickup_status || job.outcome) && (
+      {hasJob && (job.status || job.outcome) && (
         <div>
           <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
             <Briefcase className="h-3.5 w-3.5" />
             Status
           </h4>
           <div className="rounded-lg border bg-muted/30 p-3 space-y-0">
-            {job.clickup_status && (
+            {job.status && (
               <InfoRow icon={<Globe className="h-3.5 w-3.5" />} label="Status">
                 <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                  {job.clickup_status}
+                  {job.status}
                 </span>
               </InfoRow>
             )}

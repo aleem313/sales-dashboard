@@ -29,7 +29,7 @@ export default async function PipelinePage({
     getAllProfiles(),
   ]);
 
-  // Map each clickup_status to a stat card bucket
+  // Map each status to a stat card bucket
   const cardBuckets: Record<string, string> = {
     "to do": "todo",
     "todo": "todo",

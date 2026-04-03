@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const result = await getJobs({
       agent_id: params.get("agent") ?? undefined,
       profile_id: params.get("profile") ?? undefined,
-      clickup_status: params.get("status") ?? undefined,
+      status: params.get("status") ?? undefined,
       outcome: params.get("outcome") ?? undefined,
       budget_type: params.get("budget_type") ?? undefined,
       search: params.get("search") ?? undefined,
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
         job.job_title,
         (row.profile_name as string) ?? "",
         (row.agent_name as string) ?? "",
-        job.clickup_status,
+        job.status,
         job.outcome ?? "",
         job.budget_type ?? "",
         job.budget_min ?? "",

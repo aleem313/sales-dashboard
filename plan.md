@@ -9,7 +9,7 @@
 > **State Management:** Zustand (installed)
 > **Drag & Drop:** @dnd-kit (installed)
 > **Rich Text:** TipTap (to be installed)
-> **Timeline:** 8 milestones (M1–M2 complete, M2B–M7 new)
+> **Timeline:** 9 milestones (M1–M5 complete, M6–M8 remaining; M8 = ClickUp removal, highest priority)
 > **Cases & Edge Cases:** `task_board_cases.md` v2.0
 
 ---
@@ -658,7 +658,16 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 - [x] Settings link added to admin sidebar
 - [x] `POST /api/profiles/sync-n8n` auto-provisions webhook + respond nodes in n8n (requires N8N_API_URL + N8N_API_KEY)
 - [x] Rebekah webhook + respond nodes added to n8n workflow
-- [x] Merge node stays on v3 (v3.2 breaks multi-input passthrough), `numberInputs: 7`
+- [x] Nawal webhook + respond nodes added to n8n workflow (2026-04-03)
+- [x] Merge node stays on v3 (v3.2 breaks multi-input passthrough), `numberInputs: 8`
+
+### Board UX Enhancements (completed 2026-04-03)
+- [x] Agent filter bar: `BoardFilterBar` added to agent my-tasks page (search, column, priority, assignee, labels, custom fields)
+- [x] Unassigned task visibility: `getAgentTasksAcrossBoards()` returns tasks with no assignees (scoped to current project)
+- [x] Conditional "Reason" field: multi-select with 14 options, visible only when task status = "N/A", stored as `_reason` in `custom_fields`
+- [x] Multi-select filter UI: `MultiSelectFilterValue` popover component for `multi_select` field filtering
+- [x] Virtual "Reason" filter: injected into "More Filters" system with `contains_any`/`contains_all` operators
+- [x] Removed duplicate Custom Fields section from task detail (fields already shown in dedicated sections)
 
 ---
 
@@ -825,6 +834,142 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=006&secret=YOUR_CRON
 
 ---
 
+## Milestone 8: ClickUp Removal & Task Board Integration (Sprint 8)
+> Theme: Remove ClickUp dependency entirely. Task Board becomes single source of truth for job status. Dashboard metrics derived from Task Board data via job-task linking.
+> **Ref:** ClickUp removal analysis (2026-04-03)
+
+### 8.1 Database Migration (012_remove_clickup_dependency.sql)
+
+> **Pattern:** Raw SQL migration in `src/lib/migrations/`. Idempotent. Column rename preserves all historical data.
+
+- [x] Create migration `012_remove_clickup_dependency.sql`:
+  - `ALTER TABLE jobs RENAME COLUMN clickup_status TO status`
+  - `ALTER INDEX idx_jobs_clickup_status RENAME TO idx_jobs_status`
+  - `ALTER TABLE jobs ADD COLUMN IF NOT EXISTS task_id UUID REFERENCES tasks(id) ON DELETE SET NULL`
+  - `CREATE INDEX IF NOT EXISTS idx_jobs_task_id ON jobs(task_id)`
+  - `ALTER TABLE agents ALTER COLUMN clickup_user_id DROP NOT NULL`
+- [x] Create rollback script `012_remove_clickup_dependency_down.sql`
+- [x] Add `v=012` handler to `/api/migrate` route
+- [ ] Run migration via browser URL
+- [ ] Verify: all existing jobs retain status values, index works
+
+### 8.2 Data Layer Refactor (src/lib/data.ts)
+
+> **Scope:** ~20 SQL query replacements. No logic changes — column rename only.
+
+- [x] Replace ALL `clickup_status` → `status` in SQL queries (~86 occurrences)
+- [x] Replace `a.clickup_user_id` references in agent stat queries with `a.id`
+- [x] Remove `clickup_user_id` from unnecessary GROUP BY clauses
+- [x] Verify KPI query status strings match board column names (CRITICAL):
+  - Proposal sent statuses: 'Proposal Submitted', 'Sent', 'Following Up', 'Prototype Required', 'Prototype Done', 'Prototype Sent', 'Meeting Scheduled', 'Meeting Done', 'Negotiation', 'Won', 'Lost'
+- [x] Update `getJobById()`, `getJobs()`, `getAgentStats()`, `getProfileStats()`, `getKPIMetrics()`, `getPipelineData()`
+
+### 8.3 Job-Task Status Sync
+
+> **Key mechanism:** When a Task Board task moves column → update linked job's `status` field.
+
+- [x] Add `syncJobStatusFromTask(taskId, columnName)` to `task-data.ts`:
+  - Read `custom_fields._job_id` from task
+  - If linked job exists: `UPDATE jobs SET status = $columnName WHERE job_id = $jobId`
+  - If `task_id` column populated: also match by `jobs.task_id`
+- [x] Add `getLinkedJobId(taskId)` helper to `task-data.ts`
+- [x] Modify `moveTaskAction()` in `task-actions.ts`:
+  - After successful column move → call `syncJobStatusFromTask()`
+  - Determine outcome: if target column = "Won" → set `outcome='won'`, `outcome_at=NOW()`
+  - If target column = "Lost" → set `outcome='lost'`, `outcome_at=NOW()`
+  - If moving FROM terminal column → clear outcome (reversal)
+  - Set `proposal_sent_at` when entering post-sent columns
+- [x] Hook `updateColumnAction()`:
+  - When column renamed → update `status` for ALL linked jobs in that column
+- [x] Hook `deleteColumnAction()`:
+  - When column deleted with task migration → update linked jobs to target column's name
+- [ ] Verify: drag task to "Won" column → job.outcome = 'won', job.status = 'Won'
+
+### 8.4 Remove ClickUp Routes & Client
+
+> **Pattern:** Delete files, remove imports, clean config.
+
+- [x] Delete `src/lib/clickup.ts`
+- [x] Delete `src/app/api/webhook/clickup/route.ts`
+- [x] Delete `src/app/api/sync/clickup/route.ts`
+- [x] Delete `src/app/api/auth/clickup/route.ts`
+- [x] Delete `src/app/api/auth/clickup/callback/route.ts`
+- [x] Remove `/api/sync/clickup` cron from `vercel.json`
+- [x] Remove `/api/auth/clickup` from middleware auth matcher
+- [x] Remove all `import` references to `clickup.ts`
+
+### 8.5 Remove ClickUp Server Actions
+
+- [x] Delete `triggerClickUpSync()` from `actions.ts`
+- [x] Delete `triggerClickUpFullSync()` from `actions.ts`
+- [x] Modify `markProposalSentAction()`:
+  - Remove ClickUp API call (`updateTaskStatus`)
+  - Replace with: find linked task → move to "Sent" column via `moveTaskAction()`
+  - Or: remove entirely if "Mark as Sent" is now just a column drag
+- [x] Remove `clickup_list_id` handling from `createProfileAction()`
+
+### 8.6 Update n8n Webhook Handler
+
+- [x] Modify `normalizePayload()` in `/api/webhook/n8n/route.ts`:
+  - Make `clickup.taskId`, `clickup.taskUrl`, `clickup.status` fully optional
+  - Set initial `status` from first board column name when no ClickUp data
+  - Stop writing `clickup_task_id`, `clickup_task_url` to new jobs
+- [x] Update `upsertJob()` calls to use `status` instead of `clickup_status`
+
+### 8.7 Update Profile Mapping API
+
+- [x] Modify `GET /api/profiles/mapping`:
+  - Remove `clickup_list_id` from response
+  - Rename `agent_clickup_id` → `agent_id`
+- [ ] Coordinate: n8n "Process Job" node must be updated to use new field names
+
+### 8.8 Frontend Updates
+
+- [x] `src/lib/types.ts`:
+  - `Job.clickup_status` → `Job.status`
+  - `JobFilters.clickup_status` → `JobFilters.status`
+  - Mark `clickup_task_id`, `clickup_task_url` as `string | null` (legacy)
+  - Mark `Agent.clickup_user_id` as optional
+  - Mark `Profile.clickup_list_id` as optional
+- [x] `src/components/settings/sync-controls.tsx`:
+  - Remove ClickUp sync buttons
+  - Remove ClickUp OAuth connect button
+  - Keep Google Sheets sync
+- [x] `src/components/mark-as-sent-button.tsx`:
+  - Remove ClickUp API call
+  - Replace with task column move or remove component
+- [x] `src/components/job-table.tsx` — `clickup_status` → `status`, removed "View in ClickUp" link
+- [x] `src/components/pipeline/pipeline-table.tsx` — `clickup_status` → `status`
+- [x] `src/components/overview/slow-response-alert.tsx` — `clickup_status` → `status`
+- [x] `src/components/tasks/task-full-view.tsx` — `clickup_status` → `status`
+- [x] All page components referencing `job.clickup_status`
+- [x] `src/app/api/jobs/search/route.ts` — update filter/response
+- [x] `src/app/api/jobs/export/route.ts` — update CSV columns
+
+### 8.9 n8n Workflow Update (Post-Deploy)
+
+> **Using MCP tools:** `mcp__n8n-mcp__n8n_update_partial_workflow`
+> **Workflow:** "multiple webhooks" (EWnZg3svZWwcIRs4)
+
+- [ ] Disconnect "Create ClickUp Task" node
+- [ ] Rewire: "Format Dashboard Event" connects from board task branch
+- [ ] Remove ClickUp-specific fields from "Format Dashboard Event" output
+- [ ] Remove `clickup.*` from dashboard webhook payload
+- [ ] Test: send test Vollna webhook → board task created → dashboard job updated → metrics correct
+
+### 8.10 Cleanup & Documentation
+
+- [ ] Remove ClickUp env vars from Vercel dashboard (CLICKUP_API_KEY, CLICKUP_WEBHOOK_SECRET, CLICKUP_CLIENT_ID, CLICKUP_CLIENT_SECRET)
+- [x] Update `.env.example` — remove ClickUp variables, add n8n vars
+- [x] Update `src/lib/seed.ts` — reflect `status` column, mark legacy columns, fix view
+- [x] Update `src/lib/schema.sql` — reflect `status` column, mark legacy columns
+- [x] Update `CLAUDE.md` — ClickUp removal + Task Board guidance (already documented)
+- [x] Update `cline.md` — architectural shift documentation
+- [ ] Verify all dashboard pages load without errors
+- [ ] Verify KPI numbers match pre-migration values
+
+---
+
 ## Definition of Done (per feature)
 1. Code works on Vercel production (no localhost-only features)
 2. Raw SQL queries use parameterized `sql` tagged template (no string concatenation)
@@ -844,7 +989,7 @@ When instructed to **"Start milestone N"**:
 3. Keep all code production-ready (deployed to Vercel)
 4. If stopped: resume from last incomplete `- [ ]` item
 
-**Priority order:** 2B (critical fixes) → 3 → 4 → 5 → 6 → 7
+**Priority order:** **8 (ClickUp removal — NEXT)** → 6 → 7
 
 **State tracking:**
 - `plan.md` → checklist progress (this file)
@@ -853,4 +998,4 @@ When instructed to **"Start milestone N"**:
 
 ---
 
-*Rising Lion Platform | Task Management Module | Execution Plan v2.0 (Stack-Aligned) | Based on Implementation Plan v2.0*
+*Rising Lion Platform | Task Management Module | Execution Plan v3.1 (ClickUp Removal) | Based on Implementation Plan v2.0 + ClickUp Migration Analysis*

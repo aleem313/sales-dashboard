@@ -72,7 +72,7 @@ export function mapSheetRowToJobData(row: Record<string, string>) {
     agent_id: row["agent_id"] || null,
     clickup_task_id: row["clickup_task_id"] || null,
     clickup_task_url: row["clickup_task_url"] || null,
-    clickup_status: row["clickup_status"] || "New",
+    status: row["status"] || "New",
     proposal_text: row["proposal_text"] || null,
     gpt_model: row["gpt_model"] || null,
     gpt_tokens_used: row["gpt_tokens_used"]

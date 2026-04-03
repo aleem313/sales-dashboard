@@ -22,7 +22,7 @@ DROP TABLE IF EXISTS agents CASCADE;
 -- ============================================================
 CREATE TABLE agents (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  clickup_user_id   TEXT UNIQUE NOT NULL,
+  clickup_user_id   TEXT UNIQUE,               -- legacy, nullable after M8
   name              TEXT NOT NULL,
   email             TEXT,
   avatar_url        TEXT,
@@ -42,7 +42,7 @@ CREATE TABLE profiles (
   stack             TEXT,
   vollna_filter_tag TEXT UNIQUE,
   agent_id          UUID REFERENCES agents(id),
-  clickup_list_id   TEXT,
+  clickup_list_id   TEXT,                      -- legacy, optional after M8
   active            BOOLEAN DEFAULT true,
   created_at        TIMESTAMPTZ DEFAULT NOW()
 );
@@ -70,9 +70,10 @@ CREATE TABLE jobs (
   received_at       TIMESTAMPTZ DEFAULT NOW(),
   profile_id        TEXT REFERENCES profiles(profile_id),
   agent_id          UUID REFERENCES agents(id),
-  clickup_task_id   TEXT,
-  clickup_task_url  TEXT,
-  clickup_status    TEXT DEFAULT 'Proposal Ready',
+  clickup_task_id   TEXT,                      -- legacy, not written for new jobs after M8
+  clickup_task_url  TEXT,                      -- legacy, not written for new jobs after M8
+  status            TEXT DEFAULT 'Proposal Ready',  -- renamed from clickup_status (M8)
+  task_id           UUID REFERENCES tasks(id) ON DELETE SET NULL,  -- added in M8
   proposal_text     TEXT,
   gpt_model         TEXT,
   gpt_tokens_used   INTEGER,
@@ -90,7 +91,7 @@ CREATE TABLE jobs (
 -- ============================================================
 CREATE TABLE sync_log (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  source          TEXT NOT NULL,                 -- 'clickup' | 'sheets' | 'n8n_webhook'
+  source          TEXT NOT NULL,                 -- 'sheets' | 'n8n_webhook'
   records_synced  INTEGER DEFAULT 0,
   records_updated INTEGER DEFAULT 0,
   errors          TEXT[],
@@ -116,7 +117,8 @@ CREATE TABLE stats_cache (
 CREATE INDEX idx_jobs_profile_id ON jobs(profile_id);
 CREATE INDEX idx_jobs_agent_id ON jobs(agent_id);
 CREATE INDEX idx_jobs_received_at ON jobs(received_at DESC);
-CREATE INDEX idx_jobs_clickup_status ON jobs(clickup_status);
+CREATE INDEX idx_jobs_status ON jobs(status);
+CREATE INDEX idx_jobs_task_id ON jobs(task_id);
 CREATE INDEX idx_jobs_outcome ON jobs(outcome);
 CREATE INDEX idx_jobs_job_id ON jobs(job_id);
 

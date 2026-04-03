@@ -32,7 +32,7 @@ export default async function JobsPage({
     getJobs({
       agent_id: agentId,
       profile_id: profileId,
-      clickup_status: status,
+      status: status,
       outcome,
       budget_type: budgetType,
       search,
