@@ -272,10 +272,13 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       )
         return false;
 
-      // Custom field filters
+      // Custom field filters (including virtual fields for due_date, created_at)
       for (const cf of customFieldFilters) {
         const cfValues = (t.custom_fields ?? {}) as Record<string, unknown>;
-        const val = cfValues[cf.fieldId];
+        // Virtual fields map to task-level properties
+        const val = cf.fieldId === "_due_date" ? t.due_date
+          : cf.fieldId === "_created_at" ? t.created_at
+          : cfValues[cf.fieldId];
 
         switch (cf.operator) {
           case "equals":

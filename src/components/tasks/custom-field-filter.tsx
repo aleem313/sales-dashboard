@@ -89,8 +89,16 @@ export function MoreFilters({ customFields }: MoreFiltersProps) {
   const filters = store.customFieldFilters;
   const expanded = filters.length > 0;
 
-  // Inject virtual Reason field
-  const allFields = [...customFields, REASON_VIRTUAL_FIELD];
+  // Inject virtual fields for built-in date fields + Reason
+  const DUE_DATE_VIRTUAL: CustomFieldDefinition = {
+    id: "_due_date", project_id: "", name: "Due Date", field_type: "date",
+    options: null, required: false, position: 9997, archived: false, show_on_card: false, created_at: "",
+  };
+  const CREATED_AT_VIRTUAL: CustomFieldDefinition = {
+    id: "_created_at", project_id: "", name: "Created At", field_type: "date",
+    options: null, required: false, position: 9998, archived: false, show_on_card: false, created_at: "",
+  };
+  const allFields = [...customFields, DUE_DATE_VIRTUAL, CREATED_AT_VIRTUAL, REASON_VIRTUAL_FIELD];
 
   if (allFields.length === 0) return null;
 
