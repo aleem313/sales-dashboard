@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,9 +10,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { X, Plus, Filter } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { X, Plus, Filter, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useBoardStore } from "@/lib/stores/board-store";
 import type { CustomFieldDefinition } from "@/lib/task-data";
+
+// Virtual field for Reason (N/A status). Uses _reason key in custom_fields.
+const REASON_OPTIONS = [
+  "Old job", "Duplicate", "Location loc", "Low Higher rate",
+  "Language barrier", "Too many invites", "Video Proposal",
+  "Client suspended", "Portfolio unavailable", "Client Low spending",
+  "Bad rating client", "Job unavailable", "Already hired", "Out of stack",
+];
+
+const REASON_VIRTUAL_FIELD: CustomFieldDefinition = {
+  id: "_reason",
+  project_id: "",
+  name: "Reason",
+  field_type: "multi_select",
+  options: REASON_OPTIONS,
+  required: false,
+  position: 9999,
+  archived: false,
+  show_on_card: false,
+  created_at: "",
+};
 
 interface MoreFiltersProps {
   customFields: CustomFieldDefinition[];
@@ -61,10 +89,13 @@ export function MoreFilters({ customFields }: MoreFiltersProps) {
   const filters = store.customFieldFilters;
   const expanded = filters.length > 0;
 
-  if (customFields.length === 0) return null;
+  // Inject virtual Reason field
+  const allFields = [...customFields, REASON_VIRTUAL_FIELD];
+
+  if (allFields.length === 0) return null;
 
   function addFilter() {
-    const firstField = customFields[0];
+    const firstField = allFields[0];
     const ops = OPERATORS_BY_TYPE[firstField.field_type] ?? [];
     store.addCustomFieldFilter({
       fieldId: firstField.id,
@@ -78,7 +109,7 @@ export function MoreFilters({ customFields }: MoreFiltersProps) {
     newFilters[index] = { ...newFilters[index], ...updates };
 
     if (updates.fieldId) {
-      const field = customFields.find((f) => f.id === updates.fieldId);
+      const field = allFields.find((f) => f.id === updates.fieldId);
       const ops = OPERATORS_BY_TYPE[field?.field_type ?? "text"] ?? [];
       newFilters[index].operator = ops[0]?.value ?? "equals";
       newFilters[index].value = "";
@@ -122,7 +153,7 @@ export function MoreFilters({ customFields }: MoreFiltersProps) {
       {expanded && (
         <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
           {filters.map((filter, index) => {
-            const field = customFields.find((f) => f.id === filter.fieldId);
+            const field = allFields.find((f) => f.id === filter.fieldId);
             const operators = OPERATORS_BY_TYPE[field?.field_type ?? "text"] ?? [];
             const showValue = needsValueInput(filter.operator);
 
@@ -133,7 +164,7 @@ export function MoreFilters({ customFields }: MoreFiltersProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {customFields.map((f) => (
+                    {allFields.map((f) => (
                       <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -152,7 +183,13 @@ export function MoreFilters({ customFields }: MoreFiltersProps) {
 
                 {showValue && (
                   <>
-                    {field?.field_type === "dropdown" ? (
+                    {field?.field_type === "multi_select" ? (
+                      <MultiSelectFilterValue
+                        options={(field.options as string[]) ?? []}
+                        value={Array.isArray(filter.value) ? filter.value as string[] : []}
+                        onChange={(v) => updateFilter(index, { value: v })}
+                      />
+                    ) : field?.field_type === "dropdown" ? (
                       <Select value={String(filter.value ?? "")} onValueChange={(v) => updateFilter(index, { value: v })}>
                         <SelectTrigger className="h-7 w-[120px] text-xs">
                           <SelectValue placeholder="Value..." />
@@ -199,5 +236,52 @@ export function MoreFilters({ customFields }: MoreFiltersProps) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Multi-select value picker for filter conditions */
+function MultiSelectFilterValue({ options, value, onChange }: { options: string[]; value: string[]; onChange: (v: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+
+  function toggle(opt: string) {
+    onChange(value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt]);
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-7 w-[160px] text-xs justify-start font-normal truncate">
+          {value.length === 0
+            ? "Select values..."
+            : value.length <= 2
+              ? value.join(", ")
+              : `${value.length} selected`}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-52 p-1 max-h-56 overflow-y-auto" align="start">
+        {options.map((opt) => {
+          const selected = value.includes(opt);
+          return (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => toggle(opt)}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent transition-colors",
+                selected && "bg-accent/50"
+              )}
+            >
+              <div className={cn(
+                "h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0",
+                selected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/40"
+              )}>
+                {selected && <Check className="h-2.5 w-2.5" />}
+              </div>
+              {opt}
+            </button>
+          );
+        })}
+      </PopoverContent>
+    </Popover>
   );
 }

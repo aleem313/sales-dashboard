@@ -900,6 +900,20 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
                   placeholder="0" className="h-7 text-xs w-[80px] border-0 bg-transparent hover:bg-muted/50 px-2"
                 />
               </FieldRow>
+
+              {/* Reason — only visible when status column is N/A */}
+              {currentColumn?.name === "N/A" && (
+                <FieldRow icon={<span className="h-4 w-4 flex items-center justify-center text-xs font-bold text-muted-foreground">?</span>} label="Reason">
+                  <ReasonMultiSelect
+                    value={((task.custom_fields as Record<string, unknown>)?._reason as string[]) ?? []}
+                    onChange={(reasons) => {
+                      const newCf = { ...(task.custom_fields ?? {}), _reason: reasons };
+                      setTask((prev) => prev ? { ...prev, custom_fields: newCf } : prev);
+                      updateCustomField("_reason", reasons);
+                    }}
+                  />
+                </FieldRow>
+              )}
             </div>
 
             <Separator />
@@ -1332,6 +1346,89 @@ function AssigneeDropdown({ members, assignedIds, onToggle, disabled }: {
             </div>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+// ── Reason Multi-Select (N/A status only) ──
+
+const REASON_OPTIONS = [
+  "Old job",
+  "Duplicate",
+  "Location loc",
+  "Low Higher rate",
+  "Language barrier",
+  "Too many invites",
+  "Video Proposal",
+  "Client suspended",
+  "Portfolio unavailable",
+  "Client Low spending",
+  "Bad rating client",
+  "Job unavailable",
+  "Already hired",
+  "Out of stack",
+] as const;
+
+function ReasonMultiSelect({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+
+  function toggle(option: string) {
+    const next = value.includes(option)
+      ? value.filter((v) => v !== option)
+      : [...value, option];
+    onChange(next);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          "flex items-center gap-1 flex-wrap min-h-[28px] w-full text-left text-xs px-2 py-1 rounded border-0 bg-transparent hover:bg-muted/50 transition-colors",
+          open && "bg-muted/50"
+        )}
+      >
+        {value.length === 0 ? (
+          <span className="text-muted-foreground">Select reasons...</span>
+        ) : (
+          value.map((v) => (
+            <span key={v} className="inline-flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">
+              {v}
+              <X
+                className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-pointer"
+                onClick={(e) => { e.stopPropagation(); toggle(v); }}
+              />
+            </span>
+          ))
+        )}
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-56 rounded-md border bg-popover p-1 shadow-md max-h-56 overflow-y-auto">
+          {REASON_OPTIONS.map((option) => {
+            const selected = value.includes(option);
+            return (
+              <button
+                key={option}
+                type="button"
+                onClick={() => toggle(option)}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent transition-colors",
+                  selected && "bg-accent/50"
+                )}
+              >
+                <div className={cn(
+                  "h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0",
+                  selected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/40"
+                )}>
+                  {selected && <CheckSquare className="h-2.5 w-2.5" />}
+                </div>
+                {option}
+              </button>
+            );
+          })}
+        </div>
       )}
     </div>
   );

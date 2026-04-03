@@ -586,15 +586,21 @@ export async function getAvailableAgents(projectId: string): Promise<TaskAssigne
 }
 
 // Also add cross-board tasks for agent
-export async function getAgentTasksAcrossBoards(agentId: string): Promise<(Task & { project_name: string })[]> {
+export async function getAgentTasksAcrossBoards(agentId: string, currentProjectId?: string): Promise<(Task & { project_name: string })[]> {
   const result = await sql`
     SELECT t.*, c.name AS column_name, a.name AS creator_name, p.name AS project_name
     FROM tasks t
     JOIN columns c ON c.id = t.column_id
     JOIN projects p ON p.id = t.project_id
     LEFT JOIN agents a ON a.id = t.creator_id
-    WHERE EXISTS (
-      SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentId}
+    WHERE (
+      EXISTS (
+        SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentId}
+      )
+      OR (
+        NOT EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id)
+        AND (${currentProjectId ?? null}::uuid IS NULL OR t.project_id = ${currentProjectId ?? null}::uuid)
+      )
     )
     ORDER BY t.updated_at DESC
   `;

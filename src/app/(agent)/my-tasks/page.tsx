@@ -14,9 +14,12 @@ import {
   getAgentTasksAcrossBoards,
   getUserProjectsWithMeta,
   getCustomFieldDefinitions,
+  getProjectTags,
+  getSavedViews,
 } from "@/lib/task-data";
 import { getAgentById } from "@/lib/data";
 import { BoardStoreInitializer } from "@/components/tasks/board-store-initializer";
+import { BoardFilterBar } from "@/components/tasks/board-filter-bar";
 
 interface Props {
   searchParams: Promise<{ board?: string }>;
@@ -59,12 +62,14 @@ async function AgentBoardContent({ searchParams }: Props) {
     );
   }
 
-  const [allTasks, columns, members, customFields, agentData] = await Promise.all([
-    getAgentTasksAcrossBoards(agentId),
+  const [allTasks, columns, members, customFields, agentData, tags, savedViews] = await Promise.all([
+    getAgentTasksAcrossBoards(agentId, project.id),
     getProjectColumns(project.id),
     getProjectMembers(project.id),
     getCustomFieldDefinitions(project.id),
     getAgentById(agentId),
+    getProjectTags(project.id),
+    getSavedViews(project.id),
   ]);
   const boardTasks = allTasks.filter((t) => t.project_id === project!.id);
   const hasMultipleBoards = projects.length > 1;
@@ -100,7 +105,8 @@ async function AgentBoardContent({ searchParams }: Props) {
         </div>
         <NewTaskButton projectId={project.id} columns={columns} members={members} />
       </div>
-      <BoardStoreInitializer customFields={customFields} savedViews={[]} />
+      <BoardStoreInitializer customFields={customFields} savedViews={savedViews} />
+      <BoardFilterBar columns={columns} members={members} tags={tags} customFields={customFields} />
       <BoardView columns={columns} tasks={boardTasks} projectId={project.id} members={members} agentId={agentId} customFields={customFields} />
     </>
   );
