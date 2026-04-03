@@ -29,10 +29,10 @@ export default async function AnalyticsPage({
   const range = parseDateRange(params);
 
   const [modelData, countryData, timeData, budgetData, allAgents, allProfiles] = await Promise.all([
-    getProposalAnalytics(range),
-    getCountryStats(range),
-    getBestTimeToApply(range),
-    getBudgetWinRate(profileId),
+    getProposalAnalytics(range, agentId, profileId),
+    getCountryStats(range, agentId, profileId),
+    getBestTimeToApply(range, agentId, profileId),
+    getBudgetWinRate(profileId, agentId),
     getAllAgents(),
     getAllProfiles(),
   ]);

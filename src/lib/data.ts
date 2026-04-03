@@ -893,7 +893,9 @@ export async function insertAlert(alert: {
 // ============================================================
 
 export async function getProposalAnalytics(
-  range?: DateRange
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string
 ): Promise<ProposalAnalytics[]> {
   const { startDate, endDate } = range ?? {};
   const result = await sql`
@@ -911,6 +913,8 @@ export async function getProposalAnalytics(
     WHERE gpt_model IS NOT NULL
       AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
     GROUP BY gpt_model
     ORDER BY total DESC
   `;
@@ -929,7 +933,9 @@ export async function getProposalAnalytics(
 // ============================================================
 
 export async function getCountryStats(
-  range?: DateRange
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string
 ): Promise<CountryStats[]> {
   const { startDate, endDate } = range ?? {};
   const result = await sql`
@@ -945,6 +951,8 @@ export async function getCountryStats(
     WHERE client_country IS NOT NULL
       AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
     GROUP BY client_country
     HAVING COUNT(*) >= 2
     ORDER BY total DESC
@@ -958,7 +966,9 @@ export async function getCountryStats(
 }
 
 export async function getBestTimeToApply(
-  range?: DateRange
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string
 ): Promise<TimeSlotStats[]> {
   const { startDate, endDate } = range ?? {};
   const result = await sql`
@@ -974,6 +984,8 @@ export async function getBestTimeToApply(
     FROM jobs
     WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
     GROUP BY EXTRACT(DOW FROM received_at), EXTRACT(HOUR FROM received_at)
     ORDER BY day, hour
   `;
@@ -987,7 +999,8 @@ export async function getBestTimeToApply(
 }
 
 export async function getBudgetWinRate(
-  profileId?: string
+  profileId?: string,
+  agentId?: string
 ): Promise<BudgetWinRate[]> {
   const result = await sql`
     SELECT
@@ -1008,7 +1021,8 @@ export async function getBudgetWinRate(
     FROM jobs
     WHERE budget_max IS NOT NULL
       AND outcome IN ('won', 'lost')
-      AND (${profileId}::text IS NULL OR profile_id = ${profileId}::text)
+      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
+      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
     GROUP BY
       CASE
         WHEN budget_max < 100 THEN '< $100'
