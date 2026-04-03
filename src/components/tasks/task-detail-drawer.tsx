@@ -674,7 +674,7 @@ export function TaskDetailDrawer({ columns, isAdmin, agentId: currentAgentId }: 
                 <Input
                   type="datetime-local"
                   value={task.due_date ? format(new Date(task.due_date), "yyyy-MM-dd'T'HH:mm") : ""}
-                  onChange={(e) => updateField("due_date", e.target.value || null)}
+                  onChange={(e) => updateField("due_date", e.target.value ? new Date(e.target.value).toISOString() : null)}
                   className="h-7 text-xs w-[190px] border-0 bg-transparent hover:bg-muted/50 px-2"
                 />
                 {task.due_date && (
@@ -689,7 +689,7 @@ export function TaskDetailDrawer({ columns, isAdmin, agentId: currentAgentId }: 
                 <Input
                   type="datetime-local"
                   value={task.start_date ? format(new Date(task.start_date), "yyyy-MM-dd'T'HH:mm") : ""}
-                  onChange={(e) => updateField("start_date", e.target.value || null)}
+                  onChange={(e) => updateField("start_date", e.target.value ? new Date(e.target.value).toISOString() : null)}
                   className="h-7 text-xs w-[190px] border-0 bg-transparent hover:bg-muted/50 px-2"
                 />
                 {task.start_date && (
