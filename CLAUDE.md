@@ -34,9 +34,9 @@ Deployed to Vercel via Git push — there is no local dev workflow. All changes 
 
 Two user roles control access:
 - **`admin`** — full access via `(dashboard)/` route group
-- **`agent`** — restricted to `(agent)/` route group (`/my-dashboard`, `/my-jobs`, `/my-performance`)
+- **`agent`** — restricted to `(agent)/` route group (`/my-dashboard`, `/my-pipeline`, `/my-connects`, `/my-analytics`, `/my-jobs`, `/my-performance`, `/my-tasks`)
 
-Middleware (`src/middleware.ts`) enforces auth and redirects agents away from admin routes.
+Middleware (`src/middleware.ts`) enforces auth and redirects agents away from admin routes to `/my-dashboard`.
 
 ### Key Files
 
@@ -105,6 +105,21 @@ Migrations in `src/lib/migrations/`.
 - **Path alias**: `@/*` maps to `./src/*`
 - **URL state for filters** — job filters are stored in URL search params, not React state
 - **Server actions for mutations** — all writes go through `src/lib/actions.ts`, which revalidates paths after changes
+- **Smart polling** — `<AutoRefresh interval={N} />` component calls `router.refresh()` on a timer. 5s for task boards, 15s for dashboards. Pauses when tab is hidden. No WebSockets needed.
+
+### Agent Pages
+
+Agents have full dashboard access scoped to their own data. All agent pages force `agentId = session.user.agentId` at the server component level — no query param override possible.
+
+| Agent Route | Mirrors Admin Route | Data Scope |
+|-------------|-------------------|------------|
+| `/my-dashboard` | `/dashboard` | Own KPIs, funnel, pipeline, recent jobs |
+| `/my-pipeline` | `/pipeline` | Own pipeline stages + active jobs |
+| `/my-connects` | `/connects` | Own connects usage, ROI, filter quality |
+| `/my-analytics` | `/analytics` | Own proposal models, geography, timing, budget |
+| `/my-performance` | — | Own win rate trends, response time |
+| `/my-jobs` | `/jobs` | Own job list |
+| `/my-tasks` | `/tasks` | Assigned boards only |
 
 ## Migration Version History
 
@@ -233,7 +248,7 @@ When creating a new agent profile webhook in n8n workflow `EWnZg3svZWwcIRs4`, us
 
 - **Admin auth**: Admins log in via `ADMIN_CREDENTIALS` env var — they do NOT have a row in `agents` table. Code that queries `agents WHERE role = 'admin'` may find nothing.
 - **Agent sidebar detection**: `useNavSections()` uses `pathname.startsWith("/my-")` to show agent nav. All agent routes MUST start with `/my-`.
-- **Agent layout**: `(agent)/layout.tsx` does NOT render a `<Header>` — each agent page provides its own inline header. Do not add `<Header>` to agent pages.
+- **Agent layout**: `(agent)/layout.tsx` renders `<Sidebar>` only. Each agent page includes `<Header title="..." hideFilters />` individually — this shows the top navbar (date picker, theme toggle, user info) without agent/profile filter dropdowns.
 - **Auto-seed**: `getDefaultProject()` auto-creates default workspace + project + columns on first access if tables exist but are empty.
 - **Board switching**: Admin uses `?board=<id>` URL param + localStorage; agent currently sees only first assigned board (FN-1 audit item).
 - **Task creation**: Modal supports external trigger via `triggerOpen` prop + `defaultColumnId` for per-column "+" buttons.
@@ -241,7 +256,7 @@ When creating a new agent profile webhook in n8n workflow `EWnZg3svZWwcIRs4`, us
 - **Task create**: "New Task" and column "+" open a full-width create modal with all fields (same layout as detail view).
 - **Webhook auto-assignment**: When `_source === "n8n"`, the webhook auto-assigns agent (by name lookup), sets 24h due date, and creates profile + `vollna-auto` tags.
 - **Structured fields**: Both create and detail views show editable Job Snapshot (link, budget, skills, posted), Client Intel (location, rating, spent, hires), Routing Info (agent, profile, stack, job ID, generated), and Proposal — all stored in `custom_fields`.
-- **Agent header**: Agent my-tasks page shows the same header as admin with agent-scoped filters (own name, assigned profiles, date range, timezone, theme).
+- **Agent header**: All agent pages use `<Header title="..." hideFilters />` — shows date picker, theme toggle, user info, logout. No agent/profile filter dropdowns since data is session-scoped.
 - **Member removal**: Uses browser `confirm()` instead of styled dialog (UX-5 audit item); auto-unassigns from tasks.
 - **Job-Task status sync**: When a task moves columns → `moveTaskAction()` → `syncJobStatusFromTask()` → updates `jobs.status` to column name. This is the ONLY way job statuses change now.
 - **`jobs.status`**: Renamed from `clickup_status` (migration 012). Same values, same queries. Historical data preserved.

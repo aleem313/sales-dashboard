@@ -332,6 +332,7 @@ Previous `cline.md` content was **fabricated** by a prior AI session. Verified o
 | 6 | Agent Analytics page (/my-analytics) | DONE |
 | 7 | Agent sidebar nav update | DONE |
 | 8 | AutoRefresh on all dashboard + task board pages | DONE |
+| 9 | Top navbar (Header) on all agent pages with hideFilters | DONE |
 
 ### Milestones 6–7: NOT STARTED (after M8)
 See `plan.md` for full breakdown.
