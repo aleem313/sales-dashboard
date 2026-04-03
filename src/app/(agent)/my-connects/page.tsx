@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Separator } from "@/components/ui/separator";
+import { Header } from "@/components/layout/header";
 import { auth } from "@/lib/auth";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { ConnectsUsageBars } from "@/components/connects/connects-usage-bars";
@@ -35,13 +35,10 @@ export default async function MyConnectsPage({
   const wasted = roi.filter((r) => r.wins === 0).reduce((s, r) => s + r.connects_spent, 0);
 
   return (
-    <div className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
-      <AutoRefresh interval={15000} />
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">My Connects</h1>
-        <p className="text-sm text-muted-foreground mt-1">Your connects usage, ROI, and efficiency.</p>
-      </div>
-      <Separator className="mb-5" />
+    <>
+      <Header title="My Connects" hideFilters />
+      <div className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
+        <AutoRefresh interval={15000} />
 
       <StatRow className="mb-5">
         <StatCard label="Total Used" value={totalUsed} variant="accent" delta="Estimated from proposals" />
@@ -58,5 +55,6 @@ export default async function MyConnectsPage({
         <FilterQualityCard data={filterQuality} />
       </div>
     </div>
+    </>
   );
 }

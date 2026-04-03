@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Separator } from "@/components/ui/separator";
+import { Header } from "@/components/layout/header";
 import { auth } from "@/lib/auth";
 import { ModelComparison, CountryHeatmap, TimeHeatmap, BudgetIntelligence } from "@/components/charts";
 import { getProposalAnalytics, getCountryStats, getBestTimeToApply, getBudgetWinRate } from "@/lib/data";
@@ -28,13 +28,10 @@ export default async function MyAnalyticsPage({
   ]);
 
   return (
-    <div className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
-      <AutoRefresh interval={15000} />
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">My Analytics</h1>
-        <p className="text-sm text-muted-foreground mt-1">Proposal models, geography, timing, and budget insights for your jobs.</p>
-      </div>
-      <Separator className="mb-5" />
+    <>
+      <Header title="My Analytics" hideFilters />
+      <div className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
+        <AutoRefresh interval={15000} />
 
       <div className="grid gap-6">
         <ModelComparison data={modelData} />
@@ -45,5 +42,6 @@ export default async function MyAnalyticsPage({
         <BudgetIntelligence data={budgetData} />
       </div>
     </div>
+    </>
   );
 }

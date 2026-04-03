@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Header } from "@/components/layout/header";
 import { Separator } from "@/components/ui/separator";
 import { auth } from "@/lib/auth";
 import { getJobs } from "@/lib/data";
@@ -35,15 +36,9 @@ export default async function MyJobsPage({
   });
 
   return (
-    <div className="container mx-auto px-4 py-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">My Jobs</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Your assigned jobs and proposal queue.
-        </p>
-      </div>
-
-      <Separator />
+    <>
+      <Header title="My Jobs" hideFilters />
+      <div className="container mx-auto px-4 py-6 space-y-6 flex-1 overflow-y-auto">
 
       <div className="flex gap-2 flex-wrap">
         {["", "Proposal Ready", "Sent", "Following Up"].map((status) => (
@@ -145,5 +140,6 @@ export default async function MyJobsPage({
         Showing {jobs.data.length} of {jobs.total} jobs
       </p>
     </div>
+    </>
   );
 }

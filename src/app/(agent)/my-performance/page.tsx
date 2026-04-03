@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Header } from "@/components/layout/header";
 import { Separator } from "@/components/ui/separator";
 import { auth } from "@/lib/auth";
 import { WinRateTrend, ResponseTimeChart } from "@/components/charts";
@@ -18,19 +19,12 @@ export default async function MyPerformancePage() {
   ]);
 
   return (
-    <div className="container mx-auto px-4 py-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">My Performance</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Win rate trends and response time analysis.
-        </p>
+    <>
+      <Header title="My Performance" hideFilters />
+      <div className="container mx-auto px-4 py-6 space-y-6 flex-1 overflow-y-auto">
+        <WinRateTrend data={winRateTrend} />
+        <ResponseTimeChart data={responseTime} />
       </div>
-
-      <Separator />
-
-      <WinRateTrend data={winRateTrend} />
-
-      <ResponseTimeChart data={responseTime} />
-    </div>
+    </>
   );
 }

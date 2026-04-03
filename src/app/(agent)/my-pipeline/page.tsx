@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Separator } from "@/components/ui/separator";
+import { Header } from "@/components/layout/header";
 import { auth } from "@/lib/auth";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { PipelineKanban } from "@/components/pipeline/pipeline-kanban";
@@ -44,13 +44,10 @@ export default async function MyPipelinePage({
   const { todo, submitted, proto, meeting, negotiation } = counts;
 
   return (
-    <div className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
-      <AutoRefresh interval={15000} />
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">My Pipeline</h1>
-        <p className="text-sm text-muted-foreground mt-1">Your active proposals and their current stages.</p>
-      </div>
-      <Separator className="mb-5" />
+    <>
+      <Header title="My Pipeline" hideFilters />
+      <div className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
+        <AutoRefresh interval={15000} />
 
       <StatRow className="mb-5">
         <StatCard label="To Do" value={todo} variant="accent" delta="Awaiting action" />
@@ -66,5 +63,6 @@ export default async function MyPipelinePage({
 
       <PipelineTable jobs={jobs} />
     </div>
+    </>
   );
 }

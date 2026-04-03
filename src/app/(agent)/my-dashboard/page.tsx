@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Header } from "@/components/layout/header";
 import { Separator } from "@/components/ui/separator";
 import { auth } from "@/lib/auth";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
@@ -76,16 +77,10 @@ export default async function MyDashboardPage({
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 space-y-6">
-      <AutoRefresh interval={15000} />
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">My Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Your personal performance overview.
-        </p>
-      </div>
-
-      <Separator />
+    <>
+      <Header title="My Dashboard" hideFilters />
+      <div className="container mx-auto px-4 py-6 space-y-6 flex-1 overflow-y-auto">
+        <AutoRefresh interval={15000} />
 
       <AlertsBanner alerts={alerts} />
 
@@ -206,5 +201,6 @@ export default async function MyDashboardPage({
         </div>
       </div>
     </div>
+    </>
   );
 }
