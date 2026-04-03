@@ -928,31 +928,6 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
               />
             </div>
 
-            {/* Custom Fields */}
-            {customFieldDefs.length > 0 && (
-              <>
-                <Separator />
-                <div className="space-y-2">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Custom Fields</h4>
-                  <div className="space-y-2">
-                    {customFieldDefs.map((field) => {
-                      const cfValues = (task.custom_fields ?? {}) as Record<string, unknown>;
-                      return (
-                        <div key={field.id} className="flex items-center gap-3">
-                          <span className="text-xs text-muted-foreground w-28 shrink-0 truncate" title={field.name}>
-                            {field.name}{field.required && <span className="text-red-500 ml-0.5">*</span>}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <CustomFieldRenderer field={field} value={cfValues[field.id]} onChange={(newVal) => updateCustomField(field.id, newVal)} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
-
             <Separator />
 
             {/* Subtasks/Checklist */}
