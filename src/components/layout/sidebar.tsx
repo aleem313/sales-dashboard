@@ -21,6 +21,7 @@ import {
   TrendingUp,
   KanbanSquare,
   Settings,
+  BarChart3,
 } from "lucide-react";
 import { useState, Suspense } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -84,8 +85,16 @@ const agentNavSections: NavSection[] = [
     label: "Overview",
     items: [
       { href: "/my-dashboard", label: "My Dashboard", icon: Gauge },
+      { href: "/my-pipeline", label: "My Pipeline", icon: Filter },
       { href: "/my-jobs", label: "My Jobs", icon: Briefcase },
+    ],
+  },
+  {
+    label: "Performance",
+    items: [
       { href: "/my-performance", label: "My Performance", icon: TrendingUp },
+      { href: "/my-connects", label: "My Connects", icon: Zap },
+      { href: "/my-analytics", label: "My Analytics", icon: BarChart3 },
     ],
   },
   {
