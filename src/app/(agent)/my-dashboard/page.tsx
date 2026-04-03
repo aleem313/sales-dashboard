@@ -16,6 +16,7 @@ import {
   getActiveAlerts,
 } from "@/lib/data";
 import { parseDateRange } from "@/lib/date-utils";
+import { AutoRefresh } from "@/components/auto-refresh";
 import {
   Table,
   TableBody,
@@ -76,6 +77,7 @@ export default async function MyDashboardPage({
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
+      <AutoRefresh interval={15000} />
       <div>
         <h1 className="text-2xl font-bold tracking-tight">My Dashboard</h1>
         <p className="text-sm text-muted-foreground mt-1">

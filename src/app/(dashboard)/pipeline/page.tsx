@@ -9,6 +9,7 @@ import {
   getAllProfiles,
 } from "@/lib/data";
 import { parseDateRange } from "@/lib/date-utils";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 export const revalidate = 300;
 
@@ -62,6 +63,7 @@ export default async function PipelinePage({
           agents={allAgents}
           profiles={allProfiles}
         />
+      <AutoRefresh interval={15000} />
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
         <StatRow className="mb-5">
           <StatCard label="To Do" value={todo} variant="accent" delta="Awaiting action" />

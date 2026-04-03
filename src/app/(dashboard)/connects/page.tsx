@@ -11,6 +11,7 @@ import {
   getAllProfiles,
 } from "@/lib/data";
 import { parseDateRange } from "@/lib/date-utils";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 export const revalidate = 300;
 
@@ -60,6 +61,7 @@ export default async function ConnectsPage({
           agents={allAgents}
           profiles={allProfiles}
         />
+      <AutoRefresh interval={15000} />
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
         <StatRow className="mb-5">
           <StatCard label="Total Connects Used" value={totalUsed} variant="warn" delta="This period" />

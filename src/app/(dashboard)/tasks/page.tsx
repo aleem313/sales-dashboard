@@ -7,6 +7,7 @@ import { BoardSelectorWrapper } from "@/components/tasks/board-selector-wrapper"
 // TaskDetailDrawer replaced by full-page /tasks/[id] route
 import { BoardFilterBar } from "@/components/tasks/board-filter-bar";
 import { BoardStoreInitializer } from "@/components/tasks/board-store-initializer";
+import { AutoRefresh } from "@/components/auto-refresh";
 import {
   getDefaultProject,
   getProjectById,
@@ -104,6 +105,7 @@ export default function TasksPage({ searchParams }: Props) {
   return (
     <>
       <Header title="Task Board" />
+      <AutoRefresh interval={5000} />
       <main className="flex-1 overflow-hidden flex flex-col">
         <Suspense fallback={<BoardSkeleton />}>
           <BoardContent searchParams={searchParams} />
