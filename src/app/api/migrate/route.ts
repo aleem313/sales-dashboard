@@ -13,8 +13,14 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "migrate-tasks") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
+  }
+
+  if (migration === "migrate-tasks") {
+    const sourceBoard = request.nextUrl.searchParams.get("from") || "e8442ebd-afd3-4217-99c4-e55ee20d4bfa";
+    const destBoard = request.nextUrl.searchParams.get("to") || "351494d8-918e-475e-b16c-2eee3232aefe";
+    return runMigrateTasks(sourceBoard, destBoard);
   }
 
   if (migration === "012") {
@@ -479,6 +485,263 @@ async function run012() {
       success: false,
       migration: "012_remove_clickup_dependency",
       steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function runMigrateTasks(sourceProjectId: string, destProjectId: string) {
+  const log: string[] = [];
+  let totalSource = 0;
+  let moved = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  try {
+    log.push(`Migrating tasks from ${sourceProjectId} → ${destProjectId}`);
+
+    // 1. Verify both boards exist
+    const srcCheck = await sql`SELECT id, name FROM projects WHERE id = ${sourceProjectId}`;
+    const dstCheck = await sql`SELECT id, name FROM projects WHERE id = ${destProjectId}`;
+    if (srcCheck.rows.length === 0) {
+      return NextResponse.json({ success: false, error: "Source board not found" }, { status: 400 });
+    }
+    if (dstCheck.rows.length === 0) {
+      return NextResponse.json({ success: false, error: "Destination board not found" }, { status: 400 });
+    }
+    log.push(`✓ Source: "${srcCheck.rows[0].name}" | Dest: "${dstCheck.rows[0].name}"`);
+
+    // 2. Get destination columns (for mapping)
+    const destCols = await sql`
+      SELECT id, name, LOWER(TRIM(name)) AS norm_name, position, color, is_done
+      FROM columns WHERE project_id = ${destProjectId} ORDER BY position
+    `;
+    const destColMap = new Map<string, { id: string; name: string }>();
+    for (const c of destCols.rows) {
+      destColMap.set(c.norm_name as string, { id: c.id as string, name: c.name as string });
+    }
+    log.push(`✓ Destination has ${destCols.rows.length} columns: ${destCols.rows.map(c => c.name).join(", ")}`);
+
+    // 3. Get source columns
+    const srcCols = await sql`
+      SELECT id, name, LOWER(TRIM(name)) AS norm_name, position, color, is_done
+      FROM columns WHERE project_id = ${sourceProjectId} ORDER BY position
+    `;
+    log.push(`✓ Source has ${srcCols.rows.length} columns: ${srcCols.rows.map(c => c.name).join(", ")}`);
+
+    // 4. Create any missing columns in destination
+    const colIdMap = new Map<string, string>(); // source col id → dest col id
+    for (const sc of srcCols.rows) {
+      const normName = sc.norm_name as string;
+      if (destColMap.has(normName)) {
+        colIdMap.set(sc.id as string, destColMap.get(normName)!.id);
+      } else {
+        // Create column in destination
+        const maxPos = await sql`
+          SELECT COALESCE(MAX(position), 0) AS mp FROM columns WHERE project_id = ${destProjectId}
+        `;
+        const newPos = (maxPos.rows[0].mp as number) + 1000;
+        const newCol = await sql`
+          INSERT INTO columns (project_id, name, position, color, is_done)
+          VALUES (${destProjectId}, ${sc.name}, ${newPos}, ${sc.color}, ${sc.is_done})
+          ON CONFLICT (project_id, name) DO NOTHING
+          RETURNING id
+        `;
+        if (newCol.rows.length > 0) {
+          colIdMap.set(sc.id as string, newCol.rows[0].id as string);
+          log.push(`  + Created column "${sc.name}" in destination`);
+        } else {
+          // ON CONFLICT hit — fetch existing
+          const existing = await sql`
+            SELECT id FROM columns WHERE project_id = ${destProjectId} AND LOWER(TRIM(name)) = ${normName}
+          `;
+          colIdMap.set(sc.id as string, existing.rows[0].id as string);
+        }
+      }
+    }
+
+    // 5. Get all source tasks with their column names
+    const srcTasks = await sql`
+      SELECT t.*, c.name AS column_name
+      FROM tasks t
+      JOIN columns c ON c.id = t.column_id
+      WHERE t.project_id = ${sourceProjectId}
+      ORDER BY c.position, t.position
+    `;
+    totalSource = srcTasks.rows.length;
+    log.push(`✓ Found ${totalSource} tasks in source board`);
+
+    // 6. Get existing destination task titles (normalized) for dedup
+    const destTasks = await sql`
+      SELECT id, LOWER(TRIM(title)) AS norm_title FROM tasks WHERE project_id = ${destProjectId}
+    `;
+    const existingTitles = new Set<string>();
+    for (const dt of destTasks.rows) {
+      existingTitles.add(dt.norm_title as string);
+    }
+    log.push(`✓ Destination already has ${destTasks.rows.length} tasks`);
+
+    // 7. Get destination tags for mapping
+    const destTags = await sql`
+      SELECT id, LOWER(TRIM(name)) AS norm_name, name, color
+      FROM task_tags WHERE project_id = ${destProjectId}
+    `;
+    const destTagMap = new Map<string, string>(); // normalized name → dest tag id
+    for (const t of destTags.rows) {
+      destTagMap.set(t.norm_name as string, t.id as string);
+    }
+
+    // 8. Migrate each task
+    for (const srcTask of srcTasks.rows) {
+      const normTitle = (srcTask.title as string).toLowerCase().trim();
+
+      // Skip empty/null titles
+      if (!normTitle) {
+        log.push(`  ⚠ Skipped task with empty title (id: ${srcTask.id})`);
+        skipped++;
+        continue;
+      }
+
+      // Skip duplicates
+      if (existingTitles.has(normTitle)) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        // Resolve destination column
+        const destColId = colIdMap.get(srcTask.column_id as string);
+        if (!destColId) {
+          log.push(`  ✗ No column mapping for task "${srcTask.title}" (col: ${srcTask.column_id})`);
+          errors++;
+          continue;
+        }
+
+        // 8a. Insert the task
+        const newTask = await sql`
+          INSERT INTO tasks (project_id, column_id, title, description, priority, due_date, start_date, position, creator_id, custom_fields)
+          VALUES (
+            ${destProjectId},
+            ${destColId},
+            ${srcTask.title},
+            ${srcTask.description},
+            ${srcTask.priority},
+            ${srcTask.due_date},
+            ${srcTask.start_date},
+            ${srcTask.position},
+            ${srcTask.creator_id},
+            ${JSON.stringify(srcTask.custom_fields ?? {})}
+          )
+          RETURNING id
+        `;
+        const newTaskId = newTask.rows[0].id as string;
+
+        // 8b. Copy assignees
+        const assignees = await sql`SELECT agent_id FROM task_assignees WHERE task_id = ${srcTask.id}`;
+        for (const a of assignees.rows) {
+          await sql`
+            INSERT INTO task_assignees (task_id, agent_id) VALUES (${newTaskId}, ${a.agent_id})
+            ON CONFLICT DO NOTHING
+          `;
+        }
+
+        // 8c. Copy tags (create in dest project if missing)
+        const taskTags = await sql`
+          SELECT tt.name, tt.color, LOWER(TRIM(tt.name)) AS norm_name
+          FROM task_tag_map ttm
+          JOIN task_tags tt ON tt.id = ttm.tag_id
+          WHERE ttm.task_id = ${srcTask.id}
+        `;
+        for (const tag of taskTags.rows) {
+          let destTagId = destTagMap.get(tag.norm_name as string);
+          if (!destTagId) {
+            const newTag = await sql`
+              INSERT INTO task_tags (project_id, name, color)
+              VALUES (${destProjectId}, ${tag.name}, ${tag.color})
+              RETURNING id
+            `;
+            destTagId = newTag.rows[0].id as string;
+            destTagMap.set(tag.norm_name as string, destTagId);
+          }
+          await sql`
+            INSERT INTO task_tag_map (task_id, tag_id) VALUES (${newTaskId}, ${destTagId})
+            ON CONFLICT DO NOTHING
+          `;
+        }
+
+        // 8d. Copy comments (preserve threading)
+        const comments = await sql`
+          SELECT * FROM comments WHERE task_id = ${srcTask.id} ORDER BY created_at ASC
+        `;
+        const commentIdMap = new Map<string, string>(); // old id → new id
+        for (const c of comments.rows) {
+          const newParentId = c.parent_id ? (commentIdMap.get(c.parent_id as string) ?? null) : null;
+          const newComment = await sql`
+            INSERT INTO comments (task_id, author_id, parent_id, body, created_at, updated_at, deleted_at)
+            VALUES (${newTaskId}, ${c.author_id}, ${newParentId}, ${c.body}, ${c.created_at}, ${c.updated_at}, ${c.deleted_at})
+            RETURNING id
+          `;
+          commentIdMap.set(c.id as string, newComment.rows[0].id as string);
+        }
+
+        // 8e. Copy checklist items
+        const checklist = await sql`
+          SELECT * FROM checklist_items WHERE task_id = ${srcTask.id} ORDER BY position
+        `;
+        for (const ci of checklist.rows) {
+          await sql`
+            INSERT INTO checklist_items (task_id, title, is_checked, position)
+            VALUES (${newTaskId}, ${ci.title}, ${ci.is_checked}, ${ci.position})
+          `;
+        }
+
+        // 8f. Copy file attachments
+        const attachments = await sql`
+          SELECT * FROM file_attachments WHERE task_id = ${srcTask.id}
+        `;
+        for (const att of attachments.rows) {
+          await sql`
+            INSERT INTO file_attachments (task_id, filename, url, blob_path, size_bytes, mime_type, thumbnail_url, uploader_id)
+            VALUES (${newTaskId}, ${att.filename}, ${att.url}, ${att.blob_path}, ${att.size_bytes}, ${att.mime_type}, ${att.thumbnail_url}, ${att.uploader_id})
+          `;
+        }
+
+        // 8g. Log migration activity on new task
+        await sql`
+          INSERT INTO activity_log (task_id, actor_id, actor_label, action_type, field, old_value, new_value, metadata)
+          VALUES (${newTaskId}, NULL, 'System', 'task_migrated', 'project', ${sourceProjectId}, ${destProjectId}, '{"source": "board-migration"}')
+        `;
+
+        // Mark title as seen
+        existingTitles.add(normTitle);
+        moved++;
+      } catch (taskErr) {
+        log.push(`  ✗ Failed: "${srcTask.title}" — ${(taskErr as Error).message}`);
+        errors++;
+      }
+    }
+
+    log.push("");
+    log.push("═══ MIGRATION SUMMARY ═══");
+    log.push(`Source board: ${srcCheck.rows[0].name} (${sourceProjectId})`);
+    log.push(`Dest board:   ${dstCheck.rows[0].name} (${destProjectId})`);
+    log.push(`Total in source: ${totalSource}`);
+    log.push(`Moved:           ${moved}`);
+    log.push(`Skipped (dupes): ${skipped}`);
+    log.push(`Errors:          ${errors}`);
+
+    return NextResponse.json({
+      success: errors === 0,
+      migration: "migrate-tasks",
+      summary: { totalSource, moved, skipped, errors },
+      steps: log,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "migrate-tasks",
+      summary: { totalSource, moved, skipped, errors },
+      steps: [...log, `FATAL: ${(error as Error).message}`],
       error: (error as Error).message,
     }, { status: 500 });
   }
