@@ -42,12 +42,9 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
   const sd = range?.startDate ?? null;
   const ed = range?.endDate ?? null;
 
-  // Lifecycle-based metrics: milestone columns track if a job EVER reached a stage.
-  //   proposals_sent  → proposal_sent_at IS NOT NULL (set once, never cleared)
-  //   meetings_booked → meeting_booked_at IS NOT NULL (set once, never cleared)
-  //   won/lost        → outcome column (current state — terminal)
-  //   bad_leads       → current status = N/A
-  // Date filtering uses the milestone timestamp for each metric.
+  // Lifecycle metrics: proposal_sent_at / meeting_booked_at track if a job EVER reached a stage.
+  // Won/Lost/Bad Leads use current status (matches task board column).
+  // Date filtering uses the relevant event timestamp per metric.
   const result = await sql`
     SELECT
       COUNT(CASE
@@ -65,18 +62,18 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
          AND (${ed}::timestamptz IS NULL OR meeting_booked_at <= ${ed}::timestamptz)
         THEN 1 END) AS meetings_booked,
       COUNT(CASE
-        WHEN outcome = 'won'
+        WHEN LOWER(status) = 'won'
          AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
          AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
         THEN 1 END) AS won,
       COUNT(CASE
-        WHEN outcome = 'lost'
+        WHEN LOWER(status) = 'lost'
          AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
          AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
         THEN 1 END) AS lost,
       ROUND(
         COUNT(CASE
-          WHEN outcome = 'won'
+          WHEN LOWER(status) = 'won'
            AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
            AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
           THEN 1 END)::DECIMAL /
@@ -87,7 +84,7 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
           THEN 1 END), 0) * 100, 1
       ) AS win_rate,
       COALESCE(SUM(CASE
-        WHEN outcome = 'won'
+        WHEN LOWER(status) = 'won'
          AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
          AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
         THEN won_value END), 0) AS total_revenue,
@@ -1148,18 +1145,18 @@ export async function getAgentKPIMetrics(
          AND (${ed}::timestamptz IS NULL OR meeting_booked_at <= ${ed}::timestamptz)
         THEN 1 END) AS meetings_booked,
       COUNT(CASE
-        WHEN outcome = 'won'
+        WHEN LOWER(status) = 'won'
          AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
          AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
         THEN 1 END) AS won,
       COUNT(CASE
-        WHEN outcome = 'lost'
+        WHEN LOWER(status) = 'lost'
          AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
          AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
         THEN 1 END) AS lost,
       ROUND(
         COUNT(CASE
-          WHEN outcome = 'won'
+          WHEN LOWER(status) = 'won'
            AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
            AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
           THEN 1 END)::DECIMAL /
@@ -1170,7 +1167,7 @@ export async function getAgentKPIMetrics(
           THEN 1 END), 0) * 100, 1
       ) AS win_rate,
       COALESCE(SUM(CASE
-        WHEN outcome = 'won'
+        WHEN LOWER(status) = 'won'
          AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
          AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
         THEN won_value END), 0) AS total_revenue,
@@ -1272,7 +1269,7 @@ export async function getConversionFunnel(
          AND (${ed}::timestamptz IS NULL OR COALESCE(stage_entered_at, updated_at) <= ${ed}::timestamptz)
         THEN 1 END) AS negotiation,
       COUNT(CASE
-        WHEN outcome = 'won'
+        WHEN LOWER(status) = 'won'
          AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
          AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
         THEN 1 END) AS won
