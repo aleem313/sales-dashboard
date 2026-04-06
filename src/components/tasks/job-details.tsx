@@ -161,9 +161,18 @@ export function JobDetails({ job, loading, error, customFields }: JobDetailsProp
         <div className="rounded-lg border bg-muted/30 p-3 space-y-0">
           {jobUrl && (
             <InfoRow icon={<Link2 className="h-3.5 w-3.5" />} label="Job Link">
-              <a href={jobUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs truncate block">
-                View on Upwork
-              </a>
+              <div className="flex items-center gap-1.5">
+                <a href={jobUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs truncate">
+                  View on Upwork
+                </a>
+                <button
+                  className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+                  title="Copy job URL"
+                  onClick={() => copyToClipboard(jobUrl, "Job URL")}
+                >
+                  <Copy className="h-3 w-3" />
+                </button>
+              </div>
             </InfoRow>
           )}
           <InfoRow icon={<DollarSign className="h-3.5 w-3.5" />} label="Budget">
