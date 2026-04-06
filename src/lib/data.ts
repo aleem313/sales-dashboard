@@ -42,18 +42,18 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
   const { startDate, endDate } = range ?? {};
 
   // ONE base dataset filtered by received_at. ALL metrics computed within it.
-  // Lifecycle milestones (proposal_sent_at, meeting_booked_at) check if a job
-  // EVER reached that stage — but only jobs received within the date range count.
+  // Metrics are mutually exclusive: Bad Leads (N/A) are excluded from Proposal Sent.
+  // Lifecycle milestones check if a job EVER reached that stage.
   const result = await sql`
     SELECT
       COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN meeting_booked_at IS NOT NULL THEN 1 END) AS meetings_booked,
+      COUNT(CASE WHEN proposal_sent_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN meeting_booked_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meetings_booked,
       COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END) AS won,
       COUNT(CASE WHEN LOWER(status) = 'lost' THEN 1 END) AS lost,
       ROUND(
         COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END), 0) * 100, 1
+        NULLIF(COUNT(CASE WHEN proposal_sent_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END), 0) * 100, 1
       ) AS win_rate,
       COALESCE(SUM(CASE WHEN LOWER(status) = 'won' THEN won_value END), 0) AS total_revenue,
       COUNT(CASE WHEN LOWER(status) = 'n/a' THEN 1 END) AS bad_leads
@@ -117,12 +117,12 @@ export async function getAgentStats(
       a.id,
       a.name,
       COUNT(j.id) AS total_jobs,
-      COUNT(CASE WHEN LOWER(j.status) IN ('proposal submitted', 'sent', 'submitted', 'following up', 'prototype required', 'prototype done', 'prototype sent', 'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost') THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END) AS proposals_sent,
       COUNT(CASE WHEN LOWER(j.status) = 'won' THEN 1 END) AS won,
       COUNT(CASE WHEN LOWER(j.status) = 'lost' THEN 1 END) AS lost,
       ROUND(
         COUNT(CASE WHEN LOWER(j.status) = 'won' THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE WHEN LOWER(j.status) IN ('won','lost') THEN 1 END), 0) * 100, 1
+        NULLIF(COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END), 0) * 100, 1
       ) AS win_rate_pct,
       COALESCE(SUM(CASE WHEN LOWER(j.status) = 'won' THEN j.won_value END), 0) AS total_revenue,
       AVG(
@@ -1092,17 +1092,17 @@ export async function getAgentKPIMetrics(
   range?: DateRange
 ): Promise<KPIMetrics> {
   const { startDate, endDate } = range ?? {};
-  // Same base-dataset approach as getKPIMetrics, scoped to one agent
+  // Same base-dataset + mutually exclusive approach as getKPIMetrics, scoped to one agent
   const result = await sql`
     SELECT
       COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN meeting_booked_at IS NOT NULL THEN 1 END) AS meetings_booked,
+      COUNT(CASE WHEN proposal_sent_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN meeting_booked_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meetings_booked,
       COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END) AS won,
       COUNT(CASE WHEN LOWER(status) = 'lost' THEN 1 END) AS lost,
       ROUND(
         COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END), 0) * 100, 1
+        NULLIF(COUNT(CASE WHEN proposal_sent_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END), 0) * 100, 1
       ) AS win_rate,
       COALESCE(SUM(CASE WHEN LOWER(status) = 'won' THEN won_value END), 0) AS total_revenue,
       COUNT(CASE WHEN LOWER(status) = 'n/a' THEN 1 END) AS bad_leads
@@ -1171,9 +1171,9 @@ export async function getConversionFunnel(
     SELECT
       COUNT(*) AS total_jobs,
       COUNT(CASE WHEN LOWER(status) NOT IN ('rejected', 'filtered out') OR status IS NULL THEN 1 END) AS passed_filter,
-      COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN proposal_sent_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposals_sent,
       COUNT(CASE WHEN proposal_sent_at IS NOT NULL AND LOWER(status) NOT IN ('lost', 'n/a') THEN 1 END) AS responses,
-      COUNT(CASE WHEN meeting_booked_at IS NOT NULL THEN 1 END) AS meetings,
+      COUNT(CASE WHEN meeting_booked_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meetings,
       COUNT(CASE WHEN LOWER(status) IN ('negotiation', 'won') THEN 1 END) AS negotiation,
       COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END) AS won
     FROM jobs
@@ -1204,10 +1204,16 @@ export async function getConversionFunnel(
 export async function getPipelineNow(agentId?: string, profileId?: string): Promise<
   { label: string; count: number; color: string }[]
 > {
+  // Pipeline uses current status ONLY — must match actual task board columns.
+  // Only counts jobs that have a linked task (task_id IS NOT NULL) to match the board.
   const result = await sql`
     SELECT
       COUNT(CASE WHEN LOWER(status) IN ('to do', 'todo') THEN 1 END) AS todo,
-      COUNT(CASE WHEN LOWER(status) IN ('proposal submitted', 'sent', 'submitted', 'following up', 'prototype required', 'prototype done', 'prototype sent') THEN 1 END) AS in_progress,
+      COUNT(CASE WHEN LOWER(status) IN (
+        'proposal submitted', 'sent', 'submitted', 'following up',
+        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+        'in chat', 'on hold'
+      ) THEN 1 END) AS in_progress,
       COUNT(CASE WHEN LOWER(status) IN ('meeting scheduled', 'meeting done') THEN 1 END) AS meetings,
       COUNT(CASE WHEN LOWER(status) = 'negotiation' THEN 1 END) AS negotiation
     FROM jobs
@@ -1344,12 +1350,12 @@ export async function getEnhancedAgentStats(
       a.id,
       a.name,
       COUNT(j.id) AS total_jobs,
-      COUNT(CASE WHEN LOWER(j.status) IN ('proposal submitted', 'sent', 'submitted', 'following up', 'prototype required', 'prototype done', 'prototype sent', 'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost') THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END) AS proposals_sent,
       COUNT(CASE WHEN LOWER(j.status) = 'won' THEN 1 END) AS won,
       COUNT(CASE WHEN LOWER(j.status) = 'lost' THEN 1 END) AS lost,
       ROUND(
         COUNT(CASE WHEN LOWER(j.status) = 'won' THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE WHEN LOWER(j.status) IN ('won','lost') THEN 1 END), 0) * 100, 1
+        NULLIF(COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END), 0) * 100, 1
       ) AS win_rate_pct,
       COALESCE(SUM(CASE WHEN LOWER(j.status) = 'won' THEN j.won_value END), 0) AS total_revenue,
       AVG(
@@ -1357,7 +1363,7 @@ export async function getEnhancedAgentStats(
         THEN EXTRACT(EPOCH FROM (j.proposal_sent_at - j.received_at)) / 3600
         END
       ) AS avg_response_hours,
-      COUNT(CASE WHEN LOWER(j.status) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN 1 END) AS meetings_done
+      COUNT(CASE WHEN j.meeting_booked_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END) AS meetings_done
     FROM agents a
     LEFT JOIN jobs j ON j.agent_id = a.id
       AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
@@ -1443,9 +1449,9 @@ export async function getEnhancedProfileStats(
       ) AS win_rate_pct,
       AVG(CASE WHEN LOWER(j.status) = 'won' THEN j.won_value END) AS avg_won_value,
       COALESCE(SUM(CASE WHEN LOWER(j.status) = 'won' THEN j.won_value END), 0) AS total_revenue,
-      COUNT(CASE WHEN LOWER(j.status) IN ('proposal submitted', 'sent', 'submitted', 'following up', 'prototype required', 'prototype done', 'prototype sent', 'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost') THEN 1 END) AS moved_past_submitted,
-      COUNT(CASE WHEN LOWER(j.status) IN ('proposal submitted', 'sent', 'submitted', 'following up', 'prototype required', 'prototype done', 'prototype sent', 'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost') THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN LOWER(j.status) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN 1 END) AS reached_meeting
+      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END) AS moved_past_submitted,
+      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN j.meeting_booked_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END) AS reached_meeting
     FROM profiles p
     LEFT JOIN jobs j ON j.profile_id = p.profile_id
       AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
@@ -1494,7 +1500,7 @@ export async function getConnectsUsageByProfile(
     SELECT
       p.profile_name,
       p.stack,
-      COUNT(CASE WHEN LOWER(j.status) IN ('proposal submitted', 'sent', 'submitted', 'following up', 'prototype required', 'prototype done', 'prototype sent', 'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost') THEN 1 END) * 6 AS connects_used
+      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL THEN 1 END) * 6 AS connects_used
     FROM profiles p
     LEFT JOIN jobs j ON j.profile_id = p.profile_id
       AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
@@ -1525,7 +1531,7 @@ export async function getConnectROIByNiche(
   const result = await sql`
     SELECT
       COALESCE(p.stack, 'Unknown') AS niche,
-      COUNT(CASE WHEN LOWER(j.status) IN ('proposal submitted', 'sent', 'submitted', 'following up', 'prototype required', 'prototype done', 'prototype sent', 'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost') THEN 1 END) * 6 AS connects_spent,
+      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL THEN 1 END) * 6 AS connects_spent,
       COUNT(CASE WHEN LOWER(j.status) = 'won' THEN 1 END) AS wins
     FROM jobs j
     JOIN profiles p ON p.profile_id = j.profile_id
@@ -1534,7 +1540,7 @@ export async function getConnectROIByNiche(
       AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
     GROUP BY COALESCE(p.stack, 'Unknown')
-    HAVING COUNT(CASE WHEN LOWER(j.status) IN ('proposal submitted', 'sent', 'submitted', 'following up', 'prototype required', 'prototype done', 'prototype sent', 'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost') THEN 1 END) > 0
+    HAVING COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL THEN 1 END) > 0
     ORDER BY connects_spent DESC
   `;
 
