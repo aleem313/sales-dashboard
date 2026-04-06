@@ -28,7 +28,9 @@ import {
   ArrowRight,
   Link2,
   Trash2,
+  ExternalLink,
 } from "lucide-react";
+import { toast } from "sonner";
 import { CustomFieldRenderer } from "./custom-field-renderer";
 import type { Task, BoardColumn, CustomFieldDefinition } from "@/lib/task-data";
 
@@ -94,8 +96,10 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
     const checklistDone = task.checklist_done ?? 0;
     const commentCount = task.comment_count ?? 0;
     const attachmentCount = task.attachment_count ?? 0;
-    const timeEstimate = (task.custom_fields as Record<string, unknown>)?._time_estimate_minutes as number | undefined;
-    const timeTracked = (task.custom_fields as Record<string, unknown>)?._time_tracked_minutes as number | undefined;
+    const cf = (task.custom_fields ?? {}) as Record<string, unknown>;
+    const timeEstimate = cf._time_estimate_minutes as number | undefined;
+    const timeTracked = cf._time_tracked_minutes as number | undefined;
+    const jobUrl = (cf._job_url as string) || "";
     const hasMetaRow = task.priority || task.due_date || task.start_date || timeEstimate;
     const hasBottomRow = assignees.length > 0 || checklistTotal > 0 || commentCount > 0 || attachmentCount > 0;
 
@@ -224,6 +228,23 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
             <h4 className="text-sm font-medium leading-snug line-clamp-2 mb-1.5">
               {task.title}
             </h4>
+
+            {/* Job link copy button */}
+            {jobUrl && (
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <button
+                  className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                  title="Copy job URL"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(jobUrl).then(() => toast.success("Job URL copied"));
+                  }}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  <span className="truncate max-w-[140px]">Copy Job URL</span>
+                </button>
+              </div>
+            )}
 
             {/* Meta fields row — ClickUp style icon+value pairs */}
             {hasMetaRow && (
