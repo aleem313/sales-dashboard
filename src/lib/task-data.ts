@@ -1419,10 +1419,11 @@ export async function syncJobStatusFromTask(
   const isLost = lowerCol === 'lost';
   const wasTerminal = lowerOld === 'won' || lowerOld === 'lost';
 
-  // Post-sent columns (proposal has been sent)
+  // Post-sent columns (proposal has been sent) — includes actual board column names + legacy names
   const postSentStatuses = [
-    'sent', 'following up', 'prototype required', 'prototype done',
-    'prototype sent', 'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost'
+    'proposal submitted', 'sent', 'submitted', 'following up',
+    'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+    'in chat', 'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost'
   ];
   const isPostSent = postSentStatuses.includes(lowerCol);
 

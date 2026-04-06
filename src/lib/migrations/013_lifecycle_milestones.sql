@@ -29,8 +29,23 @@ WHERE meeting_booked_at IS NULL
 UPDATE jobs SET proposal_sent_at = COALESCE(stage_entered_at, updated_at)
 WHERE proposal_sent_at IS NULL
   AND LOWER(status) IN ('proposal submitted', 'sent', 'submitted', 'following up',
-    'prototype required', 'prototype done', 'prototype sent',
-    'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost');
+    'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+    'in chat', 'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost');
+
+-- Also backfill proposal_sent_at from activity_log for jobs that ever passed through proposal column
+UPDATE jobs j SET proposal_sent_at = sub.first_proposal
+FROM (
+  SELECT j2.id AS job_id, MIN(al.created_at) AS first_proposal
+  FROM jobs j2
+  JOIN tasks t ON (t.id = j2.task_id OR t.custom_fields->>'_job_id' = j2.job_id)
+  JOIN activity_log al ON al.task_id = t.id
+  WHERE al.action_type = 'task_moved'
+    AND al.field = 'column'
+    AND LOWER(al.new_value) IN ('proposal submitted', 'sent', 'submitted')
+    AND j2.proposal_sent_at IS NULL
+  GROUP BY j2.id
+) sub
+WHERE j.id = sub.job_id;
 
 -- Index for efficient date-range queries on milestone columns
 CREATE INDEX IF NOT EXISTS idx_jobs_meeting_booked_at ON jobs(meeting_booked_at) WHERE meeting_booked_at IS NOT NULL;

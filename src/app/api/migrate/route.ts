@@ -470,17 +470,35 @@ async function run013() {
     `;
     results.push(`✓ Backfill fallback (current meeting status): ${backfillFallback.rowCount} rows`);
 
-    // 4. Backfill proposal_sent_at for post-sent statuses that are missing it
+    // 4. Backfill proposal_sent_at from activity_log (first time task entered proposal column)
+    const backfillPSA_AL = await sql`
+      UPDATE jobs j SET proposal_sent_at = sub.first_proposal
+      FROM (
+        SELECT j2.id AS job_id, MIN(al.created_at) AS first_proposal
+        FROM jobs j2
+        JOIN tasks t ON (t.id = j2.task_id OR t.custom_fields->>'_job_id' = j2.job_id)
+        JOIN activity_log al ON al.task_id = t.id
+        WHERE al.action_type = 'task_moved'
+          AND al.field = 'column'
+          AND LOWER(al.new_value) IN ('proposal submitted', 'sent', 'submitted')
+          AND j2.proposal_sent_at IS NULL
+        GROUP BY j2.id
+      ) sub
+      WHERE j.id = sub.job_id
+    `;
+    results.push(`✓ Backfill proposal_sent_at from activity_log: ${backfillPSA_AL.rowCount} rows`);
+
+    // 5. Fallback backfill proposal_sent_at for post-sent statuses still missing it
     const backfillPSA = await sql`
       UPDATE jobs SET proposal_sent_at = COALESCE(stage_entered_at, updated_at)
       WHERE proposal_sent_at IS NULL
         AND LOWER(status) IN ('proposal submitted', 'sent', 'submitted', 'following up',
-          'prototype required', 'prototype done', 'prototype sent',
-          'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost')
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost')
     `;
-    results.push(`✓ Backfill proposal_sent_at for post-sent statuses: ${backfillPSA.rowCount} rows`);
+    results.push(`✓ Backfill proposal_sent_at fallback (current status): ${backfillPSA.rowCount} rows`);
 
-    // 5. Create partial indexes for milestone date-range queries
+    // 6. Create partial indexes for milestone date-range queries
     await sql`CREATE INDEX IF NOT EXISTS idx_jobs_meeting_booked_at ON jobs(meeting_booked_at) WHERE meeting_booked_at IS NOT NULL`;
     await sql`CREATE INDEX IF NOT EXISTS idx_jobs_proposal_sent_at ON jobs(proposal_sent_at) WHERE proposal_sent_at IS NOT NULL`;
     await sql`CREATE INDEX IF NOT EXISTS idx_jobs_outcome_at ON jobs(outcome_at) WHERE outcome_at IS NOT NULL`;
