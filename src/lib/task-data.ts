@@ -1426,6 +1426,10 @@ export async function syncJobStatusFromTask(
   ];
   const isPostSent = postSentStatuses.includes(lowerCol);
 
+  // Meeting milestone columns
+  const meetingStatuses = ['meeting scheduled', 'meeting done'];
+  const isMeeting = meetingStatuses.includes(lowerCol);
+
   if (isWon) {
     await sql`
       UPDATE jobs SET status = ${newColumnName}, outcome = 'won', outcome_at = NOW(), stage_entered_at = NOW(), updated_at = NOW()
@@ -1454,6 +1458,14 @@ export async function syncJobStatusFromTask(
     await sql`
       UPDATE jobs SET proposal_sent_at = COALESCE(proposal_sent_at, NOW())
       WHERE id = ${job.id} AND proposal_sent_at IS NULL
+    `;
+  }
+
+  // Set meeting_booked_at when first entering a meeting column (lifecycle milestone)
+  if (isMeeting) {
+    await sql`
+      UPDATE jobs SET meeting_booked_at = COALESCE(meeting_booked_at, NOW())
+      WHERE id = ${job.id} AND meeting_booked_at IS NULL
     `;
   }
 

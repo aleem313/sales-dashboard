@@ -133,6 +133,7 @@ Agents have full dashboard access scoped to their own data. All agent pages forc
 | 010 | `010_profile_platform.sql` | — | Add `platform` column to profiles table (default: 'Upwork') |
 | 011 | `011_fix_profile_assignments.sql` | — | Fix profile-to-agent assignments to match n8n flow |
 | 012 | `012_remove_clickup_dependency.sql` | M8 | Rename `clickup_status` → `status`, add `jobs.task_id` FK, make `clickup_user_id` nullable |
+| 013 | `013_lifecycle_milestones.sql` | — | Add `meeting_booked_at` milestone column, backfill from activity_log, partial indexes |
 
 ## Migration Execution
 
@@ -144,7 +145,7 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v={VERSION}&secret=YOU
 
 **Latest migration:**
 ```
-https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=012&secret=YOUR_CRON_SECRET
+https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=013&secret=YOUR_CRON_SECRET
 ```
 
 Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variables. All migrations are idempotent — safe to re-run.

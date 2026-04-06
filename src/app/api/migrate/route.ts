@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "migrate-tasks") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "migrate-tasks") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
   }
 
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const sourceBoard = request.nextUrl.searchParams.get("from") || "e8442ebd-afd3-4217-99c4-e55ee20d4bfa";
     const destBoard = request.nextUrl.searchParams.get("to") || "351494d8-918e-475e-b16c-2eee3232aefe";
     return runMigrateTasks(sourceBoard, destBoard);
+  }
+
+  if (migration === "013") {
+    return run013();
   }
 
   if (migration === "012") {
@@ -416,6 +420,81 @@ async function run011() {
     return NextResponse.json({
       success: false,
       migration: "011_fix_profile_assignments",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run013() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 013: Add lifecycle milestone columns...");
+
+    // 1. Add meeting_booked_at column
+    const colCheck = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'jobs' AND column_name = 'meeting_booked_at'
+    `;
+    if (colCheck.rows.length === 0) {
+      await sql`ALTER TABLE jobs ADD COLUMN meeting_booked_at TIMESTAMPTZ`;
+      results.push("✓ Added meeting_booked_at column");
+    } else {
+      results.push("⊘ meeting_booked_at column already exists");
+    }
+
+    // 2. Backfill meeting_booked_at from activity_log (first time task entered meeting column)
+    const backfillAL = await sql`
+      UPDATE jobs j SET meeting_booked_at = sub.first_meeting
+      FROM (
+        SELECT j2.id AS job_id, MIN(al.created_at) AS first_meeting
+        FROM jobs j2
+        JOIN tasks t ON (t.id = j2.task_id OR t.custom_fields->>'_job_id' = j2.job_id)
+        JOIN activity_log al ON al.task_id = t.id
+        WHERE al.action_type = 'task_moved'
+          AND al.field = 'column'
+          AND LOWER(al.new_value) IN ('meeting scheduled', 'meeting done')
+          AND j2.meeting_booked_at IS NULL
+        GROUP BY j2.id
+      ) sub
+      WHERE j.id = sub.job_id
+    `;
+    results.push(`✓ Backfilled meeting_booked_at from activity_log: ${backfillAL.rowCount} rows`);
+
+    // 3. Fallback backfill: jobs currently in meeting statuses with no activity_log match
+    const backfillFallback = await sql`
+      UPDATE jobs SET meeting_booked_at = COALESCE(stage_entered_at, updated_at)
+      WHERE meeting_booked_at IS NULL
+        AND LOWER(status) IN ('meeting scheduled', 'meeting done')
+    `;
+    results.push(`✓ Backfill fallback (current meeting status): ${backfillFallback.rowCount} rows`);
+
+    // 4. Backfill proposal_sent_at for post-sent statuses that are missing it
+    const backfillPSA = await sql`
+      UPDATE jobs SET proposal_sent_at = COALESCE(stage_entered_at, updated_at)
+      WHERE proposal_sent_at IS NULL
+        AND LOWER(status) IN ('proposal submitted', 'sent', 'submitted', 'following up',
+          'prototype required', 'prototype done', 'prototype sent',
+          'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost')
+    `;
+    results.push(`✓ Backfill proposal_sent_at for post-sent statuses: ${backfillPSA.rowCount} rows`);
+
+    // 5. Create partial indexes for milestone date-range queries
+    await sql`CREATE INDEX IF NOT EXISTS idx_jobs_meeting_booked_at ON jobs(meeting_booked_at) WHERE meeting_booked_at IS NOT NULL`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_jobs_proposal_sent_at ON jobs(proposal_sent_at) WHERE proposal_sent_at IS NOT NULL`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_jobs_outcome_at ON jobs(outcome_at) WHERE outcome_at IS NOT NULL`;
+    results.push("✓ Partial indexes created");
+
+    return NextResponse.json({
+      success: true,
+      migration: "013_lifecycle_milestones",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "013_lifecycle_milestones",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });
