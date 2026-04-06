@@ -1428,23 +1428,23 @@ export async function syncJobStatusFromTask(
 
   if (isWon) {
     await sql`
-      UPDATE jobs SET status = ${newColumnName}, outcome = 'won', outcome_at = NOW(), updated_at = NOW()
+      UPDATE jobs SET status = ${newColumnName}, outcome = 'won', outcome_at = NOW(), stage_entered_at = NOW(), updated_at = NOW()
       WHERE id = ${job.id}
     `;
   } else if (isLost) {
     await sql`
-      UPDATE jobs SET status = ${newColumnName}, outcome = 'lost', outcome_at = NOW(), updated_at = NOW()
+      UPDATE jobs SET status = ${newColumnName}, outcome = 'lost', outcome_at = NOW(), stage_entered_at = NOW(), updated_at = NOW()
       WHERE id = ${job.id}
     `;
   } else if (wasTerminal) {
     // Reversal: moving out of Won/Lost → clear outcome
     await sql`
-      UPDATE jobs SET status = ${newColumnName}, outcome = NULL, outcome_at = NULL, updated_at = NOW()
+      UPDATE jobs SET status = ${newColumnName}, outcome = NULL, outcome_at = NULL, stage_entered_at = NOW(), updated_at = NOW()
       WHERE id = ${job.id}
     `;
   } else {
     await sql`
-      UPDATE jobs SET status = ${newColumnName}, updated_at = NOW()
+      UPDATE jobs SET status = ${newColumnName}, stage_entered_at = NOW(), updated_at = NOW()
       WHERE id = ${job.id}
     `;
   }

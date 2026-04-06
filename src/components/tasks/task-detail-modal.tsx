@@ -16,7 +16,7 @@ export function TaskDetailModal({ taskId, columns, isAdmin, agentId, onClose }: 
   return (
     <Dialog open={!!taskId} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent
-        showCloseButton={false}
+        showCloseButton={true}
         className="max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh] p-0 overflow-hidden sm:max-w-[95vw]"
       >
         <DialogTitle className="sr-only">Task Detail</DialogTitle>
