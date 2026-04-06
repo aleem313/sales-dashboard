@@ -39,62 +39,28 @@ import type {
 // ============================================================
 
 export async function getKPIMetrics(range?: DateRange, agentId?: string, profileId?: string): Promise<KPIMetrics> {
-  const sd = range?.startDate ?? null;
-  const ed = range?.endDate ?? null;
+  const { startDate, endDate } = range ?? {};
 
-  // Lifecycle metrics: proposal_sent_at / meeting_booked_at track if a job EVER reached a stage.
-  // Won/Lost/Bad Leads use current status (matches task board column).
-  // Date filtering uses the relevant event timestamp per metric.
+  // ONE base dataset filtered by received_at. ALL metrics computed within it.
+  // Lifecycle milestones (proposal_sent_at, meeting_booked_at) check if a job
+  // EVER reached that stage — but only jobs received within the date range count.
   const result = await sql`
     SELECT
-      COUNT(CASE
-        WHEN (${sd}::timestamptz IS NULL OR received_at >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR received_at <= ${ed}::timestamptz)
-        THEN 1 END) AS total_jobs,
-      COUNT(CASE
-        WHEN proposal_sent_at IS NOT NULL
-         AND (${sd}::timestamptz IS NULL OR proposal_sent_at >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR proposal_sent_at <= ${ed}::timestamptz)
-        THEN 1 END) AS proposals_sent,
-      COUNT(CASE
-        WHEN meeting_booked_at IS NOT NULL
-         AND (${sd}::timestamptz IS NULL OR meeting_booked_at >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR meeting_booked_at <= ${ed}::timestamptz)
-        THEN 1 END) AS meetings_booked,
-      COUNT(CASE
-        WHEN LOWER(status) = 'won'
-         AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
-        THEN 1 END) AS won,
-      COUNT(CASE
-        WHEN LOWER(status) = 'lost'
-         AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
-        THEN 1 END) AS lost,
+      COUNT(*) AS total_jobs,
+      COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN meeting_booked_at IS NOT NULL THEN 1 END) AS meetings_booked,
+      COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END) AS won,
+      COUNT(CASE WHEN LOWER(status) = 'lost' THEN 1 END) AS lost,
       ROUND(
-        COUNT(CASE
-          WHEN LOWER(status) = 'won'
-           AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
-           AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
-          THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE
-          WHEN proposal_sent_at IS NOT NULL
-           AND (${sd}::timestamptz IS NULL OR proposal_sent_at >= ${sd}::timestamptz)
-           AND (${ed}::timestamptz IS NULL OR proposal_sent_at <= ${ed}::timestamptz)
-          THEN 1 END), 0) * 100, 1
+        COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END)::DECIMAL /
+        NULLIF(COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END), 0) * 100, 1
       ) AS win_rate,
-      COALESCE(SUM(CASE
-        WHEN LOWER(status) = 'won'
-         AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
-        THEN won_value END), 0) AS total_revenue,
-      COUNT(CASE
-        WHEN LOWER(status) = 'n/a'
-         AND (${sd}::timestamptz IS NULL OR COALESCE(stage_entered_at, updated_at) >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR COALESCE(stage_entered_at, updated_at) <= ${ed}::timestamptz)
-        THEN 1 END) AS bad_leads
+      COALESCE(SUM(CASE WHEN LOWER(status) = 'won' THEN won_value END), 0) AS total_revenue,
+      COUNT(CASE WHEN LOWER(status) = 'n/a' THEN 1 END) AS bad_leads
     FROM jobs
-    WHERE (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
+    WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
   `;
 
@@ -1125,59 +1091,25 @@ export async function getAgentKPIMetrics(
   agentId: string,
   range?: DateRange
 ): Promise<KPIMetrics> {
-  const sd = range?.startDate ?? null;
-  const ed = range?.endDate ?? null;
-  // Lifecycle-based: same logic as getKPIMetrics, scoped to one agent
+  const { startDate, endDate } = range ?? {};
+  // Same base-dataset approach as getKPIMetrics, scoped to one agent
   const result = await sql`
     SELECT
-      COUNT(CASE
-        WHEN (${sd}::timestamptz IS NULL OR received_at >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR received_at <= ${ed}::timestamptz)
-        THEN 1 END) AS total_jobs,
-      COUNT(CASE
-        WHEN proposal_sent_at IS NOT NULL
-         AND (${sd}::timestamptz IS NULL OR proposal_sent_at >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR proposal_sent_at <= ${ed}::timestamptz)
-        THEN 1 END) AS proposals_sent,
-      COUNT(CASE
-        WHEN meeting_booked_at IS NOT NULL
-         AND (${sd}::timestamptz IS NULL OR meeting_booked_at >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR meeting_booked_at <= ${ed}::timestamptz)
-        THEN 1 END) AS meetings_booked,
-      COUNT(CASE
-        WHEN LOWER(status) = 'won'
-         AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
-        THEN 1 END) AS won,
-      COUNT(CASE
-        WHEN LOWER(status) = 'lost'
-         AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
-        THEN 1 END) AS lost,
+      COUNT(*) AS total_jobs,
+      COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN meeting_booked_at IS NOT NULL THEN 1 END) AS meetings_booked,
+      COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END) AS won,
+      COUNT(CASE WHEN LOWER(status) = 'lost' THEN 1 END) AS lost,
       ROUND(
-        COUNT(CASE
-          WHEN LOWER(status) = 'won'
-           AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
-           AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
-          THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE
-          WHEN proposal_sent_at IS NOT NULL
-           AND (${sd}::timestamptz IS NULL OR proposal_sent_at >= ${sd}::timestamptz)
-           AND (${ed}::timestamptz IS NULL OR proposal_sent_at <= ${ed}::timestamptz)
-          THEN 1 END), 0) * 100, 1
+        COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END)::DECIMAL /
+        NULLIF(COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END), 0) * 100, 1
       ) AS win_rate,
-      COALESCE(SUM(CASE
-        WHEN LOWER(status) = 'won'
-         AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
-        THEN won_value END), 0) AS total_revenue,
-      COUNT(CASE
-        WHEN LOWER(status) = 'n/a'
-         AND (${sd}::timestamptz IS NULL OR COALESCE(stage_entered_at, updated_at) >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR COALESCE(stage_entered_at, updated_at) <= ${ed}::timestamptz)
-        THEN 1 END) AS bad_leads
+      COALESCE(SUM(CASE WHEN LOWER(status) = 'won' THEN won_value END), 0) AS total_revenue,
+      COUNT(CASE WHEN LOWER(status) = 'n/a' THEN 1 END) AS bad_leads
     FROM jobs
     WHERE agent_id = ${agentId}
+      AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
   `;
   const row = result.rows[0];
   return {
@@ -1233,48 +1165,21 @@ export async function getConversionFunnel(
   agentId?: string,
   profileId?: string
 ): Promise<FunnelStep[]> {
-  const sd = range?.startDate ?? null;
-  const ed = range?.endDate ?? null;
-  // Lifecycle-based funnel: milestone columns for proposals/meetings, outcome for won
+  const { startDate, endDate } = range ?? {};
+  // ONE base dataset filtered by received_at — all funnel steps computed within it
   const result = await sql`
     SELECT
-      COUNT(CASE
-        WHEN (${sd}::timestamptz IS NULL OR received_at >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR received_at <= ${ed}::timestamptz)
-        THEN 1 END) AS total_jobs,
-      COUNT(CASE
-        WHEN (LOWER(status) NOT IN ('rejected', 'filtered out') OR status IS NULL)
-         AND (${sd}::timestamptz IS NULL OR received_at >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR received_at <= ${ed}::timestamptz)
-        THEN 1 END) AS passed_filter,
-      COUNT(CASE
-        WHEN proposal_sent_at IS NOT NULL
-         AND (${sd}::timestamptz IS NULL OR proposal_sent_at >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR proposal_sent_at <= ${ed}::timestamptz)
-        THEN 1 END) AS proposals_sent,
-      COUNT(CASE
-        WHEN proposal_sent_at IS NOT NULL
-         AND LOWER(status) NOT IN ('lost', 'n/a')
-         AND (${sd}::timestamptz IS NULL OR proposal_sent_at >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR proposal_sent_at <= ${ed}::timestamptz)
-        THEN 1 END) AS responses,
-      COUNT(CASE
-        WHEN meeting_booked_at IS NOT NULL
-         AND (${sd}::timestamptz IS NULL OR meeting_booked_at >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR meeting_booked_at <= ${ed}::timestamptz)
-        THEN 1 END) AS meetings,
-      COUNT(CASE
-        WHEN LOWER(status) IN ('negotiation', 'won')
-         AND (${sd}::timestamptz IS NULL OR COALESCE(stage_entered_at, updated_at) >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR COALESCE(stage_entered_at, updated_at) <= ${ed}::timestamptz)
-        THEN 1 END) AS negotiation,
-      COUNT(CASE
-        WHEN LOWER(status) = 'won'
-         AND (${sd}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) >= ${sd}::timestamptz)
-         AND (${ed}::timestamptz IS NULL OR COALESCE(outcome_at, updated_at) <= ${ed}::timestamptz)
-        THEN 1 END) AS won
+      COUNT(*) AS total_jobs,
+      COUNT(CASE WHEN LOWER(status) NOT IN ('rejected', 'filtered out') OR status IS NULL THEN 1 END) AS passed_filter,
+      COUNT(CASE WHEN proposal_sent_at IS NOT NULL THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN proposal_sent_at IS NOT NULL AND LOWER(status) NOT IN ('lost', 'n/a') THEN 1 END) AS responses,
+      COUNT(CASE WHEN meeting_booked_at IS NOT NULL THEN 1 END) AS meetings,
+      COUNT(CASE WHEN LOWER(status) IN ('negotiation', 'won') THEN 1 END) AS negotiation,
+      COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END) AS won
     FROM jobs
-    WHERE (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
+    WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
   `;
 
@@ -1769,13 +1674,13 @@ export async function getAvgResponseTime(
 ): Promise<number | null> {
   const { startDate, endDate } = range ?? {};
 
-  // Filter by proposal_sent_at — measures proposals sent within the date range
+  // Same base dataset as KPIs: filter by received_at, then avg response time within it
   const result = await sql`
     SELECT AVG(EXTRACT(EPOCH FROM (proposal_sent_at - received_at)) / 3600) AS avg_hours
     FROM jobs
     WHERE proposal_sent_at IS NOT NULL
-      AND (${startDate}::timestamptz IS NULL OR proposal_sent_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR proposal_sent_at <= ${endDate}::timestamptz)
+      AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
   `;
