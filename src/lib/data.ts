@@ -1210,8 +1210,8 @@ export async function getPipelineNow(agentId?: string, profileId?: string): Prom
     SELECT
       COUNT(CASE WHEN LOWER(c.name) IN ('to do', 'todo') THEN 1 END) AS todo,
       COUNT(CASE WHEN LOWER(c.name) IN (
-        'proposal submitted', 'sent', 'submitted', 'following up',
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+        'proposal submitted', 'proposal views',
+        'prototype required', 'prototype done', 'prototype submitted',
         'in chat', 'on hold'
       ) THEN 1 END) AS in_progress,
       COUNT(CASE WHEN LOWER(c.name) IN ('meeting scheduled', 'meeting done') THEN 1 END) AS meetings,

@@ -282,8 +282,10 @@ ClickUp integration has been **fully removed** as of Milestone 8. The following 
 2. **Never** rely on `clickup_task_id` or `clickup_task_url` for new features — they are legacy
 3. **Always** use Task Board as the source of truth for job status
 4. Job status changes happen ONLY via Task Board column moves (`moveTaskAction` → `syncJobStatusFromTask`)
-5. The `jobs.status` column contains the same values as board column names (e.g., "Proposal Ready", "Sent", "Won", "Lost")
-6. KPI calculations in `data.ts` depend on these exact status strings — if board columns are renamed, update the KPI queries
+5. The `jobs.status` column contains the same values as board column names (e.g., "Proposal Submitted", "In Chat", "Won", "Lost")
+6. **Board columns** (14 total): Todo, Proposal Submitted, Proposal Views, Prototype Required, Prototype Done, Prototype Submitted, In Chat, Meeting Scheduled, Meeting Done, Negotiation, Lost, On Hold, N/A, Won
+7. **Pipeline Now grouping**: Todo | In Progress (Proposal Submitted, Proposal Views, Prototype Required/Done/Submitted, In Chat, On Hold) | Meetings (Meeting Scheduled/Done) | Negotiation
+8. KPI calculations in `data.ts` depend on these exact status strings — if board columns are renamed, update the KPI queries
 
 ## Key Reference Files
 
