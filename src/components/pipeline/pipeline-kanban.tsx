@@ -6,27 +6,27 @@ interface PipelineKanbanProps {
 }
 
 const stageColors: Record<string, string> = {
-  "To Do": "var(--primary)",
-  "New": "var(--primary)",
-  "Submitted": "var(--muted-foreground)",
-  "Sent": "var(--muted-foreground)",
-  "Following Up": "var(--muted-foreground)",
+  "Todo": "var(--primary)",
+  "Proposal Submitted": "var(--muted-foreground)",
+  "Proposal Views": "var(--muted-foreground)",
   "Prototype Required": "var(--accent-warn)",
   "Prototype Done": "var(--muted-foreground)",
-  "Prototype Sent": "var(--muted-foreground)",
+  "Prototype Submitted": "var(--muted-foreground)",
+  "In Chat": "var(--muted-foreground)",
   "Meeting Scheduled": "var(--primary)",
   "Meeting Done": "var(--muted-foreground)",
   "Negotiation": "var(--accent-green)",
   "Won": "var(--accent-green)",
   "Lost": "var(--destructive)",
   "On Hold": "var(--accent-warn)",
+  "N/A": "var(--muted-foreground)",
 };
 
 const stageBadgeVariant = (key: string) => {
   if (["Won", "Negotiation"].includes(key)) return "green" as const;
   if (["Lost"].includes(key)) return "danger" as const;
   if (["Prototype Required", "On Hold"].includes(key)) return "warn" as const;
-  if (["To Do", "Meeting Scheduled", "New"].includes(key)) return "blue" as const;
+  if (["Todo", "Meeting Scheduled"].includes(key)) return "blue" as const;
   return "muted" as const;
 };
 

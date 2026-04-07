@@ -1245,20 +1245,41 @@ export async function getPipelineStages(
 ): Promise<PipelineStage[]> {
   const { startDate, endDate } = range ?? {};
 
+  // Normalize legacy/variant status names to current board column names
+  const statusNormMap: Record<string, string> = {
+    "To Do": "Todo",
+    "New": "Todo",
+    "Proposal Ready": "Todo",
+    "Submitted": "Proposal Submitted",
+    "Sent": "Prototype Submitted",
+    "Following Up": "In Chat",
+    "Proposal Views": "Proposal Views",
+    "In Chat": "In Chat",
+    "N/A": "N/A",
+  };
+
   const stageMap: Record<string, { label: string; subtitle: string }> = {
-    "To Do": { label: "To Do", subtitle: "Pending proposals" },
-    "Submitted": { label: "Submitted", subtitle: "Awaiting client" },
-    "Sent": { label: "Sent", subtitle: "Awaiting response" },
-    "Following Up": { label: "Following Up", subtitle: "Re-engaged" },
+    "Todo": { label: "Todo", subtitle: "Pending proposals" },
+    "Proposal Submitted": { label: "Submitted", subtitle: "Awaiting client" },
+    "Proposal Views": { label: "Views", subtitle: "Client viewed" },
     "Prototype Required": { label: "Proto Req.", subtitle: "Build needed" },
     "Prototype Done": { label: "Proto Done", subtitle: "Ready to send" },
-    "Prototype Sent": { label: "Proto Sent", subtitle: "Awaiting feedback" },
+    "Prototype Submitted": { label: "Proto Sent", subtitle: "Awaiting feedback" },
+    "In Chat": { label: "In Chat", subtitle: "Re-engaged" },
     "Meeting Scheduled": { label: "Mtg Sched.", subtitle: "Calendar booked" },
     "Meeting Done": { label: "Mtg Done", subtitle: "Follow up needed" },
     "Negotiation": { label: "Negotiation", subtitle: "Hot leads" },
     "Won": { label: "Won", subtitle: "Closed won" },
     "Lost": { label: "Lost", subtitle: "Closed lost" },
     "On Hold": { label: "On Hold", subtitle: "Client paused" },
+    "N/A": { label: "N/A", subtitle: "Not applicable" },
+  };
+
+  const stageOrder: Record<string, number> = {
+    "Todo": 1, "Proposal Submitted": 2, "Proposal Views": 3,
+    "Prototype Required": 4, "Prototype Done": 5, "Prototype Submitted": 6,
+    "In Chat": 7, "Meeting Scheduled": 8, "Meeting Done": 9,
+    "Negotiation": 10, "Won": 11, "Lost": 12, "On Hold": 13, "N/A": 14,
   };
 
   const result = await sql`
@@ -1269,28 +1290,25 @@ export async function getPipelineStages(
       AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
     GROUP BY status
-    ORDER BY
-      CASE status
-        WHEN 'To Do' THEN 1 WHEN 'New' THEN 1 WHEN 'Proposal Ready' THEN 1
-        WHEN 'Submitted' THEN 2 WHEN 'Sent' THEN 3 WHEN 'Following Up' THEN 4
-        WHEN 'Prototype Required' THEN 5 WHEN 'Prototype Done' THEN 6
-        WHEN 'Prototype Sent' THEN 7 WHEN 'Meeting Scheduled' THEN 8
-        WHEN 'Meeting Done' THEN 9 WHEN 'Negotiation' THEN 10
-        WHEN 'Won' THEN 11 WHEN 'Lost' THEN 12 WHEN 'On Hold' THEN 13
-        ELSE 14
-      END
   `;
 
-  return result.rows.map((row) => {
-    const status = row.status;
-    const mapped = stageMap[status] ?? { label: status, subtitle: "" };
-    return {
-      key: status,
-      label: mapped.label,
-      count: parseInt(row.count) || 0,
-      subtitle: mapped.subtitle,
-    };
-  });
+  // Aggregate counts by normalized stage key
+  const aggregated = new Map<string, number>();
+  for (const row of result.rows) {
+    const raw = row.status?.trim() || "N/A";
+    const normalized = statusNormMap[raw] ?? raw;
+    // Any status not in stageMap goes to N/A
+    const key = stageMap[normalized] ? normalized : "N/A";
+    aggregated.set(key, (aggregated.get(key) ?? 0) + (parseInt(row.count) || 0));
+  }
+
+  // Sort by defined stage order and return
+  return Array.from(aggregated.entries())
+    .sort((a, b) => (stageOrder[a[0]] ?? 99) - (stageOrder[b[0]] ?? 99))
+    .map(([key, count]) => {
+      const mapped = stageMap[key] ?? { label: key, subtitle: "" };
+      return { key, label: mapped.label, count, subtitle: mapped.subtitle };
+    });
 }
 
 export async function getActiveJobsInPipeline(agentId?: string, profileId?: string): Promise<PipelineJob[]> {
