@@ -86,7 +86,7 @@ export default async function DashboardPage({
         />
       <AutoRefresh interval={15000} />
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
-        <StatRow className="mb-5 lg:!grid-cols-7">
+        <StatRow className="mb-5 lg:!grid-cols-8">
           <StatCard
             label="Jobs Received"
             value={kpi.totalJobs}
@@ -100,6 +100,14 @@ export default async function DashboardPage({
             subtitle={kpi.totalJobs > 0 ? `${Math.round((kpi.proposalsSent / kpi.totalJobs) * 100)}%` : undefined}
             delta={`${fmt(kpi.deltaProposals)} ${vsLabel}`}
             deltaDown={kpi.deltaProposals < 0}
+          />
+          <StatCard
+            label="Un Touched"
+            value={kpi.untouched}
+            subtitle={kpi.totalJobs > 0 ? `${Math.round((kpi.untouched / kpi.totalJobs) * 100)}%` : undefined}
+            variant="warn"
+            delta={`${fmt(kpi.deltaUntouched)} ${vsLabel}`}
+            deltaDown={kpi.deltaUntouched < 0}
           />
           <StatCard
             label="Meetings Booked"

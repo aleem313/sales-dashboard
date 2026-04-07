@@ -74,6 +74,7 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
     winRate: parseFloat(row.win_rate) || 0,
     totalRevenue: parseFloat(row.total_revenue) || 0,
     badLeads: parseInt(row.bad_leads) || 0,
+    untouched: (parseInt(row.total_jobs) || 0) - (parseInt(row.proposals_sent) || 0) - (parseInt(row.bad_leads) || 0),
   };
 }
 
@@ -1121,6 +1122,7 @@ export async function getAgentKPIMetrics(
     winRate: parseFloat(row.win_rate) || 0,
     totalRevenue: parseFloat(row.total_revenue) || 0,
     badLeads: parseInt(row.bad_leads) || 0,
+    untouched: (parseInt(row.total_jobs) || 0) - (parseInt(row.proposals_sent) || 0) - (parseInt(row.bad_leads) || 0),
   };
 }
 
@@ -1157,6 +1159,7 @@ export async function getKPIMetricsWithDeltas(
     deltaWon: current.won - prev.won,
     deltaWinRate: current.winRate - prev.winRate,
     deltaBadLeads: current.badLeads - prev.badLeads,
+    deltaUntouched: current.untouched - prev.untouched,
   };
 }
 

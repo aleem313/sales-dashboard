@@ -87,7 +87,7 @@ export default async function MyDashboardPage({
 
       <AlertsBanner alerts={alerts} />
 
-      <StatRow className="lg:!grid-cols-7">
+      <StatRow className="lg:!grid-cols-8">
         <StatCard
           label="Jobs Received"
           value={kpi.totalJobs}
@@ -101,6 +101,14 @@ export default async function MyDashboardPage({
           subtitle={kpi.totalJobs > 0 ? `${Math.round((kpi.proposalsSent / kpi.totalJobs) * 100)}%` : undefined}
           delta={`${fmt(kpi.deltaProposals)} ${vsLabel}`}
           deltaDown={kpi.deltaProposals < 0}
+        />
+        <StatCard
+          label="Un Touched"
+          value={kpi.untouched}
+          subtitle={kpi.totalJobs > 0 ? `${Math.round((kpi.untouched / kpi.totalJobs) * 100)}%` : undefined}
+          variant="warn"
+          delta={`${fmt(kpi.deltaUntouched)} ${vsLabel}`}
+          deltaDown={kpi.deltaUntouched < 0}
         />
         <StatCard
           label="Meetings Booked"
