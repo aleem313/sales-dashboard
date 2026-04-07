@@ -1204,22 +1204,24 @@ export async function getConversionFunnel(
 export async function getPipelineNow(agentId?: string, profileId?: string): Promise<
   { label: string; count: number; color: string }[]
 > {
-  // Pipeline uses current status ONLY — must match actual task board columns.
-  // Only counts jobs that have a linked task (task_id IS NOT NULL) to match the board.
+  // Counts tasks from actual board columns — matches what the Task Board shows.
+  // Joins tasks → columns for column names, and optionally tasks → jobs for agent/profile filtering.
   const result = await sql`
     SELECT
-      COUNT(CASE WHEN LOWER(status) IN ('to do', 'todo') THEN 1 END) AS todo,
-      COUNT(CASE WHEN LOWER(status) IN (
+      COUNT(CASE WHEN LOWER(c.name) IN ('to do', 'todo') THEN 1 END) AS todo,
+      COUNT(CASE WHEN LOWER(c.name) IN (
         'proposal submitted', 'sent', 'submitted', 'following up',
         'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
         'in chat', 'on hold'
       ) THEN 1 END) AS in_progress,
-      COUNT(CASE WHEN LOWER(status) IN ('meeting scheduled', 'meeting done') THEN 1 END) AS meetings,
-      COUNT(CASE WHEN LOWER(status) = 'negotiation' THEN 1 END) AS negotiation
-    FROM jobs
-    WHERE LOWER(status) NOT IN ('won', 'lost', 'rejected', 'filtered out', 'n/a', 'new', 'proposal ready')
-      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
-      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
+      COUNT(CASE WHEN LOWER(c.name) IN ('meeting scheduled', 'meeting done') THEN 1 END) AS meetings,
+      COUNT(CASE WHEN LOWER(c.name) = 'negotiation' THEN 1 END) AS negotiation
+    FROM tasks t
+    JOIN columns c ON c.id = t.column_id
+    LEFT JOIN jobs j ON j.task_id = t.id
+    WHERE LOWER(c.name) NOT IN ('won', 'lost', 'rejected', 'filtered out', 'n/a', 'new', 'proposal ready')
+      AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
   `;
 
   const r = result.rows[0];
