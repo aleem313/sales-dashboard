@@ -1220,7 +1220,9 @@ export async function getPipelineNow(agentId?: string, profileId?: string): Prom
     JOIN columns c ON c.id = t.column_id
     LEFT JOIN jobs j ON j.task_id = t.id
     WHERE LOWER(c.name) NOT IN ('won', 'lost', 'rejected', 'filtered out', 'n/a', 'new', 'proposal ready')
-      AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
+      AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
+      ))
       AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
   `;
 
