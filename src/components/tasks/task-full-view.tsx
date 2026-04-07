@@ -40,6 +40,7 @@ import {
   Download,
   ArrowLeft,
   Search,
+  Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow, format } from "date-fns";
@@ -1171,8 +1172,23 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">📌 Job Snapshot</h4>
               <div className="rounded-lg border bg-muted/30 p-3 space-y-0">
                 <FieldRow icon={<span className="text-sm">🔗</span>} label="Job Link">
-                  <Input value={(cf._job_url as string) ?? job?.job_url ?? ""} onChange={(e) => updateCustomField("_job_url", e.target.value)}
-                    placeholder="https://upwork.com/jobs/..." className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2" />
+                  <div className="flex items-center gap-1 flex-1">
+                    <Input value={(cf._job_url as string) ?? job?.job_url ?? ""} onChange={(e) => updateCustomField("_job_url", e.target.value)}
+                      placeholder="https://upwork.com/jobs/..." className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 px-2" />
+                    {((cf._job_url as string) || job?.job_url) && (
+                      <button
+                        className="shrink-0 text-muted-foreground hover:text-primary transition-colors p-1 rounded hover:bg-muted/50"
+                        title="Copy job URL"
+                        onClick={() => {
+                          const url = (cf._job_url as string) || job?.job_url || "";
+                          navigator.clipboard.writeText(url);
+                          toast.success("Job URL copied");
+                        }}
+                      >
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
                 </FieldRow>
                 <FieldRow icon={<span className="text-sm">💰</span>} label="Budget">
                   <Input value={(cf._budget as string) ?? ""} onChange={(e) => updateCustomField("_budget", e.target.value)}

@@ -187,7 +187,7 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 ### n8n Integration Gotchas (CRITICAL)
 
 - **No `fetch()` in Code nodes** — n8n Code nodes run in a sandbox. Use `this.helpers.httpRequest()` instead.
-- **Merge node must stay on v3** — v3.2 waits for ALL inputs; v3 passes through on ANY input. Do NOT upgrade.
+- **Merge node must stay on v3.2** — v3.2 gracefully handles partial inputs (one webhook fires, others ignored); v3 passes through on ANY input causing parallel downstream execution and OOM crashes. Do NOT downgrade to v3.
 - **Merge `numberInputs` must equal webhook count** — currently 8 (Sana, Laiba, Khansa, Saim, Shayan, Craig, Rebekah, Nawal).
 - **Each Respond node needs a unique Merge input index** — Sana=0, Laiba=1, Khansa=2, Saim=3, Shayan=4, Craig=5, Rebekah=6, Nawal=7.
 
