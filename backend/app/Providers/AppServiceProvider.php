@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Auth\LegacyPasswordUserProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
@@ -17,6 +19,13 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureRateLimiting();
+
+        Auth::provider('legacy-password', function ($app, array $config) {
+            return new LegacyPasswordUserProvider(
+                $app['hash'],
+                $config['model']
+            );
+        });
     }
 
     protected function configureRateLimiting(): void
