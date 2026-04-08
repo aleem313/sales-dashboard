@@ -48,3 +48,4 @@ agency-dashboard*.html
 
 #claude
 /.claude
+/.claudeapi/
