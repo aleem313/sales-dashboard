@@ -48,3 +48,5 @@ agency-dashboard*.html
 
 #claude
 /.claude
+
+/backend
