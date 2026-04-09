@@ -258,7 +258,7 @@ When Neon data transfer quota resets, run these commands to dump production data
 ### Quick Command (just say "get dump")
 ```bash
 # 1. Switch to Neon connection temporarily
-export PATH=$PATH:"/c/laragon/bin/postgresql/postgresql-14.5-1/bin"
+export PATH=$PATH:"/c/laragon/bin/postgresql/postgresql-17/bin"
 NEON_URL="postgresql://neondb_owner:npg_QpjWIwi8CRh0@ep-late-darkness-aix89pvz-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require"
 
 # 2. Test Neon connectivity

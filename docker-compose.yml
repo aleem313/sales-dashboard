@@ -18,7 +18,7 @@ services:
       - sales-net
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-sales_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sales_pass}

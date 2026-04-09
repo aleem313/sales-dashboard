@@ -105,7 +105,7 @@ sales-dashboard/
 
 - **2.2.2 PostgreSQL Service (`postgres`)**
   - **2.2.2.1 Image**
-    - Use `postgres:16-alpine` (matches Neon's PG version)
+    - Use `postgres:17-alpine` (matches Neon's PG version)
   - **2.2.2.2 Environment**
     - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` from env file
   - **2.2.2.3 Volumes**
@@ -241,7 +241,7 @@ sales-dashboard/
     - Rolling update: 1 at a time, 10s delay
 
 - **3.3.2 PostgreSQL Service (`postgres`)**
-  - **3.3.2.1 Image**: `postgres:16-alpine`
+  - **3.3.2.1 Image**: `postgres:17-alpine`
   - **3.3.2.2 Environment**
     - Credentials from env file
     - `POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256` (secure auth)
