@@ -6,15 +6,10 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/.next
-    env_file:
-      - .env.local
+      - ./.env.docker:/app/.env.local:ro
     environment:
       - WATCHPACK_POLLING=true
-      - POSTGRES_HOST=postgres
-      - POSTGRES_URL=postgresql://${POSTGRES_USER:-sales_user}:${POSTGRES_PASSWORD:-sales_pass}@postgres:5432/${POSTGRES_DATABASE:-sales_dashboard}
+      - NEXT_TELEMETRY_DISABLED=1
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,8 +1,11 @@
 import { sql as vercelSql } from "@vercel/postgres";
 
+const pgHost = process.env.POSTGRES_HOST || "";
 const isLocal =
-  process.env.POSTGRES_HOST === "localhost" ||
-  process.env.POSTGRES_HOST === "127.0.0.1";
+  pgHost === "localhost" ||
+  pgHost === "127.0.0.1" ||
+  pgHost === "postgres" ||
+  !pgHost.includes(".");
 
 // Lazy-loaded pg pool — only imported when running locally, avoiding
 // Edge runtime errors from Node.js-only modules.
