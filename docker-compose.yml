@@ -1,0 +1,50 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    env_file:
+      - .env.local
+    environment:
+      - WATCHPACK_POLLING=true
+      - POSTGRES_HOST=postgres
+      - POSTGRES_URL=postgresql://${POSTGRES_USER:-sales_user}:${POSTGRES_PASSWORD:-sales_pass}@postgres:5432/${POSTGRES_DATABASE:-sales_dashboard}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - sales-net
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sales_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sales_pass}
+      POSTGRES_DB: ${POSTGRES_DATABASE:-sales_dashboard}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sales_user} -d ${POSTGRES_DATABASE:-sales_dashboard}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - sales-net
+
+volumes:
+  pgdata:
+
+networks:
+  sales-net:
+    driver: bridge

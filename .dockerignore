@@ -1,0 +1,47 @@
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Next.js build output
+.next
+out
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Documentation
+*.md
+!README.md
+docs/
+backups/
+
+# Environment (secrets)
+.env
+.env.local
+.env.production
+.env.neon
+.env.docker.example
+
+# Vercel
+.vercel
+
+# Misc
+scripts/
+*.sql
+*.dump

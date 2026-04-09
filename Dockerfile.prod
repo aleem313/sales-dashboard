@@ -1,0 +1,58 @@
+# ============================================
+# Stage 1: Install production dependencies
+# ============================================
+FROM node:22-alpine AS deps
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# ============================================
+# Stage 2: Build the Next.js application
+# ============================================
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+# Copy all deps (including dev for build tooling)
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build-time env vars (add any NEXT_PUBLIC_* vars you need)
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build Next.js (standalone output)
+RUN npm run build
+
+# ============================================
+# Stage 3: Production runtime (minimal image)
+# ============================================
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+# Security: non-root user
+RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
+
+# Copy standalone build output
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+USER nextjs
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+
+CMD ["node", "server.js"]
