@@ -29,7 +29,7 @@ export async function POST(
   if (!body.name?.trim()) return NextResponse.json({ error: "Name is required" }, { status: 422 });
   let ownerId = session.user.agentId;
   if (!ownerId) {
-    const { sql } = await import("@vercel/postgres");
+    const { sql } = await import("@/lib/db");
     const agent = await sql`SELECT id FROM agents WHERE active = true LIMIT 1`;
     if (agent.rows.length === 0) return NextResponse.json({ error: "No active agents" }, { status: 500 });
     ownerId = agent.rows[0].id as string;

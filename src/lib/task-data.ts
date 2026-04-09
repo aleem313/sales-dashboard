@@ -1,4 +1,4 @@
-import { sql } from "@vercel/postgres";
+import { sql } from "@/lib/db";
 
 // Fix activity_log trigger to allow DELETE (migration 007 may not have been applied)
 async function fixActivityLogTrigger() {

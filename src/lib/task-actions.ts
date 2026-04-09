@@ -89,7 +89,7 @@ export async function moveTaskAction(
   if (!session?.user) throw new Error("Unauthorized");
 
   // Get old column name before move (for reversal detection)
-  const { sql } = await import("@vercel/postgres");
+  const { sql } = await import("@/lib/db");
   const oldCol = await sql`
     SELECT c.name FROM tasks t JOIN columns c ON c.id = t.column_id WHERE t.id = ${taskId}
   `;
@@ -187,7 +187,7 @@ export async function createBoardAction(data: { name: string; description?: stri
   // Find a creator agent ID
   let creatorId = session.user.agentId;
   if (!creatorId) {
-    const { sql } = await import("@vercel/postgres");
+    const { sql } = await import("@/lib/db");
     const agent = await sql`SELECT id FROM agents WHERE active = true LIMIT 1`;
     if (agent.rows.length === 0) throw new Error("No active agents");
     creatorId = agent.rows[0].id as string;
@@ -288,7 +288,7 @@ export async function deleteColumnAction(columnId: string, moveTasksTo?: string)
 
   // If moveTasksTo is set, bulk-move tasks before deleting and sync linked jobs
   if (moveTasksTo) {
-    const { sql } = await import("@vercel/postgres");
+    const { sql } = await import("@/lib/db");
     // Get target column name for job sync
     const targetCol = await sql`SELECT name FROM columns WHERE id = ${moveTasksTo}`;
     const targetName = targetCol.rows[0]?.name as string;
@@ -330,7 +330,7 @@ export async function updateTagAction(tagId: string, fields: { name?: string; co
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
 
-  const { sql } = await import("@vercel/postgres");
+  const { sql } = await import("@/lib/db");
   const result = await sql`
     UPDATE task_tags SET
       name = COALESCE(${fields.name ?? null}, name),
@@ -347,7 +347,7 @@ export async function deleteTagAction(tagId: string) {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
 
-  const { sql } = await import("@vercel/postgres");
+  const { sql } = await import("@/lib/db");
   // CASCADE on task_tag_map handles removing from tasks
   await sql`DELETE FROM task_tags WHERE id = ${tagId}`;
   revalidateBoard();
@@ -450,7 +450,7 @@ export async function createSavedViewAction(data: {
   if (!data.name?.trim()) throw new Error("Name is required");
   let ownerId = session.user.agentId;
   if (!ownerId) {
-    const { sql } = await import("@vercel/postgres");
+    const { sql } = await import("@/lib/db");
     const agent = await sql`SELECT id FROM agents WHERE active = true LIMIT 1`;
     if (agent.rows.length === 0) throw new Error("No active agents");
     ownerId = agent.rows[0].id as string;

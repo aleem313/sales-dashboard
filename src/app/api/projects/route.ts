@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
   let creatorId = session.user.agentId;
   if (!creatorId) {
     // Admin via env var — find first active agent as proxy owner
-    const { sql } = await import("@vercel/postgres");
+    const { sql } = await import("@/lib/db");
     const agent = await sql`SELECT id FROM agents WHERE active = true LIMIT 1`;
     if (agent.rows.length === 0) {
       return NextResponse.json({ error: "No active agents to assign as board owner" }, { status: 500 });

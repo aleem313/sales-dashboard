@@ -1,7 +1,7 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import { sql } from "@vercel/postgres";
+import { sql } from "@/lib/db";
 
 async function run() {
   console.log("Running migration 006: task management schema...\n");

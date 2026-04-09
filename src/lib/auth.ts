@@ -24,13 +24,21 @@ declare module "@auth/core/jwt" {
   }
 }
 
-// Verify PBKDF2-hashed password using Node.js crypto (dynamic import for Edge compat)
+// Verify PBKDF2-hashed password using Web Crypto API (works in Edge + Node.js)
 async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
   const [salt, hash] = storedHash.split(":");
   if (!salt || !hash) return false;
-  const { pbkdf2Sync } = await import("crypto");
-  const derived = pbkdf2Sync(password, Buffer.from(salt, "hex"), 100000, 64, "sha256").toString("hex");
-  return derived === hash;
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]
+  );
+  const saltBytes = new Uint8Array(salt.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+  const derived = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt: saltBytes, iterations: 100000, hash: "SHA-256" },
+    keyMaterial, 64 * 8
+  );
+  const hex = Array.from(new Uint8Array(derived)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return hex === hash;
 }
 
 function parseAdminCredentials(): { email: string; password: string }[] {

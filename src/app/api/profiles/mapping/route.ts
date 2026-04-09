@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { sql } from "@vercel/postgres";
+import { sql } from "@/lib/db";
 
 // Public endpoint — n8n fetches this on every execution to get
 // the current profile → agent mapping. No auth required so n8n

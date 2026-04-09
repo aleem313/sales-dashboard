@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put, del } from "@vercel/blob";
-import { sql } from "@vercel/postgres";
+import { sql } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { getTaskById, isProjectMember } from "@/lib/task-data";
 

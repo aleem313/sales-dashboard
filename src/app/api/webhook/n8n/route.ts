@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import crypto from "crypto";
-import { sql } from "@vercel/postgres";
+import { sql } from "@/lib/db";
 import { upsertJob, createSyncLog, completeSyncLog } from "@/lib/data";
 
 export async function POST(request: NextRequest) {

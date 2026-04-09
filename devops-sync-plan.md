@@ -225,6 +225,69 @@ bash scripts/sync-prod.sh
 
 ---
 
+## Phase 6: Local PostgreSQL Configuration
+
+### Step 6.1 — Environment File Setup
+- `.env.local` contains both Neon (commented out) and local PostgreSQL (active)
+- `.env.neon` is a full backup of the original Vercel env pull
+- To switch to Neon: comment out the LOCAL block, uncomment the NEON block in `.env.local`
+- To switch to local: reverse the above
+
+### Step 6.2 — Local Connection Details
+```
+Host:     localhost
+Port:     5432
+User:     postgres
+Password: (empty)
+Database: sales_dashboard
+URL:      postgresql://postgres@localhost:5432/sales_dashboard
+```
+
+### Step 6.3 — Run Dev Server
+```bash
+npm install    # first time only
+npm run dev    # starts on http://localhost:3000
+```
+
+---
+
+## Phase 7: Neon Database Dump (Run When Quota Resets)
+
+When Neon data transfer quota resets, run these commands to dump production data and restore it locally.
+
+### Quick Command (just say "get dump")
+```bash
+# 1. Switch to Neon connection temporarily
+export PATH=$PATH:"/c/laragon/bin/postgresql/postgresql-14.5-1/bin"
+NEON_URL="postgresql://neondb_owner:npg_QpjWIwi8CRh0@ep-late-darkness-aix89pvz-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require"
+
+# 2. Test Neon connectivity
+psql "$NEON_URL" -c "SELECT 1;"
+
+# 3. Dump from Neon
+mkdir -p backups
+pg_dump "$NEON_URL" -Fc --no-owner --no-privileges -f backups/neon_backup_$(date +%Y%m%d_%H%M%S).dump
+
+# 4. Drop and recreate local database (fresh restore)
+psql -U postgres -h localhost -c "DROP DATABASE IF EXISTS sales_dashboard;"
+psql -U postgres -h localhost -c "CREATE DATABASE sales_dashboard;"
+
+# 5. Restore dump to local
+pg_restore -U postgres -h localhost -d sales_dashboard --no-owner --no-privileges backups/neon_backup_*.dump
+
+# 6. Verify
+psql -U postgres -h localhost -d sales_dashboard -c "SELECT count(*) FROM jobs;"
+psql -U postgres -h localhost -d sales_dashboard -c "SELECT count(*) FROM tasks;"
+psql -U postgres -h localhost -d sales_dashboard -c "SELECT count(*) FROM agents;"
+```
+
+### Or Use the Automation Script
+```bash
+bash scripts/sync-prod.sh
+```
+
+---
+
 ## Troubleshooting
 
 | Issue | Solution |
