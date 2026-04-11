@@ -75,12 +75,25 @@ and inside the two `POSTGRES_URL*` connection strings.
 
 ## 4. Build and start
 
+> **Important**: pass `--env-file .env.production` on every compose command.
+> Compose variable substitution (e.g. `${POSTGRES_USER}` used by the `postgres`
+> service) reads from the shell env or a `.env` next to the compose file — not
+> from `env_file:`. Without the flag, postgres starts with blank credentials
+> and fails its healthcheck.
+
 ```bash
-docker compose -f docker-compose.server.yml up -d --build
-docker compose -f docker-compose.server.yml logs -f app
+docker compose --env-file .env.production -f docker-compose.server.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.server.yml logs -f app
 ```
 
 First build takes 2–4 minutes. App listens on host port 80.
+
+Alternative: create a `.env` symlink so you can omit the flag:
+
+```bash
+ln -s .env.production .env
+docker compose -f docker-compose.server.yml up -d --build
+```
 
 ## 5. Run migrations
 
@@ -119,7 +132,11 @@ to add before the server existed — it simply no-op'd until now.
 
 ## 8. Operational notes
 
-- **Logs**: `docker compose -f docker-compose.server.yml logs -f app`
-- **DB shell**: `docker compose -f docker-compose.server.yml exec postgres psql -U sales_user sales_dashboard`
-- **Update**: `git pull && docker compose -f docker-compose.server.yml up -d --build`
-- **Backup DB**: `docker compose -f docker-compose.server.yml exec postgres pg_dump -U sales_user sales_dashboard | gzip > backup-$(date +%F).sql.gz`
+All compose commands need `--env-file .env.production` (unless you created
+the `.env` symlink from step 4):
+
+- **Logs**: `docker compose --env-file .env.production -f docker-compose.server.yml logs -f app`
+- **DB shell**: `docker exec -it sales-dashboard-postgres-1 psql -U sales_user sales_dashboard`
+- **Update**: `git pull && docker compose --env-file .env.production -f docker-compose.server.yml up -d --build`
+- **Backup DB**: `docker exec sales-dashboard-postgres-1 pg_dump -U sales_user sales_dashboard | gzip > backup-$(date +%F).sql.gz`
+- **Restore from custom-format dump**: see `docker cp … && docker exec … pg_restore --no-owner --no-acl --clean --if-exists -d sales_dashboard /tmp/file.dump`
