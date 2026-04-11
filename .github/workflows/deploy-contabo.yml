@@ -1,0 +1,86 @@
+name: Deploy to Contabo
+
+# Push-to-main → automatic deploy to the Contabo HTTP-only server at
+# http://157.173.110.62. Builds on the server from a git pull and brings
+# up the lean docker-compose.server.yml stack.
+#
+# Required repo secrets:
+#   CONTABO_SSH_HOST  — server hostname or IP (e.g. 157.173.110.62)
+#   CONTABO_SSH_USER  — root (or whatever user owns /opt/sales-dashboard)
+#   CONTABO_SSH_KEY   — ed25519 private key whose public half is in
+#                       /root/.ssh/authorized_keys on the server
+# Optional:
+#   CONTABO_SSH_PORT  — defaults to 22
+#   CONTABO_APP_PATH  — defaults to /opt/sales-dashboard
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two deploys in parallel. Queue subsequent pushes.
+concurrency:
+  group: deploy-contabo
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: SSH deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.CONTABO_SSH_HOST }}
+          username: ${{ secrets.CONTABO_SSH_USER }}
+          key: ${{ secrets.CONTABO_SSH_KEY }}
+          port: ${{ secrets.CONTABO_SSH_PORT || 22 }}
+          command_timeout: 12m
+          script_stop: true
+          script: |
+            set -euo pipefail
+
+            APP_DIR="${{ secrets.CONTABO_APP_PATH || '/opt/sales-dashboard' }}"
+            COMPOSE="docker compose --env-file .env.production -f docker-compose.server.yml"
+            APP_CONTAINER="sales-dashboard-app-1"
+
+            echo "=== 1. Pulling latest main ==="
+            cd "$APP_DIR"
+            git fetch --prune origin
+            git checkout main
+            git reset --hard origin/main
+            git log --oneline -1
+
+            echo "=== 2. Rebuilding and restarting stack ==="
+            $COMPOSE up -d --build
+
+            echo "=== 3. Waiting for app to become healthy ==="
+            HEALTHY=0
+            for i in $(seq 1 36); do
+              STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$APP_CONTAINER" 2>/dev/null || echo missing)
+              echo "poll $i: $STATUS"
+              if [ "$STATUS" = "healthy" ]; then
+                HEALTHY=1
+                break
+              fi
+              sleep 5
+            done
+
+            if [ "$HEALTHY" -ne 1 ]; then
+              echo "✗ app did not reach healthy state within 3 minutes"
+              echo "--- last 80 lines of app logs ---"
+              $COMPOSE logs --tail 80 app || true
+              exit 1
+            fi
+
+            echo "=== 4. External /api/health check ==="
+            if ! curl -sf http://localhost/api/health >/dev/null; then
+              echo "✗ /api/health did not return 2xx via host port 80"
+              exit 1
+            fi
+
+            echo "=== 5. Pruning unused images ==="
+            docker image prune -f >/dev/null 2>&1 || true
+
+            echo "✓ Deploy complete: $(git log --oneline -1)"
