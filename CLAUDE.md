@@ -20,7 +20,23 @@ No test framework is configured. There are no unit/integration tests.
 
 ## Deployment
 
-Deployed to Vercel via Git push — there is no local dev workflow. All changes must be production-ready. Vercel handles cron jobs (defined in `vercel.json`).
+The app is deployed **to two targets simultaneously** from `main`:
+
+1. **Vercel** (primary) — `https://sales-dashboard-snowy-beta.vercel.app`, backed by Neon Postgres. Git push triggers Vercel's own deploy. Vercel handles cron jobs defined in `vercel.json`.
+2. **Contabo self-hosted** — `http://157.173.110.62` on a Ubuntu 24.04 VPS, Docker-native, Postgres 17 in a sibling container. Deployed by `.github/workflows/deploy-contabo.yml` on every push to `main`: SSH → `git reset --hard` → `docker compose --env-file .env.production -f docker-compose.server.yml up -d --build` → healthcheck → done. See `docker/DEPLOY-CONTABO.md` for the runbook.
+
+Both deployments receive the same n8n webhook traffic via parallel sink nodes in the workflow (see "n8n Integration" below). No local dev workflow — all changes must be production-ready.
+
+**CI/CD key files:**
+- `.github/workflows/deploy-contabo.yml` — **active** auto-deploy pipeline (push to main)
+- `.github/workflows/deploy.yml` — reference-only (GHCR + staging/prod + nginx), triggers removed
+- `docker-compose.server.yml` — lean HTTP-only compose used on Contabo (no nginx, no SSL)
+- `docker-compose.prod.yml` — full nginx+certbot stack, intended for post-domain setup
+
+**Contabo gotchas:**
+- Compose variable substitution for postgres needs `--env-file .env.production` on every command
+- `Dockerfile.prod` healthcheck uses `127.0.0.1` not `localhost` (BusyBox wget resolves localhost to IPv6 ::1 which Next.js standalone doesn't bind)
+- `next.config.ts` has `typescript.ignoreBuildErrors: true` to work around pre-existing strict-mode errors in `src/lib/data.ts`
 
 ## Architecture
 
@@ -69,13 +85,18 @@ Middleware (`src/middleware.ts`) enforces auth and redirects agents away from ad
 
 ### n8n → Task Board Architecture
 
-The n8n workflow delivers processed jobs to the **Task Board** after AI proposal generation:
+The n8n workflow delivers processed jobs to the **Task Board** after AI proposal generation. As of 2026-04-11, `Format Dashboard Event` is triggered directly by `Format ClickUp Task` (in parallel with the Create nodes), and fans out to BOTH the Vercel and Contabo dashboards simultaneously:
 
 ```
-Format Task
-   └── Create Board Task → POST /api/v1/webhooks/tasks
-   └── Format Dashboard Event → Send to Dashboard → POST /api/webhook/n8n
+Format ClickUp Task ┬─► Create ClickUp Task          (legacy — removable)
+                    ├─► Create Board Task            (legacy — removable)
+                    └─► Format Dashboard Event ┬─► Send to Dashboard             → Vercel   POST /api/webhook/n8n
+                                                └─► Send to Self-Hosted Dashboard → Contabo POST http://157.173.110.62/api/webhook/n8n
 ```
+
+Both sinks use `neverError: true` so a down environment never breaks the pipeline. The payload shape is identical between the two — the only difference is that `clickup.taskId` / `clickup.taskUrl` are now always `null` because Format Dashboard Event runs before any ClickUp API response exists. Outcome detection falls back to `item.taskName && item.proposal → 'proposal_created'` which is already coded in the Format Dashboard Event Code node.
+
+When the two Create nodes are eventually deleted, the Format ClickUp Task node will have a single downstream (Format Dashboard Event) and the dashboard fan-out keeps working unchanged.
 
 - **Board API**: `POST /api/v1/webhooks/tasks` with Bearer token auth (`n8n-board-sync`). Falls back to default project.
 - **Payload mapping**: Task title = `[profile] Job Title`, description = rich formatted proposal + job snapshot. Job metadata stored in `custom_fields` (`_job_id`, `_job_url`, `_budget`, `_skills`, `_proposal`, `_assigned_agent`, `_profile_name`, `_source`, client data)
@@ -190,6 +211,8 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 - **Merge node must stay on v3.2** — v3.2 gracefully handles partial inputs (one webhook fires, others ignored); v3 passes through on ANY input causing parallel downstream execution and OOM crashes. Do NOT downgrade to v3.
 - **Merge `numberInputs` must equal webhook count** — currently 8 (Sana, Laiba, Khansa, Saim, Shayan, Craig, Rebekah, Nawal).
 - **Each Respond node needs a unique Merge input index** — Sana=0, Laiba=1, Khansa=2, Saim=3, Shayan=4, Craig=5, Rebekah=6, Nawal=7.
+- **`Check Active Hours` weekend + time gate** — the workflow intentionally drops every event outside **Mon–Fri 16:10 → 02:00 Asia/Karachi (PKT)**. On Saturdays and Sundays `getDay()` returns 0 or 6 and the code returns `[]` immediately. Executions with duration <2s that show only `Webhook → Respond → Merge → Check Active Hours` in the preview are **filtered by this gate, not broken**. Do NOT debug "nothing is happening" on weekends without checking this first.
+- **Parallel dashboard sinks** — `Format Dashboard Event` fans out to `Send to Dashboard` (Vercel) AND `Send to Self-Hosted Dashboard` (Contabo `157.173.110.62`) in parallel. Both use `neverError: true`. When editing the Format Dashboard Event code, verify both sinks receive the same shape.
 
 ### Adding a New Profile/Webhook Node to n8n
 
