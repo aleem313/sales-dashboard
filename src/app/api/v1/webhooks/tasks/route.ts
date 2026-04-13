@@ -83,9 +83,35 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const cf = body.custom_fields ?? {};
+
+  // --- Dedup: one task per (project_id, _job_id, _profile_name) ---
+  // If a task with the same job+profile already exists, return it instead of
+  // creating a duplicate. Safe under n8n retries and against fan-in from
+  // multiple Vollna events for the same job.
+  const jobIdForDedup = cf._job_id != null && cf._job_id !== "" ? String(cf._job_id) : null;
+  const profileNameForDedup = cf._profile_name != null && cf._profile_name !== "" ? String(cf._profile_name) : null;
+  if (jobIdForDedup && profileNameForDedup) {
+    const existing = await sql`
+      SELECT * FROM tasks
+      WHERE project_id = ${projectId}
+        AND custom_fields->>'_job_id' = ${jobIdForDedup}
+        AND custom_fields->>'_profile_name' = ${profileNameForDedup}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    if (existing.rows.length > 0) {
+      const existingTask = existing.rows[0];
+      await logWebhookEvent(projectId, "inbound", "task_create", 200, body, "duplicate_ignored");
+      return NextResponse.json(
+        { ok: true, duplicate: true, task_id: existingTask.id, task: existingTask },
+        { status: 200 }
+      );
+    }
+  }
+
   // --- Auto-assign agent by name from custom_fields ---
   let assigneeIds: string[] = body.assignee_ids ?? [];
-  const cf = body.custom_fields ?? {};
   const agentName = cf._assigned_agent as string | undefined;
 
   if (agentName && assigneeIds.length === 0) {

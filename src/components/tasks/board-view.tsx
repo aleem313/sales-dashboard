@@ -23,7 +23,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { BoardColumnComponent } from "./board-column";
 import { TaskCardContent } from "./task-card";
-import { useBoardStore } from "@/lib/stores/board-store";
+import { useBoardStore, sortTasksForColumn } from "@/lib/stores/board-store";
 import { moveTaskAction, deleteTaskAction, updateColumnAction, deleteColumnAction, createColumnAction, reorderColumnsAction } from "@/lib/task-actions";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -379,12 +379,18 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
     }
   }
 
-  // Use store tasks grouped by column — respects active filters
+  // Use store tasks grouped by column — respects active filters.
+  // Display order:
+  //   - "Todo" column → latest first (created_at DESC)
+  //   - every other column → priority (urgent→high→medium→low), tie-break created_at DESC
+  // Internal drag math (inside DnD handlers) still uses position via store.getTasksByColumn.
   const filteredTasks = store.getFilteredTasks();
   const getColumnTasks = (columnId: string) => {
-    return filteredTasks
-      .filter((t) => t.column_id === columnId)
-      .sort((a, b) => a.position - b.position);
+    const col = columnOrder.find((c) => c.id === columnId);
+    return sortTasksForColumn(
+      filteredTasks.filter((t) => t.column_id === columnId),
+      col?.name
+    );
   };
 
   // Grouping support

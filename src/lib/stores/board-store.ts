@@ -1,6 +1,29 @@
 import { create } from "zustand";
 import type { BoardColumn, Task, ProjectMember, CustomFieldDefinition, SavedView } from "@/lib/task-data";
 
+const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+
+/**
+ * Column-aware sort rule:
+ *  - Todo column → strict created_at DESC (latest job on top, priority ignored)
+ *  - All others → priority (urgent → high → medium → low), tie-break by created_at DESC
+ *
+ * Exported so the board view can use the same ordering for the non-grouped path.
+ */
+export function sortTasksForColumn(tasks: Task[], columnName: string | undefined): Task[] {
+  const isTodo = (columnName ?? "").trim().toLowerCase() === "todo";
+  const ts = (t: Task) => new Date(t.created_at).getTime();
+  if (isTodo) {
+    return [...tasks].sort((a, b) => ts(b) - ts(a));
+  }
+  return [...tasks].sort((a, b) => {
+    const pa = PRIORITY_RANK[a.priority ?? ""] ?? 99;
+    const pb = PRIORITY_RANK[b.priority ?? ""] ?? 99;
+    if (pa !== pb) return pa - pb;
+    return ts(b) - ts(a);
+  });
+}
+
 interface BoardState {
   // Data
   columns: BoardColumn[];
@@ -345,7 +368,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         id: col.id,
         label: col.name,
         color: col.color,
-        tasks: filtered.filter((t) => t.column_id === col.id).sort((a, b) => a.position - b.position),
+        tasks: sortTasksForColumn(
+          filtered.filter((t) => t.column_id === col.id),
+          col.name
+        ),
       }));
     }
 
