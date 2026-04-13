@@ -42,7 +42,7 @@ import {
   Search,
   Copy,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, copyText } from "@/lib/utils";
 import { formatDistanceToNow, format } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -573,7 +573,10 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
   function handleCopyLink() {
     const basePath = window.location.pathname.startsWith("/my-") ? "/my-tasks" : "/tasks";
     const url = `${window.location.origin}${basePath}?task=${task?.id}`;
-    navigator.clipboard.writeText(url).then(() => toast.success("Link copied"));
+    copyText(url).then((ok) => {
+      if (ok) toast.success("Link copied");
+      else toast.error("Copy failed");
+    });
   }
 
   function saveTimeEstimate() {
@@ -1181,8 +1184,10 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
                         title="Copy job URL"
                         onClick={() => {
                           const url = (cf._job_url as string) || job?.job_url || "";
-                          navigator.clipboard.writeText(url);
-                          toast.success("Job URL copied");
+                          copyText(url).then((ok) => {
+                            if (ok) toast.success("Job URL copied");
+                            else toast.error("Copy failed");
+                          });
                         }}
                       >
                         <Copy className="h-3 w-3" />

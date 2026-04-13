@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, copyText } from "@/lib/utils";
 import { format } from "date-fns";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -114,7 +114,10 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
     function handleCopyLink(e: React.MouseEvent) {
       e.stopPropagation();
       const url = `${window.location.origin}/tasks?task=${task.id}`;
-      navigator.clipboard.writeText(url);
+      copyText(url).then((ok) => {
+        if (ok) toast.success("Link copied");
+        else toast.error("Copy failed");
+      });
     }
 
     return (
@@ -237,7 +240,10 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
                   title="Copy job URL"
                   onClick={(e) => {
                     e.stopPropagation();
-                    navigator.clipboard.writeText(jobUrl).then(() => toast.success("Job URL copied"));
+                    copyText(jobUrl).then((ok) => {
+                      if (ok) toast.success("Job URL copied");
+                      else toast.error("Copy failed");
+                    });
                   }}
                 >
                   <ExternalLink className="h-3 w-3" />

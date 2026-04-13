@@ -41,7 +41,7 @@ import {
   Image as ImageIcon,
   Download,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, copyText } from "@/lib/utils";
 import { formatDistanceToNow, format } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -501,7 +501,10 @@ export function TaskDetailDrawer({ columns, isAdmin, agentId: currentAgentId }: 
 
   function handleCopyLink() {
     const url = `${window.location.origin}/tasks?task=${task?.id}`;
-    navigator.clipboard.writeText(url).then(() => toast.success("Link copied"));
+    copyText(url).then((ok) => {
+      if (ok) toast.success("Link copied");
+      else toast.error("Copy failed");
+    });
   }
 
   function saveTimeEstimate() {

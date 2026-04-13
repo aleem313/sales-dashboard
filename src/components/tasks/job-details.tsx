@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, copyText } from "@/lib/utils";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -37,7 +37,10 @@ interface JobDetailsProps {
 }
 
 function copyToClipboard(text: string, label: string) {
-  navigator.clipboard.writeText(text).then(() => toast.success(`${label} copied`));
+  copyText(text).then((ok) => {
+    if (ok) toast.success(`${label} copied`);
+    else toast.error("Copy failed");
+  });
 }
 
 function InfoRow({ icon, label, children, className }: { icon: React.ReactNode; label: string; children: React.ReactNode; className?: string }) {

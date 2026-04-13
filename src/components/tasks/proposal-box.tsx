@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, copyText } from "@/lib/utils";
 import { toast } from "sonner";
 import { Copy, Check, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -85,10 +85,14 @@ export function ProposalBox({ proposal, onChange, readOnly = true }: ProposalBox
 
   function handleCopy() {
     if (!proposal) return;
-    navigator.clipboard.writeText(proposal).then(() => {
-      setCopied(true);
-      toast.success("Proposal copied to clipboard");
-      setTimeout(() => setCopied(false), 2000);
+    copyText(proposal).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        toast.success("Proposal copied to clipboard");
+        setTimeout(() => setCopied(false), 2000);
+      } else {
+        toast.error("Copy failed");
+      }
     });
   }
 
