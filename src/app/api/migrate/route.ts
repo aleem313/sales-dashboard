@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "migrate-tasks") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "migrate-tasks") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
   }
 
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const sourceBoard = request.nextUrl.searchParams.get("from") || "e8442ebd-afd3-4217-99c4-e55ee20d4bfa";
     const destBoard = request.nextUrl.searchParams.get("to") || "351494d8-918e-475e-b16c-2eee3232aefe";
     return runMigrateTasks(sourceBoard, destBoard);
+  }
+
+  if (migration === "014") {
+    return run014();
   }
 
   if (migration === "013") {
@@ -420,6 +424,131 @@ async function run011() {
     return NextResponse.json({
       success: false,
       migration: "011_fix_profile_assignments",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run014() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 014: Extend lifecycle milestone columns (proposal_viewed_at, in_chat_at, meeting_done_at)...");
+
+    // 1. Add columns
+    for (const col of ["proposal_viewed_at", "in_chat_at", "meeting_done_at"] as const) {
+      const exists = await sql`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'jobs' AND column_name = ${col}
+      `;
+      if (exists.rows.length === 0) {
+        if (col === "proposal_viewed_at") {
+          await sql`ALTER TABLE jobs ADD COLUMN proposal_viewed_at TIMESTAMPTZ`;
+        } else if (col === "in_chat_at") {
+          await sql`ALTER TABLE jobs ADD COLUMN in_chat_at TIMESTAMPTZ`;
+        } else {
+          await sql`ALTER TABLE jobs ADD COLUMN meeting_done_at TIMESTAMPTZ`;
+        }
+        results.push(`✓ Added ${col} column`);
+      } else {
+        results.push(`⊘ ${col} column already exists`);
+      }
+    }
+
+    // 2. Backfill proposal_viewed_at from activity_log
+    const bfViewedAL = await sql`
+      UPDATE jobs j SET proposal_viewed_at = sub.first_viewed
+      FROM (
+        SELECT j2.id AS job_id, MIN(al.created_at) AS first_viewed
+        FROM jobs j2
+        JOIN tasks t ON (t.id = j2.task_id OR t.custom_fields->>'_job_id' = j2.job_id)
+        JOIN activity_log al ON al.task_id = t.id
+        WHERE al.action_type = 'task_moved'
+          AND al.field = 'column'
+          AND LOWER(al.new_value) IN ('proposal views', 'proposal viewed', 'viewed')
+          AND j2.proposal_viewed_at IS NULL
+        GROUP BY j2.id
+      ) sub
+      WHERE j.id = sub.job_id
+    `;
+    results.push(`✓ Backfill proposal_viewed_at from activity_log: ${bfViewedAL.rowCount} rows`);
+
+    const bfViewedFB = await sql`
+      UPDATE jobs SET proposal_viewed_at = COALESCE(stage_entered_at, updated_at)
+      WHERE proposal_viewed_at IS NULL
+        AND LOWER(status) IN (
+          'proposal views', 'proposal viewed',
+          'in chat', 'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost'
+        )
+    `;
+    results.push(`✓ Backfill proposal_viewed_at fallback: ${bfViewedFB.rowCount} rows`);
+
+    // 3. Backfill in_chat_at from activity_log
+    const bfChatAL = await sql`
+      UPDATE jobs j SET in_chat_at = sub.first_chat
+      FROM (
+        SELECT j2.id AS job_id, MIN(al.created_at) AS first_chat
+        FROM jobs j2
+        JOIN tasks t ON (t.id = j2.task_id OR t.custom_fields->>'_job_id' = j2.job_id)
+        JOIN activity_log al ON al.task_id = t.id
+        WHERE al.action_type = 'task_moved'
+          AND al.field = 'column'
+          AND LOWER(al.new_value) IN ('in chat', 'following up')
+          AND j2.in_chat_at IS NULL
+        GROUP BY j2.id
+      ) sub
+      WHERE j.id = sub.job_id
+    `;
+    results.push(`✓ Backfill in_chat_at from activity_log: ${bfChatAL.rowCount} rows`);
+
+    const bfChatFB = await sql`
+      UPDATE jobs SET in_chat_at = COALESCE(stage_entered_at, updated_at)
+      WHERE in_chat_at IS NULL
+        AND LOWER(status) IN ('in chat', 'meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost')
+    `;
+    results.push(`✓ Backfill in_chat_at fallback: ${bfChatFB.rowCount} rows`);
+
+    // 4. Backfill meeting_done_at from activity_log
+    const bfDoneAL = await sql`
+      UPDATE jobs j SET meeting_done_at = sub.first_done
+      FROM (
+        SELECT j2.id AS job_id, MIN(al.created_at) AS first_done
+        FROM jobs j2
+        JOIN tasks t ON (t.id = j2.task_id OR t.custom_fields->>'_job_id' = j2.job_id)
+        JOIN activity_log al ON al.task_id = t.id
+        WHERE al.action_type = 'task_moved'
+          AND al.field = 'column'
+          AND LOWER(al.new_value) = 'meeting done'
+          AND j2.meeting_done_at IS NULL
+        GROUP BY j2.id
+      ) sub
+      WHERE j.id = sub.job_id
+    `;
+    results.push(`✓ Backfill meeting_done_at from activity_log: ${bfDoneAL.rowCount} rows`);
+
+    const bfDoneFB = await sql`
+      UPDATE jobs SET meeting_done_at = COALESCE(stage_entered_at, updated_at)
+      WHERE meeting_done_at IS NULL
+        AND LOWER(status) IN ('meeting done', 'negotiation', 'won', 'lost')
+    `;
+    results.push(`✓ Backfill meeting_done_at fallback: ${bfDoneFB.rowCount} rows`);
+
+    // 5. Partial indexes
+    await sql`CREATE INDEX IF NOT EXISTS idx_jobs_proposal_viewed_at ON jobs(proposal_viewed_at) WHERE proposal_viewed_at IS NOT NULL`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_jobs_in_chat_at         ON jobs(in_chat_at)         WHERE in_chat_at         IS NOT NULL`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_jobs_meeting_done_at    ON jobs(meeting_done_at)    WHERE meeting_done_at    IS NOT NULL`;
+    results.push("✓ Partial indexes created");
+
+    return NextResponse.json({
+      success: true,
+      migration: "014_lifecycle_milestones_ext",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "014_lifecycle_milestones_ext",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });

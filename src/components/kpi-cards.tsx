@@ -1,39 +1,23 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Briefcase, Send, Trophy, TrendingUp, DollarSign } from "lucide-react";
+import { Briefcase, Send, Eye, MessageSquare, CalendarCheck, CalendarCheck2, Trophy, TrendingUp, DollarSign } from "lucide-react";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
 import type { KPIMetrics } from "@/lib/types";
 
 export function KPICards({ metrics }: { metrics: KPIMetrics }) {
   const cards = [
-    {
-      title: "Total Jobs",
-      value: formatNumber(metrics.totalJobs),
-      icon: Briefcase,
-    },
-    {
-      title: "Proposals Sent",
-      value: formatNumber(metrics.proposalsSent),
-      icon: Send,
-    },
-    {
-      title: "Won",
-      value: formatNumber(metrics.won),
-      icon: Trophy,
-    },
-    {
-      title: "Win Rate",
-      value: formatPercent(metrics.winRate),
-      icon: TrendingUp,
-    },
-    {
-      title: "Revenue",
-      value: formatCurrency(metrics.totalRevenue),
-      icon: DollarSign,
-    },
+    { title: "Total Jobs",      value: formatNumber(metrics.totalJobs),       icon: Briefcase },
+    { title: "Proposals Sent",  value: formatNumber(metrics.proposalsSent),   icon: Send },
+    { title: "Proposal Viewed", value: formatNumber(metrics.proposalsViewed), icon: Eye },
+    { title: "In Chat",         value: formatNumber(metrics.inChat),          icon: MessageSquare },
+    { title: "Meeting Booked",  value: formatNumber(metrics.meetingsBooked),  icon: CalendarCheck },
+    { title: "Meeting Done",    value: formatNumber(metrics.meetingsDone),    icon: CalendarCheck2 },
+    { title: "Won",             value: formatNumber(metrics.won),             icon: Trophy },
+    { title: "Win Rate",        value: formatPercent(metrics.winRate),        icon: TrendingUp },
+    { title: "Revenue",         value: formatCurrency(metrics.totalRevenue),  icon: DollarSign },
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+    <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5">
       {cards.map((card) => (
         <Card key={card.title}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

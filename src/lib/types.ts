@@ -96,7 +96,10 @@ export interface StatsCache {
 export interface KPIMetrics {
   totalJobs: number;
   proposalsSent: number;
+  proposalsViewed: number;
+  inChat: number;
   meetingsBooked: number;
+  meetingsDone: number;
   won: number;
   lost: number;
   winRate: number;

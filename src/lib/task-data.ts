@@ -1427,9 +1427,14 @@ export async function syncJobStatusFromTask(
   ];
   const isPostSent = postSentStatuses.includes(lowerCol);
 
-  // Meeting milestone columns
+  // Meeting milestone columns — meeting_booked_at covers any entry to a meeting column
   const meetingStatuses = ['meeting scheduled', 'meeting done'];
   const isMeeting = meetingStatuses.includes(lowerCol);
+
+  // Additional historical-reach milestones (migration 014)
+  const isProposalViewed = ['proposal views', 'proposal viewed', 'viewed'].includes(lowerCol);
+  const isInChat = ['in chat', 'following up'].includes(lowerCol);
+  const isMeetingDone = lowerCol === 'meeting done';
 
   if (isWon) {
     await sql`
@@ -1467,6 +1472,26 @@ export async function syncJobStatusFromTask(
     await sql`
       UPDATE jobs SET meeting_booked_at = COALESCE(meeting_booked_at, NOW())
       WHERE id = ${job.id} AND meeting_booked_at IS NULL
+    `;
+  }
+
+  // Migration-014 milestones: first-reach only, preserved across reversals/Lost
+  if (isProposalViewed) {
+    await sql`
+      UPDATE jobs SET proposal_viewed_at = COALESCE(proposal_viewed_at, NOW())
+      WHERE id = ${job.id} AND proposal_viewed_at IS NULL
+    `;
+  }
+  if (isInChat) {
+    await sql`
+      UPDATE jobs SET in_chat_at = COALESCE(in_chat_at, NOW())
+      WHERE id = ${job.id} AND in_chat_at IS NULL
+    `;
+  }
+  if (isMeetingDone) {
+    await sql`
+      UPDATE jobs SET meeting_done_at = COALESCE(meeting_done_at, NOW())
+      WHERE id = ${job.id} AND meeting_done_at IS NULL
     `;
   }
 

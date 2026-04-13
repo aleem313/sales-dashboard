@@ -43,13 +43,17 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
 
   // ONE base dataset filtered by received_at. ALL metrics computed within it.
   // Metrics are mutually exclusive: Bad Leads (N/A) are excluded from Proposal Sent.
-  // Lifecycle milestones check if a job EVER reached that stage.
+  // Lifecycle milestones check if a job EVER reached that stage — a job that
+  // reached Meeting Booked and later moved to Lost is still counted for Meeting Booked.
   const result = await sql`
     SELECT
       COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN proposal_sent_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN meeting_booked_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meetings_booked,
-      COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END) AS won,
+      COUNT(CASE WHEN proposal_sent_at   IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN proposal_viewed_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposals_viewed,
+      COUNT(CASE WHEN in_chat_at         IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS in_chat,
+      COUNT(CASE WHEN meeting_booked_at  IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meetings_booked,
+      COUNT(CASE WHEN meeting_done_at    IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meetings_done,
+      COUNT(CASE WHEN LOWER(status) = 'won'  THEN 1 END) AS won,
       COUNT(CASE WHEN LOWER(status) = 'lost' THEN 1 END) AS lost,
       ROUND(
         COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END)::DECIMAL /
@@ -68,7 +72,10 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
   return {
     totalJobs: parseInt(row.total_jobs) || 0,
     proposalsSent: parseInt(row.proposals_sent) || 0,
+    proposalsViewed: parseInt(row.proposals_viewed) || 0,
+    inChat: parseInt(row.in_chat) || 0,
     meetingsBooked: parseInt(row.meetings_booked) || 0,
+    meetingsDone: parseInt(row.meetings_done) || 0,
     won: parseInt(row.won) || 0,
     lost: parseInt(row.lost) || 0,
     winRate: parseFloat(row.win_rate) || 0,
@@ -1093,13 +1100,17 @@ export async function getAgentKPIMetrics(
   range?: DateRange
 ): Promise<KPIMetrics> {
   const { startDate, endDate } = range ?? {};
-  // Same base-dataset + mutually exclusive approach as getKPIMetrics, scoped to one agent
+  // Same base-dataset + mutually exclusive approach as getKPIMetrics, scoped to one agent.
+  // Lifecycle milestone columns use "ever reached" semantics.
   const result = await sql`
     SELECT
       COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN proposal_sent_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN meeting_booked_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meetings_booked,
-      COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END) AS won,
+      COUNT(CASE WHEN proposal_sent_at   IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN proposal_viewed_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposals_viewed,
+      COUNT(CASE WHEN in_chat_at         IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS in_chat,
+      COUNT(CASE WHEN meeting_booked_at  IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meetings_booked,
+      COUNT(CASE WHEN meeting_done_at    IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meetings_done,
+      COUNT(CASE WHEN LOWER(status) = 'won'  THEN 1 END) AS won,
       COUNT(CASE WHEN LOWER(status) = 'lost' THEN 1 END) AS lost,
       ROUND(
         COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END)::DECIMAL /
@@ -1116,7 +1127,10 @@ export async function getAgentKPIMetrics(
   return {
     totalJobs: parseInt(row.total_jobs) || 0,
     proposalsSent: parseInt(row.proposals_sent) || 0,
+    proposalsViewed: parseInt(row.proposals_viewed) || 0,
+    inChat: parseInt(row.in_chat) || 0,
     meetingsBooked: parseInt(row.meetings_booked) || 0,
+    meetingsDone: parseInt(row.meetings_done) || 0,
     won: parseInt(row.won) || 0,
     lost: parseInt(row.lost) || 0,
     winRate: parseFloat(row.win_rate) || 0,
@@ -1245,70 +1259,56 @@ export async function getPipelineStages(
 ): Promise<PipelineStage[]> {
   const { startDate, endDate } = range ?? {};
 
-  // Normalize legacy/variant status names to current board column names
-  const statusNormMap: Record<string, string> = {
-    "To Do": "Todo",
-    "New": "Todo",
-    "Proposal Ready": "Todo",
-    "Submitted": "Proposal Submitted",
-    "Sent": "Prototype Submitted",
-    "Following Up": "In Chat",
-    "Proposal Views": "Proposal Views",
-    "In Chat": "In Chat",
-    "N/A": "N/A",
-  };
-
-  const stageMap: Record<string, { label: string; subtitle: string }> = {
-    "Todo": { label: "Todo", subtitle: "Pending proposals" },
-    "Proposal Submitted": { label: "Submitted", subtitle: "Awaiting client" },
-    "Proposal Views": { label: "Views", subtitle: "Client viewed" },
-    "Prototype Required": { label: "Proto Req.", subtitle: "Build needed" },
-    "Prototype Done": { label: "Proto Done", subtitle: "Ready to send" },
-    "Prototype Submitted": { label: "Proto Sent", subtitle: "Awaiting feedback" },
-    "In Chat": { label: "In Chat", subtitle: "Re-engaged" },
-    "Meeting Scheduled": { label: "Mtg Sched.", subtitle: "Calendar booked" },
-    "Meeting Done": { label: "Mtg Done", subtitle: "Follow up needed" },
-    "Negotiation": { label: "Negotiation", subtitle: "Hot leads" },
-    "Won": { label: "Won", subtitle: "Closed won" },
-    "Lost": { label: "Lost", subtitle: "Closed lost" },
-    "On Hold": { label: "On Hold", subtitle: "Client paused" },
-    "N/A": { label: "N/A", subtitle: "Not applicable" },
-  };
-
-  const stageOrder: Record<string, number> = {
-    "Todo": 1, "Proposal Submitted": 2, "Proposal Views": 3,
-    "Prototype Required": 4, "Prototype Done": 5, "Prototype Submitted": 6,
-    "In Chat": 7, "Meeting Scheduled": 8, "Meeting Done": 9,
-    "Negotiation": 10, "Won": 11, "Lost": 12, "On Hold": 13, "N/A": 14,
-  };
-
+  // Option-B semantics: the five funnel-critical stages (Proposal Submitted,
+  // Proposal Views, In Chat, Meeting Booked, Meeting Done) use "ever reached"
+  // counts via the lifecycle milestone columns, so a job that passed through
+  // a stage and later moved to Lost is still counted under that stage.
+  // Other stages (Todo, Prototype*, Negotiation, Won, Lost, On Hold, N/A) use
+  // current-status counts — they represent where the job is right now.
   const result = await sql`
-    SELECT status, COUNT(*) AS count
+    SELECT
+      COUNT(CASE WHEN LOWER(status) IN ('todo', 'to do', 'new', 'proposal ready') THEN 1 END) AS todo,
+      COUNT(CASE WHEN proposal_sent_at   IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposal_submitted,
+      COUNT(CASE WHEN proposal_viewed_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposal_views,
+      COUNT(CASE WHEN LOWER(status) = 'prototype required'  THEN 1 END) AS prototype_required,
+      COUNT(CASE WHEN LOWER(status) = 'prototype done'      THEN 1 END) AS prototype_done,
+      COUNT(CASE WHEN LOWER(status) IN ('prototype submitted', 'prototype sent') THEN 1 END) AS prototype_submitted,
+      COUNT(CASE WHEN in_chat_at         IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS in_chat,
+      COUNT(CASE WHEN meeting_booked_at  IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meeting_booked,
+      COUNT(CASE WHEN meeting_done_at    IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meeting_done,
+      COUNT(CASE WHEN LOWER(status) = 'negotiation' THEN 1 END) AS negotiation,
+      COUNT(CASE WHEN LOWER(status) = 'won'         THEN 1 END) AS won,
+      COUNT(CASE WHEN LOWER(status) = 'lost'        THEN 1 END) AS lost,
+      COUNT(CASE WHEN LOWER(status) = 'on hold'     THEN 1 END) AS on_hold,
+      COUNT(CASE WHEN LOWER(status) = 'n/a'         THEN 1 END) AS na
     FROM jobs
     WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
-    GROUP BY status
   `;
 
-  // Aggregate counts by normalized stage key
-  const aggregated = new Map<string, number>();
-  for (const row of result.rows) {
-    const raw = row.status?.trim() || "N/A";
-    const normalized = statusNormMap[raw] ?? raw;
-    // Any status not in stageMap goes to N/A
-    const key = stageMap[normalized] ? normalized : "N/A";
-    aggregated.set(key, (aggregated.get(key) ?? 0) + (parseInt(row.count) || 0));
-  }
+  const r = result.rows[0];
+  const n = (v: unknown) => parseInt(String(v ?? 0)) || 0;
 
-  // Sort by defined stage order and return
-  return Array.from(aggregated.entries())
-    .sort((a, b) => (stageOrder[a[0]] ?? 99) - (stageOrder[b[0]] ?? 99))
-    .map(([key, count]) => {
-      const mapped = stageMap[key] ?? { label: key, subtitle: "" };
-      return { key, label: mapped.label, count, subtitle: mapped.subtitle };
-    });
+  // Fixed stage order, matching the board column order. Subtitles indicate
+  // which counts are historical vs current-status so the UI can be honest.
+  return [
+    { key: "Todo",                label: "Todo",        count: n(r.todo),                subtitle: "Pending proposals" },
+    { key: "Proposal Submitted",  label: "Submitted",   count: n(r.proposal_submitted),  subtitle: "Ever reached" },
+    { key: "Proposal Views",      label: "Views",       count: n(r.proposal_views),      subtitle: "Ever reached" },
+    { key: "Prototype Required",  label: "Proto Req.",  count: n(r.prototype_required),  subtitle: "Build needed" },
+    { key: "Prototype Done",      label: "Proto Done",  count: n(r.prototype_done),      subtitle: "Ready to send" },
+    { key: "Prototype Submitted", label: "Proto Sent",  count: n(r.prototype_submitted), subtitle: "Awaiting feedback" },
+    { key: "In Chat",             label: "In Chat",     count: n(r.in_chat),             subtitle: "Ever reached" },
+    { key: "Meeting Scheduled",   label: "Mtg Booked",  count: n(r.meeting_booked),      subtitle: "Ever reached" },
+    { key: "Meeting Done",        label: "Mtg Done",    count: n(r.meeting_done),        subtitle: "Ever reached" },
+    { key: "Negotiation",         label: "Negotiation", count: n(r.negotiation),         subtitle: "Hot leads" },
+    { key: "Won",                 label: "Won",         count: n(r.won),                 subtitle: "Closed won" },
+    { key: "Lost",                label: "Lost",        count: n(r.lost),                subtitle: "Closed lost" },
+    { key: "On Hold",             label: "On Hold",     count: n(r.on_hold),             subtitle: "Client paused" },
+    { key: "N/A",                 label: "N/A",         count: n(r.na),                  subtitle: "Not applicable" },
+  ];
 }
 
 export async function getActiveJobsInPipeline(agentId?: string, profileId?: string): Promise<PipelineJob[]> {
