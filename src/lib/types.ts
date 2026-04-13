@@ -326,6 +326,7 @@ export interface ConnectsUsage {
 }
 
 export interface BoostedConnectsSummary {
+  totalConnectsUsed: number;
   totalBoosted: number;
   bidOutBoost: number;
 }

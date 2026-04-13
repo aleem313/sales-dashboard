@@ -32,7 +32,8 @@ export default async function MyConnectsPage({
   ]);
   const agentProfiles = allProfiles.filter((p) => p.agent_id === agentId);
 
-  const totalUsed = usage.reduce((s, u) => s + u.connects_used, 0);
+  const estimatedUsed = usage.reduce((s, u) => s + u.connects_used, 0);
+  const totalUsed = boosted.totalConnectsUsed > 0 ? boosted.totalConnectsUsed : estimatedUsed;
   const totalWins = roi.reduce((s, r) => s + r.wins, 0);
   const connectsPerWin = totalWins > 0 ? Math.round(totalUsed / totalWins) : 0;
   const wasted = roi.filter((r) => r.wins === 0).reduce((s, r) => s + r.connects_spent, 0);

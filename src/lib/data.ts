@@ -1553,8 +1553,11 @@ export async function getBoostedConnectsSummary(
 ): Promise<BoostedConnectsSummary> {
   const { startDate, endDate } = range ?? {};
 
+  // tasks.custom_fields._job_id links to jobs.job_id (jobs.task_id is not populated).
+  // LEFT JOIN so manually-created tasks without a linked job still count when no filters are set.
   const result = await sql`
     SELECT
+      COALESCE(SUM(NULLIF(t.custom_fields->>'_connects_used', '')::numeric), 0) AS total_connects_used,
       COALESCE(SUM(NULLIF(t.custom_fields->>'_boosted_connects', '')::numeric), 0) AS total_boosted,
       COALESCE(SUM(
         CASE WHEN EXISTS (
@@ -1569,16 +1572,36 @@ export async function getBoostedConnectsSummary(
         END
       ), 0) AS bid_out_boost
     FROM tasks t
-    JOIN jobs j ON j.task_id = t.id
-    WHERE (t.custom_fields->>'_boosted_connects') IS NOT NULL
-      AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
-      AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
-      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
+    LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
+    WHERE (
+        NULLIF(t.custom_fields->>'_connects_used', '') IS NOT NULL
+        OR NULLIF(t.custom_fields->>'_boosted_connects', '') IS NOT NULL
+      )
+      AND (
+        ${startDate}::timestamptz IS NULL
+        OR COALESCE(j.received_at, t.created_at) >= ${startDate}::timestamptz
+      )
+      AND (
+        ${endDate}::timestamptz IS NULL
+        OR COALESCE(j.received_at, t.created_at) <= ${endDate}::timestamptz
+      )
+      AND (
+        ${agentId ?? null}::uuid IS NULL
+        OR j.agent_id = ${agentId ?? null}::uuid
+        OR EXISTS (
+          SELECT 1 FROM task_assignees ta
+          WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
+        )
+      )
+      AND (
+        ${profileId ?? null}::text IS NULL
+        OR j.profile_id = ${profileId ?? null}::text
+      )
   `;
 
   const row = result.rows[0] ?? {};
   return {
+    totalConnectsUsed: Number(row.total_connects_used) || 0,
     totalBoosted: Number(row.total_boosted) || 0,
     bidOutBoost: Number(row.bid_out_boost) || 0,
   };

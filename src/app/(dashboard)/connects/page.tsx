@@ -35,7 +35,8 @@ export default async function ConnectsPage({
     getAllProfiles(),
   ]);
 
-  const totalUsed = usage.reduce((s, u) => s + u.connects_used, 0);
+  const estimatedUsed = usage.reduce((s, u) => s + u.connects_used, 0);
+  const totalUsed = boosted.totalConnectsUsed > 0 ? boosted.totalConnectsUsed : estimatedUsed;
   const totalWins = roi.reduce((s, r) => s + r.wins, 0);
   const connectsPerWin = totalWins > 0 ? Math.round(totalUsed / totalWins) : 0;
 
