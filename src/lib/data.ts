@@ -31,6 +31,7 @@ import type {
   ConnectsUsage,
   ConnectROI,
   FilterQuality,
+  BoostedConnectsSummary,
   AlertCounts,
 } from "./types";
 
@@ -1543,6 +1544,44 @@ export async function getConnectsUsageByProfile(
     connects_used: parseInt(row.connects_used) || 0,
     connects_budget: 150,
   }));
+}
+
+export async function getBoostedConnectsSummary(
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string
+): Promise<BoostedConnectsSummary> {
+  const { startDate, endDate } = range ?? {};
+
+  const result = await sql`
+    SELECT
+      COALESCE(SUM(NULLIF(t.custom_fields->>'_boosted_connects', '')::numeric), 0) AS total_boosted,
+      COALESCE(SUM(
+        CASE WHEN EXISTS (
+          SELECT 1
+          FROM task_tag_map ttm
+          JOIN task_tags tg ON tg.id = ttm.tag_id
+          WHERE ttm.task_id = t.id
+            AND LOWER(tg.name) = 'bid out boost'
+        )
+        THEN NULLIF(t.custom_fields->>'_boosted_connects', '')::numeric
+        ELSE 0
+        END
+      ), 0) AS bid_out_boost
+    FROM tasks t
+    JOIN jobs j ON j.task_id = t.id
+    WHERE (t.custom_fields->>'_boosted_connects') IS NOT NULL
+      AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
+  `;
+
+  const row = result.rows[0] ?? {};
+  return {
+    totalBoosted: Number(row.total_boosted) || 0,
+    bidOutBoost: Number(row.bid_out_boost) || 0,
+  };
 }
 
 export async function getConnectROIByNiche(

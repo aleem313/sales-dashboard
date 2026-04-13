@@ -5,7 +5,7 @@ import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { ConnectsUsageBars } from "@/components/connects/connects-usage-bars";
 import { ConnectROITable } from "@/components/connects/connect-roi-table";
 import { FilterQualityCard } from "@/components/connects/filter-quality";
-import { getConnectsUsageByProfile, getConnectROIByNiche, getFilterQualityAnalysis, getAllProfiles } from "@/lib/data";
+import { getConnectsUsageByProfile, getConnectROIByNiche, getFilterQualityAnalysis, getBoostedConnectsSummary, getAllProfiles } from "@/lib/data";
 import { parseDateRange } from "@/lib/date-utils";
 import { AutoRefresh } from "@/components/auto-refresh";
 
@@ -23,10 +23,11 @@ export default async function MyConnectsPage({
   const params = await searchParams;
   const range = parseDateRange(params);
 
-  const [usage, roi, filterQuality, allProfiles] = await Promise.all([
+  const [usage, roi, filterQuality, boosted, allProfiles] = await Promise.all([
     getConnectsUsageByProfile(range, agentId),
     getConnectROIByNiche(range, agentId),
     getFilterQualityAnalysis(range, agentId),
+    getBoostedConnectsSummary(range, agentId),
     getAllProfiles(),
   ]);
   const agentProfiles = allProfiles.filter((p) => p.agent_id === agentId);
@@ -44,6 +45,8 @@ export default async function MyConnectsPage({
 
       <StatRow className="mb-5">
         <StatCard label="Total Used" value={totalUsed} variant="accent" delta="Estimated from proposals" />
+        <StatCard label="Boosted Connects" value={boosted.totalBoosted} variant="accent" delta="All boosted" />
+        <StatCard label="Bid out Boost" value={boosted.bidOutBoost} variant="accent" delta="Boosted + labeled" />
         <StatCard label="Per Win" value={connectsPerWin} delta="Connects per closed deal" />
         <StatCard label="Wasted" value={wasted} variant="danger" delta="On 0-win niches" />
         <StatCard label="Total Wins" value={totalWins} variant="green" delta="Won jobs" />

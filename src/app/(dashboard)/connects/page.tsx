@@ -7,6 +7,7 @@ import {
   getConnectsUsageByProfile,
   getConnectROIByNiche,
   getFilterQualityAnalysis,
+  getBoostedConnectsSummary,
   getAllAgents,
   getAllProfiles,
 } from "@/lib/data";
@@ -25,10 +26,11 @@ export default async function ConnectsPage({
   const profileId = typeof params.profile === "string" ? params.profile : undefined;
   const range = parseDateRange(params);
 
-  const [usage, roi, filterQuality, allAgents, allProfiles] = await Promise.all([
+  const [usage, roi, filterQuality, boosted, allAgents, allProfiles] = await Promise.all([
     getConnectsUsageByProfile(range, agentId, profileId),
     getConnectROIByNiche(range, agentId, profileId),
     getFilterQualityAnalysis(range, agentId, profileId),
+    getBoostedConnectsSummary(range, agentId, profileId),
     getAllAgents(),
     getAllProfiles(),
   ]);
@@ -65,6 +67,8 @@ export default async function ConnectsPage({
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
         <StatRow className="mb-5">
           <StatCard label="Total Connects Used" value={totalUsed} variant="warn" delta="This period" />
+          <StatCard label="Boosted Connects" value={boosted.totalBoosted} variant="accent" delta="All boosted" />
+          <StatCard label="Bid out Boost" value={boosted.bidOutBoost} variant="accent" delta="Boosted + labeled" />
           <StatCard label="Connects per Win" value={connectsPerWin || "—"} delta={connectsPerWin > 0 ? "Improving" : ""} />
           <StatCard label="Wasted Connects" value={wasted} variant="danger" delta="Low-quality jobs" deltaDown />
           <StatCard

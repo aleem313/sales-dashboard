@@ -325,6 +325,11 @@ export interface ConnectsUsage {
   connects_budget: number;
 }
 
+export interface BoostedConnectsSummary {
+  totalBoosted: number;
+  bidOutBoost: number;
+}
+
 export interface ConnectROI {
   niche: string;
   connects_spent: number;
