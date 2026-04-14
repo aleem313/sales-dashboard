@@ -314,22 +314,23 @@ ClickUp integration has been **fully removed** as of Milestone 8. The following 
 
 | File | Purpose |
 |------|---------|
-| `plan.md` | Execution plan with milestones and checklists |
-| `cline.md` | Project history, progress tracking, resume instructions |
-| `task_board_cases.md` | All cases, subcases & edge cases for Task Board (3 levels deep) — dev scoping and QA |
-| `task_board_ui_audit.md` | UI component audit: 12 components, issues (P0/P1/P2), role matrix, recommended fixes |
+| `docs/plan.md` | Execution plan with milestones and checklists |
+| `docs/cline.md` | Project history, progress tracking, resume instructions |
+| `docs/task_board_cases.md` | All cases, subcases & edge cases for Task Board (3 levels deep) — dev scoping and QA |
+| `docs/task_board_ui_audit.md` | UI component audit: 12 components, issues (P0/P1/P2), role matrix, recommended fixes |
+| `docs/agent-guide/AGENT_USER_GUIDE.md` | End-user guide for agents — features, stats, lifecycle, common misunderstandings |
 
 ## Conversation Continuity
 
-**Always read `cline.md` first** in every new conversation. It contains:
+**Always read `docs/cline.md` first** in every new conversation. It contains:
 - Full project history and decisions
 - Milestone progress tracking
 - What's been built and what's next
 - Tech stack decisions and rationale
 
-Update `cline.md` after completing each feature (status table + detail section).
+Update `docs/cline.md` after completing each feature (status table + detail section).
 
-Execution plan lives in `plan.md` (v3.1, ClickUp removal). Mark items `[x]` as they're completed.
+Execution plan lives in `docs/plan.md` (v3.1, ClickUp removal). Mark items `[x]` as they're completed.
 
 ## Git Commits
 
