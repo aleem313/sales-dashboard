@@ -211,10 +211,14 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
 
             {/* Job link copy button */}
             {jobUrl && (
-              <div className="flex items-center gap-1.5 mb-1.5">
+              <div
+                className="flex items-center gap-1.5 mb-1.5"
+                onPointerDown={(e) => e.stopPropagation()}
+              >
                 <button
                   className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
                   title="Copy job URL"
+                  onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
                     copyText(jobUrl).then((ok) => {
