@@ -2,7 +2,7 @@
 
 import { forwardRef, useState } from "react";
 import { cn, copyText } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -52,28 +52,6 @@ function hashColor(str: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
-function isDueWarning(dueDate: string): "overdue" | "soon" | null {
-  const due = new Date(dueDate);
-  const now = new Date();
-  if (due < now) return "overdue";
-  if (due.getTime() - now.getTime() < 48 * 60 * 60 * 1000) return "soon";
-  return null;
-}
-
-function formatDueDate(dueDate: string): string {
-  const date = new Date(dueDate);
-  const now = new Date();
-  const diffMs = date.getTime() - now.getTime();
-  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Tomorrow";
-  if (diffDays === -1) return "Yesterday";
-  if (diffDays < -1) return format(date, "MMM d");
-  if (diffDays <= 7) return format(date, "EEE");
-  return format(date, "MMM d");
-}
-
 interface TaskCardProps {
   task: Task;
   columnColor?: string;
@@ -89,7 +67,6 @@ interface TaskCardProps {
 export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { style?: React.CSSProperties }>(
   ({ task, columnColor, onClick, isDragging, style, columns, isAdmin, onMoveTask, onDeleteTask, customFields, ...props }, ref) => {
     const [menuOpen, setMenuOpen] = useState(false);
-    const dueStatus = task.due_date ? isDueWarning(task.due_date) : null;
     const assignees = task.assignees ?? [];
     const tags = task.tags ?? [];
     const checklistTotal = task.checklist_total ?? 0;
@@ -100,7 +77,7 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
     const timeEstimate = cf._time_estimate_minutes as number | undefined;
     const timeTracked = cf._time_tracked_minutes as number | undefined;
     const jobUrl = (cf._job_url as string) || "";
-    const hasMetaRow = task.priority || task.due_date || task.start_date || timeEstimate;
+    const hasMetaRow = task.priority || task.created_at || task.start_date || timeEstimate;
     const hasBottomRow = assignees.length > 0 || checklistTotal > 0 || commentCount > 0 || attachmentCount > 0;
 
     function formatMinutes(mins: number): string {
@@ -269,19 +246,14 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
                   </span>
                 )}
 
-                {/* Due date */}
-                {task.due_date && (
+                {/* Created */}
+                {task.created_at && (
                   <span
-                    className={cn(
-                      "inline-flex items-center gap-0.5 text-[11px]",
-                      dueStatus === "overdue" && "text-red-600 dark:text-red-400 font-medium",
-                      dueStatus === "soon" && "text-orange-600 dark:text-orange-400 font-medium",
-                      !dueStatus && "text-muted-foreground"
-                    )}
-                    title={`Due: ${format(new Date(task.due_date), "MMM d, yyyy")}`}
+                    className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground"
+                    title={`Created: ${format(new Date(task.created_at), "MMM d, yyyy h:mm a")}`}
                   >
                     <Calendar className="h-3 w-3" />
-                    {formatDueDate(task.due_date)}
+                    {formatDistanceToNow(new Date(task.created_at), { addSuffix: true })}
                   </span>
                 )}
 

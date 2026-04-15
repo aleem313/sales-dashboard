@@ -31,6 +31,8 @@ import { Undo2, Plus, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TaskDetailModal } from "./task-detail-modal";
 import { TaskCreateModal } from "./task-create-modal";
+import { NotificationPermissionBanner } from "./notification-permission-banner";
+import { useNewTaskNotifier } from "@/hooks/use-new-task-notifier";
 import type { BoardColumn, Task, ProjectMember, CustomFieldDefinition } from "@/lib/task-data";
 
 interface BoardViewProps {
@@ -95,6 +97,7 @@ function SortableColumn({
 export function BoardView({ columns: serverColumns, tasks, projectId, members, isAdmin, agentId, customFields }: BoardViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  useNewTaskNotifier(tasks, { enabled: !isAdmin });
   const [addToColumn, setAddToColumn] = useState<string | null>(null);
   const [modalTaskId, setModalTaskId] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -400,6 +403,7 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
   if (isGroupedView) {
     return (
       <>
+        {!isAdmin && <NotificationPermissionBanner />}
         <div className="flex h-full gap-4 overflow-x-auto px-6 py-4">
           {groupedData.map((group) => (
             <BoardColumnComponent
@@ -453,6 +457,7 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
 
   return (
     <>
+      {!isAdmin && <NotificationPermissionBanner />}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
