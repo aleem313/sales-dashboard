@@ -29,7 +29,6 @@ Both deployments receive the same n8n webhook traffic via parallel sink nodes in
 
 **CI/CD key files:**
 - `.github/workflows/deploy-contabo.yml` — **active** auto-deploy pipeline (push to main)
-- `.github/workflows/deploy.yml` — reference-only (GHCR + staging/prod + nginx), triggers removed
 - `docker-compose.server.yml` — lean HTTP-only compose used on Contabo (no nginx, no SSL)
 - `docker-compose.prod.yml` — full nginx+certbot stack, intended for post-domain setup
 
