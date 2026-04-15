@@ -36,19 +36,30 @@ export function playBeep(): void {
   try {
     if (c.state === "suspended") void c.resume();
     const now = c.currentTime;
-    const gain = c.createGain();
-    gain.connect(c.destination);
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.15, now + 0.01);
-    gain.gain.linearRampToValueAtTime(0, now + 0.2);
+    const volume = 0.4;
 
-    const osc1 = c.createOscillator();
-    osc1.type = "sine";
-    osc1.frequency.setValueAtTime(800, now);
-    osc1.frequency.linearRampToValueAtTime(1200, now + 0.18);
-    osc1.connect(gain);
-    osc1.start(now);
-    osc1.stop(now + 0.2);
+    // Three-note rising chime: C5 → E5 → G5 (major triad), like a classic notification
+    const notes: Array<{ freq: number; start: number; dur: number }> = [
+      { freq: 523.25, start: 0.0, dur: 0.15 },
+      { freq: 659.25, start: 0.12, dur: 0.15 },
+      { freq: 783.99, start: 0.24, dur: 0.28 },
+    ];
+
+    for (const n of notes) {
+      const gain = c.createGain();
+      gain.connect(c.destination);
+      gain.gain.setValueAtTime(0, now + n.start);
+      gain.gain.linearRampToValueAtTime(volume, now + n.start + 0.01);
+      gain.gain.linearRampToValueAtTime(volume * 0.7, now + n.start + n.dur * 0.5);
+      gain.gain.linearRampToValueAtTime(0, now + n.start + n.dur);
+
+      const osc = c.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(n.freq, now + n.start);
+      osc.connect(gain);
+      osc.start(now + n.start);
+      osc.stop(now + n.start + n.dur + 0.02);
+    }
   } catch {
     // no-op
   }
