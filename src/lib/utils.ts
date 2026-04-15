@@ -64,19 +64,37 @@ export async function copyText(text: string): Promise<boolean> {
   } catch {
     // fall through to execCommand fallback
   }
+  // execCommand fallback. We must mount the temporary <textarea> INSIDE the
+  // currently focused element's subtree — otherwise Radix Dialog's FocusScope
+  // will intercept the focus handoff and bounce focus back into the dialog,
+  // killing the selection before `execCommand("copy")` can read it. Symptom:
+  // execCommand returns true but nothing actually lands on the clipboard.
   try {
+    const activeEl = (document.activeElement as HTMLElement | null) ?? null;
+    const host = activeEl?.parentElement ?? document.body;
     const textarea = document.createElement("textarea");
     textarea.value = text;
     textarea.setAttribute("readonly", "");
     textarea.style.position = "fixed";
     textarea.style.top = "0";
     textarea.style.left = "0";
+    textarea.style.width = "1px";
+    textarea.style.height = "1px";
     textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(textarea);
+    textarea.style.pointerEvents = "none";
+    host.appendChild(textarea);
+    textarea.focus({ preventScroll: true });
+    textarea.setSelectionRange(0, text.length);
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch {
+      ok = false;
+    }
+    host.removeChild(textarea);
+    if (activeEl && typeof activeEl.focus === "function") {
+      activeEl.focus({ preventScroll: true });
+    }
     return ok;
   } catch {
     return false;
