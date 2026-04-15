@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { sql } from "@/lib/db";
 import crypto from "crypto";
 import {
@@ -227,6 +228,10 @@ export async function POST(request: NextRequest) {
     }
 
     await logWebhookEvent(projectId, "inbound", "task_create", 201, body, null);
+
+    revalidatePath("/tasks");
+    revalidatePath("/my-tasks");
+
     return NextResponse.json(responsePayload, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
