@@ -19,17 +19,19 @@ export const revalidate = 0;
 export default async function MyJobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; profile?: string }>;
 }) {
   const session = await auth();
   if (!session?.user?.agentId) redirect("/dashboard");
 
   const params = await searchParams;
   const agentId = session.user.agentId;
+  const profileId = params.profile || undefined;
 
   const [jobs, allProfiles] = await Promise.all([
     getJobs({
       agent_id: agentId,
+      profile_id: profileId,
       status: params.status || undefined,
       limit: 50,
       sortBy: "received_at",

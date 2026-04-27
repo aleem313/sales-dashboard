@@ -34,7 +34,7 @@ export const revalidate = 300;
 export default async function MyDashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string; from?: string; to?: string; tz?: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string; tz?: string; profile?: string }>;
 }) {
   const session = await auth();
   if (!session?.user?.agentId) redirect("/dashboard");
@@ -42,14 +42,15 @@ export default async function MyDashboardPage({
   const agentId = session.user.agentId;
   const params = await searchParams;
   const range = parseDateRange(params);
+  const profileId = params.profile || undefined;
 
   const [kpi, avgResponseTime, funnel, pipeline, winRateTrend, recentJobs, alerts, allProfiles] = await Promise.all([
-    getKPIMetricsWithDeltas(range, agentId),
-    getAvgResponseTime(range, agentId),
-    getConversionFunnel(range, agentId),
-    getPipelineNow(agentId),
+    getKPIMetricsWithDeltas(range, agentId, profileId),
+    getAvgResponseTime(range, agentId, profileId),
+    getConversionFunnel(range, agentId, profileId),
+    getPipelineNow(agentId, profileId),
     getAgentWinRateTrend(agentId),
-    getJobs({ agent_id: agentId, startDate: range.startDate, endDate: range.endDate, limit: 10, sortBy: "received_at", sortDir: "desc" }),
+    getJobs({ agent_id: agentId, profile_id: profileId, startDate: range.startDate, endDate: range.endDate, limit: 10, sortBy: "received_at", sortDir: "desc" }),
     getActiveAlerts(),
     getAllProfiles(),
   ]);

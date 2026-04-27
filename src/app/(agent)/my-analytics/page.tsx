@@ -11,7 +11,7 @@ export const revalidate = 300;
 export default async function MyAnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string; from?: string; to?: string; tz?: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string; tz?: string; profile?: string }>;
 }) {
   const session = await auth();
   if (!session?.user?.agentId) redirect("/my-dashboard");
@@ -19,12 +19,13 @@ export default async function MyAnalyticsPage({
   const agentId = session.user.agentId;
   const params = await searchParams;
   const range = parseDateRange(params);
+  const profileId = params.profile || undefined;
 
   const [modelData, countryData, timeData, budgetData, allProfiles] = await Promise.all([
-    getProposalAnalytics(range, agentId),
-    getCountryStats(range, agentId),
-    getBestTimeToApply(range, agentId),
-    getBudgetWinRate(undefined, agentId),
+    getProposalAnalytics(range, agentId, profileId),
+    getCountryStats(range, agentId, profileId),
+    getBestTimeToApply(range, agentId, profileId),
+    getBudgetWinRate(profileId, agentId),
     getAllProfiles(),
   ]);
   const agentProfiles = allProfiles.filter((p) => p.agent_id === agentId);

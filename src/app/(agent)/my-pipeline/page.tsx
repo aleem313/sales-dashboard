@@ -13,7 +13,7 @@ export const revalidate = 300;
 export default async function MyPipelinePage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string; from?: string; to?: string; tz?: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string; tz?: string; profile?: string }>;
 }) {
   const session = await auth();
   if (!session?.user?.agentId) redirect("/my-dashboard");
@@ -21,10 +21,11 @@ export default async function MyPipelinePage({
   const agentId = session.user.agentId;
   const params = await searchParams;
   const range = parseDateRange(params);
+  const profileId = params.profile || undefined;
 
   const [stages, jobs, allProfiles] = await Promise.all([
-    getPipelineStages(range, agentId),
-    getActiveJobsInPipeline(agentId),
+    getPipelineStages(range, agentId, profileId),
+    getActiveJobsInPipeline(agentId, profileId),
     getAllProfiles(),
   ]);
   const agentProfiles = allProfiles.filter((p) => p.agent_id === agentId);

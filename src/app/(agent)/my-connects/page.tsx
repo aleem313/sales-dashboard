@@ -14,7 +14,7 @@ export const revalidate = 300;
 export default async function MyConnectsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string; from?: string; to?: string; tz?: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string; tz?: string; profile?: string }>;
 }) {
   const session = await auth();
   if (!session?.user?.agentId) redirect("/my-dashboard");
@@ -22,12 +22,13 @@ export default async function MyConnectsPage({
   const agentId = session.user.agentId;
   const params = await searchParams;
   const range = parseDateRange(params);
+  const profileId = params.profile || undefined;
 
   const [usage, roi, filterQuality, boosted, allProfiles] = await Promise.all([
-    getConnectsUsageByProfile(range, agentId),
-    getConnectROIByNiche(range, agentId),
-    getFilterQualityAnalysis(range, agentId),
-    getBoostedConnectsSummary(range, agentId),
+    getConnectsUsageByProfile(range, agentId, profileId),
+    getConnectROIByNiche(range, agentId, profileId),
+    getFilterQualityAnalysis(range, agentId, profileId),
+    getBoostedConnectsSummary(range, agentId, profileId),
     getAllProfiles(),
   ]);
   const agentProfiles = allProfiles.filter((p) => p.agent_id === agentId);
