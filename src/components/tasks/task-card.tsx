@@ -23,6 +23,7 @@ import {
   Flag,
   Clock,
   CalendarClock,
+  History,
   MoreHorizontal,
   Pencil,
   ArrowRight,
@@ -77,7 +78,11 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
     const timeEstimate = cf._time_estimate_minutes as number | undefined;
     const timeTracked = cf._time_tracked_minutes as number | undefined;
     const jobUrl = (cf._job_url as string) || "";
-    const hasMetaRow = task.priority || task.created_at || task.start_date || timeEstimate;
+    const updatedAtMs = task.updated_at ? new Date(task.updated_at).getTime() : 0;
+    const createdAtMs = task.created_at ? new Date(task.created_at).getTime() : 0;
+    // Only show "updated" when it's meaningfully later than "created" (>60s).
+    const showUpdatedAt = !!task.updated_at && updatedAtMs - createdAtMs > 60_000;
+    const hasMetaRow = task.priority || task.created_at || task.start_date || timeEstimate || showUpdatedAt;
     const hasBottomRow = assignees.length > 0 || checklistTotal > 0 || commentCount > 0 || attachmentCount > 0;
 
     function formatMinutes(mins: number): string {
@@ -258,6 +263,17 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
                   >
                     <Calendar className="h-3 w-3" />
                     {formatDistanceToNow(new Date(task.created_at), { addSuffix: true })}
+                  </span>
+                )}
+
+                {/* Updated */}
+                {showUpdatedAt && (
+                  <span
+                    className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground"
+                    title={`Last updated: ${format(new Date(task.updated_at), "MMM d, yyyy h:mm a")}`}
+                  >
+                    <History className="h-3 w-3" />
+                    Updated {formatDistanceToNow(new Date(task.updated_at), { addSuffix: true })}
                   </span>
                 )}
 
