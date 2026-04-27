@@ -52,14 +52,37 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
   //
   // Win rate = won / (won + lost) — percentage of decided cards that won.
   // Revenue is the only metric still derived from jobs (won_value lives there).
+  // Funnel KPIs are CUMULATIVE — a card counts toward every stage it has reached
+  // or passed. A card currently in Won counts toward Proposals Sent, Proposals
+  // Viewed, In Chat, Meetings Booked, and Meetings Done because it must have
+  // moved through them. Lost and On Hold count toward Proposals Sent only
+  // (matches getConversionFunnel convention) since we can't tell how far they
+  // progressed before falling off the path.
+  // Won, Lost, Bad Leads (N/A), Untouched (Todo) remain current-state counts.
   const result = await sql`
     SELECT
       COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN LOWER(c.name) = 'proposal submitted' THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN LOWER(c.name) IN ('proposal views', 'proposal viewed', 'viewed') THEN 1 END) AS proposals_viewed,
-      COUNT(CASE WHEN LOWER(c.name) IN ('in chat', 'following up') THEN 1 END) AS in_chat,
-      COUNT(CASE WHEN LOWER(c.name) IN ('meeting scheduled', 'meeting done') THEN 1 END) AS meetings_booked,
-      COUNT(CASE WHEN LOWER(c.name) = 'meeting done' THEN 1 END) AS meetings_done,
+      COUNT(CASE WHEN LOWER(c.name) IN (
+        'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+        'in chat', 'following up',
+        'meeting scheduled', 'meeting done',
+        'negotiation', 'won', 'lost', 'on hold'
+      ) THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN LOWER(c.name) IN (
+        'proposal views', 'proposal viewed', 'viewed',
+        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+        'in chat', 'following up',
+        'meeting scheduled', 'meeting done',
+        'negotiation', 'won'
+      ) THEN 1 END) AS proposals_viewed,
+      COUNT(CASE WHEN LOWER(c.name) IN (
+        'in chat', 'following up',
+        'meeting scheduled', 'meeting done',
+        'negotiation', 'won'
+      ) THEN 1 END) AS in_chat,
+      COUNT(CASE WHEN LOWER(c.name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN 1 END) AS meetings_booked,
+      COUNT(CASE WHEN LOWER(c.name) IN ('meeting done', 'negotiation', 'won') THEN 1 END) AS meetings_done,
       COUNT(CASE WHEN LOWER(c.name) = 'won' THEN 1 END) AS won,
       COUNT(CASE WHEN LOWER(c.name) = 'lost' THEN 1 END) AS lost,
       ROUND(
@@ -1255,8 +1278,15 @@ export async function getPipelineStages(
   const { startDate, endDate } = range ?? {};
 
   // Counts derived from the Task Board (tasks JOIN columns), which is the
-  // source of truth per CLAUDE.md. Each stage = "cards currently in this column"
-  // so dashboard counts match what users see on the board.
+  // source of truth per CLAUDE.md.
+  //
+  // Funnel stages (Proposal Submitted → Negotiation) are CUMULATIVE — a card
+  // counts toward every stage it has reached or passed. So a card currently in
+  // Won counts in Proposal Submitted, Proposal Views, every Prototype stage,
+  // In Chat, Meeting Booked, Meeting Done, AND Negotiation. Lost and On Hold
+  // count toward Proposal Submitted only (matches getConversionFunnel) since
+  // we can't tell how far they progressed before leaving the path.
+  // Todo, Won, Lost, On Hold, N/A remain current-state.
   //
   // Date filter: COALESCE(j.stage_entered_at, t.updated_at, t.created_at) — the
   // best available "when did this card last change status" timestamp. Linked
@@ -1269,15 +1299,46 @@ export async function getPipelineStages(
   const result = await sql`
     SELECT
       COUNT(CASE WHEN LOWER(c.name) IN ('todo', 'to do', 'new', 'proposal ready') THEN 1 END) AS todo,
-      COUNT(CASE WHEN LOWER(c.name) = 'proposal submitted' THEN 1 END) AS proposal_submitted,
-      COUNT(CASE WHEN LOWER(c.name) IN ('proposal views', 'proposal viewed', 'viewed') THEN 1 END) AS proposal_views,
-      COUNT(CASE WHEN LOWER(c.name) = 'prototype required' THEN 1 END) AS prototype_required,
-      COUNT(CASE WHEN LOWER(c.name) = 'prototype done' THEN 1 END) AS prototype_done,
-      COUNT(CASE WHEN LOWER(c.name) IN ('prototype submitted', 'prototype sent') THEN 1 END) AS prototype_submitted,
-      COUNT(CASE WHEN LOWER(c.name) IN ('in chat', 'following up') THEN 1 END) AS in_chat,
-      COUNT(CASE WHEN LOWER(c.name) = 'meeting scheduled' THEN 1 END) AS meeting_booked,
-      COUNT(CASE WHEN LOWER(c.name) = 'meeting done' THEN 1 END) AS meeting_done,
-      COUNT(CASE WHEN LOWER(c.name) = 'negotiation' THEN 1 END) AS negotiation,
+      COUNT(CASE WHEN LOWER(c.name) IN (
+        'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+        'in chat', 'following up',
+        'meeting scheduled', 'meeting done',
+        'negotiation', 'won', 'lost', 'on hold'
+      ) THEN 1 END) AS proposal_submitted,
+      COUNT(CASE WHEN LOWER(c.name) IN (
+        'proposal views', 'proposal viewed', 'viewed',
+        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+        'in chat', 'following up',
+        'meeting scheduled', 'meeting done',
+        'negotiation', 'won'
+      ) THEN 1 END) AS proposal_views,
+      COUNT(CASE WHEN LOWER(c.name) IN (
+        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+        'in chat', 'following up',
+        'meeting scheduled', 'meeting done',
+        'negotiation', 'won'
+      ) THEN 1 END) AS prototype_required,
+      COUNT(CASE WHEN LOWER(c.name) IN (
+        'prototype done', 'prototype submitted', 'prototype sent',
+        'in chat', 'following up',
+        'meeting scheduled', 'meeting done',
+        'negotiation', 'won'
+      ) THEN 1 END) AS prototype_done,
+      COUNT(CASE WHEN LOWER(c.name) IN (
+        'prototype submitted', 'prototype sent',
+        'in chat', 'following up',
+        'meeting scheduled', 'meeting done',
+        'negotiation', 'won'
+      ) THEN 1 END) AS prototype_submitted,
+      COUNT(CASE WHEN LOWER(c.name) IN (
+        'in chat', 'following up',
+        'meeting scheduled', 'meeting done',
+        'negotiation', 'won'
+      ) THEN 1 END) AS in_chat,
+      COUNT(CASE WHEN LOWER(c.name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN 1 END) AS meeting_booked,
+      COUNT(CASE WHEN LOWER(c.name) IN ('meeting done', 'negotiation', 'won') THEN 1 END) AS meeting_done,
+      COUNT(CASE WHEN LOWER(c.name) IN ('negotiation', 'won') THEN 1 END) AS negotiation,
       COUNT(CASE WHEN LOWER(c.name) = 'won' THEN 1 END) AS won,
       COUNT(CASE WHEN LOWER(c.name) = 'lost' THEN 1 END) AS lost,
       COUNT(CASE WHEN LOWER(c.name) = 'on hold' THEN 1 END) AS on_hold,
@@ -1296,19 +1357,20 @@ export async function getPipelineStages(
   const r = result.rows[0];
   const n = (v: unknown) => parseInt(String(v ?? 0)) || 0;
 
-  // Fixed stage order, matching the board column order. All counts now reflect
-  // current column position, so subtitles describe what the column means.
+  // Fixed stage order, matching the board column order. Funnel stages
+  // (Submitted → Negotiation) are cumulative — count of cards that have reached
+  // this stage or any later one. Terminal/off-funnel stages stay current-state.
   return [
     { key: "Todo",                label: "Todo",        count: n(r.todo),                subtitle: "Pending proposals" },
-    { key: "Proposal Submitted",  label: "Submitted",   count: n(r.proposal_submitted),  subtitle: "Currently here" },
-    { key: "Proposal Views",      label: "Views",       count: n(r.proposal_views),      subtitle: "Currently here" },
-    { key: "Prototype Required",  label: "Proto Req.",  count: n(r.prototype_required),  subtitle: "Build needed" },
-    { key: "Prototype Done",      label: "Proto Done",  count: n(r.prototype_done),      subtitle: "Ready to send" },
-    { key: "Prototype Submitted", label: "Proto Sent",  count: n(r.prototype_submitted), subtitle: "Awaiting feedback" },
-    { key: "In Chat",             label: "In Chat",     count: n(r.in_chat),             subtitle: "Currently here" },
-    { key: "Meeting Scheduled",   label: "Mtg Booked",  count: n(r.meeting_booked),      subtitle: "Currently here" },
-    { key: "Meeting Done",        label: "Mtg Done",    count: n(r.meeting_done),        subtitle: "Currently here" },
-    { key: "Negotiation",         label: "Negotiation", count: n(r.negotiation),         subtitle: "Hot leads" },
+    { key: "Proposal Submitted",  label: "Submitted",   count: n(r.proposal_submitted),  subtitle: "Reached this stage" },
+    { key: "Proposal Views",      label: "Views",       count: n(r.proposal_views),      subtitle: "Reached this stage" },
+    { key: "Prototype Required",  label: "Proto Req.",  count: n(r.prototype_required),  subtitle: "Reached this stage" },
+    { key: "Prototype Done",      label: "Proto Done",  count: n(r.prototype_done),      subtitle: "Reached this stage" },
+    { key: "Prototype Submitted", label: "Proto Sent",  count: n(r.prototype_submitted), subtitle: "Reached this stage" },
+    { key: "In Chat",             label: "In Chat",     count: n(r.in_chat),             subtitle: "Reached this stage" },
+    { key: "Meeting Scheduled",   label: "Mtg Booked",  count: n(r.meeting_booked),      subtitle: "Reached this stage" },
+    { key: "Meeting Done",        label: "Mtg Done",    count: n(r.meeting_done),        subtitle: "Reached this stage" },
+    { key: "Negotiation",         label: "Negotiation", count: n(r.negotiation),         subtitle: "Reached this stage" },
     { key: "Won",                 label: "Won",         count: n(r.won),                 subtitle: "Closed won" },
     { key: "Lost",                label: "Lost",        count: n(r.lost),                subtitle: "Closed lost" },
     { key: "On Hold",             label: "On Hold",     count: n(r.on_hold),             subtitle: "Client paused" },
