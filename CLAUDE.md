@@ -154,6 +154,8 @@ Agents have full dashboard access scoped to their own data. All agent pages forc
 | 011 | `011_fix_profile_assignments.sql` | — | Fix profile-to-agent assignments to match n8n flow |
 | 012 | `012_remove_clickup_dependency.sql` | M8 | Rename `clickup_status` → `status`, add `jobs.task_id` FK, make `clickup_user_id` nullable |
 | 013 | `013_lifecycle_milestones.sql` | — | Add `meeting_booked_at` milestone column, backfill from activity_log, partial indexes |
+| 014 | (in migrate route) | — | Lifecycle milestone columns extended: `proposal_viewed_at`, `in_chat_at`, `meeting_done_at`; backfill from activity_log + partial indexes |
+| 015 | `015_stage_entered_at_filter.sql` | — | Backfill `jobs.stage_entered_at` from `received_at`, set DEFAULT NOW(), add `idx_jobs_stage_entered_at`, wipe `stats_cache`. Enables status-update-date filtering on dashboards/pipeline. |
 
 ## Migration Execution
 
@@ -165,7 +167,13 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v={VERSION}&secret=YOU
 
 **Latest migration:**
 ```
-https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=013&secret=YOUR_CRON_SECRET
+https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=015&secret=YOUR_CRON_SECRET
+```
+
+**Run on BOTH targets** (Vercel + Contabo) — each has its own Postgres:
+```
+https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=015&secret=YOUR_CRON_SECRET
+http://157.173.110.62/api/migrate?v=015&secret=YOUR_CRON_SECRET
 ```
 
 Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variables. All migrations are idempotent — safe to re-run.

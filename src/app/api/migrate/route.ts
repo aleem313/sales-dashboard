@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "migrate-tasks") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "migrate-tasks") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
   }
 
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const sourceBoard = request.nextUrl.searchParams.get("from") || "e8442ebd-afd3-4217-99c4-e55ee20d4bfa";
     const destBoard = request.nextUrl.searchParams.get("to") || "351494d8-918e-475e-b16c-2eee3232aefe";
     return runMigrateTasks(sourceBoard, destBoard);
+  }
+
+  if (migration === "015") {
+    return run015();
   }
 
   if (migration === "014") {
@@ -424,6 +428,48 @@ async function run011() {
     return NextResponse.json({
       success: false,
       migration: "011_fix_profile_assignments",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run015() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 015: Make stage_entered_at the canonical status-change filter timestamp...");
+
+    // Step 1: Backfill NULL stage_entered_at from received_at.
+    // Safe — only touches rows that have never had a status change recorded.
+    const backfill = await sql`
+      UPDATE jobs SET stage_entered_at = received_at
+      WHERE stage_entered_at IS NULL
+    `;
+    results.push(`✓ Backfilled stage_entered_at from received_at: ${backfill.rowCount} rows`);
+
+    // Step 2: Set DEFAULT NOW() so future INSERTs get a non-NULL value automatically.
+    await sql`ALTER TABLE jobs ALTER COLUMN stage_entered_at SET DEFAULT NOW()`;
+    results.push("✓ jobs.stage_entered_at default set to NOW()");
+
+    // Step 3: Index for date-range filtering on status-change date.
+    await sql`CREATE INDEX IF NOT EXISTS idx_jobs_stage_entered_at ON jobs (stage_entered_at DESC)`;
+    results.push("✓ idx_jobs_stage_entered_at index ensured");
+
+    // Step 4: Wipe stats_cache so the 5-min TTL doesn't serve stale-meaning data
+    // immediately post-deploy. Cache repopulates on next request.
+    const cacheWipe = await sql`DELETE FROM stats_cache`;
+    results.push(`✓ Cleared stats_cache: ${cacheWipe.rowCount} rows removed`);
+
+    return NextResponse.json({
+      success: true,
+      migration: "015_stage_entered_at_filter",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "015_stage_entered_at_filter",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });

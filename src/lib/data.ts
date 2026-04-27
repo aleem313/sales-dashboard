@@ -42,7 +42,8 @@ import type {
 export async function getKPIMetrics(range?: DateRange, agentId?: string, profileId?: string): Promise<KPIMetrics> {
   const { startDate, endDate } = range ?? {};
 
-  // ONE base dataset filtered by received_at. ALL metrics computed within it.
+  // ONE base dataset filtered by stage_entered_at (the date the job last changed status).
+  // A job created 10 days ago and moved to Won today appears in today's window.
   // Metrics are mutually exclusive: Bad Leads (N/A) are excluded from Proposal Sent.
   // Lifecycle milestones check if a job EVER reached that stage — a job that
   // reached Meeting Booked and later moved to Lost is still counted for Meeting Booked.
@@ -63,8 +64,8 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
       COALESCE(SUM(CASE WHEN LOWER(status) = 'won' THEN won_value END), 0) AS total_revenue,
       COUNT(CASE WHEN LOWER(status) = 'n/a' THEN 1 END) AS bad_leads
     FROM jobs
-    WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+    WHERE (${startDate}::timestamptz IS NULL OR stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR stage_entered_at <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
   `;
@@ -141,8 +142,8 @@ export async function getAgentStats(
       ) AS avg_response_hours
     FROM agents a
     LEFT JOIN jobs j ON j.agent_id = a.id
-      AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+      AND (${startDate}::timestamptz IS NULL OR j.stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.stage_entered_at <= ${endDate}::timestamptz)
     WHERE a.active = true
     GROUP BY a.id, a.name
     ORDER BY total_jobs DESC
@@ -228,8 +229,8 @@ export async function getProfileStats(
       COALESCE(SUM(CASE WHEN LOWER(j.status) = 'won' THEN j.won_value END), 0) AS total_revenue
     FROM profiles p
     LEFT JOIN jobs j ON j.profile_id = p.profile_id
-      AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+      AND (${startDate}::timestamptz IS NULL OR j.stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.stage_entered_at <= ${endDate}::timestamptz)
     WHERE p.active = true
     GROUP BY p.id, p.profile_id, p.profile_name, p.stack
     ORDER BY total_jobs DESC
@@ -324,8 +325,8 @@ export async function getJobs(
       AND (${outcome}::text IS NULL OR j.outcome = ${outcome}::text)
       AND (${budget_type}::text IS NULL OR j.budget_type = ${budget_type}::text)
       AND (${search}::text IS NULL OR j.job_title ILIKE '%' || ${search}::text || '%')
-      AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+      AND (${startDate}::timestamptz IS NULL OR j.stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.stage_entered_at <= ${endDate}::timestamptz)
   `;
 
   const total = parseInt(countResult.rows[0].total);
@@ -344,8 +345,8 @@ export async function getJobs(
        AND ($4::text IS NULL OR j.outcome = $4::text)
        AND ($5::text IS NULL OR j.budget_type = $5::text)
        AND ($6::text IS NULL OR j.job_title ILIKE '%' || $6::text || '%')
-       AND ($7::timestamptz IS NULL OR j.received_at >= $7::timestamptz)
-       AND ($8::timestamptz IS NULL OR j.received_at <= $8::timestamptz)
+       AND ($7::timestamptz IS NULL OR j.stage_entered_at >= $7::timestamptz)
+       AND ($8::timestamptz IS NULL OR j.stage_entered_at <= $8::timestamptz)
      ORDER BY ${sortColumn} ${direction}
      LIMIT $9 OFFSET $10`,
     [
@@ -793,8 +794,8 @@ export async function getRevenueByAgent(
     INNER JOIN jobs j ON j.agent_id = a.id
     WHERE LOWER(j.status) = 'won'
       AND j.won_value IS NOT NULL
-      AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+      AND (${startDate}::timestamptz IS NULL OR j.stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.stage_entered_at <= ${endDate}::timestamptz)
     GROUP BY a.name
     ORDER BY revenue DESC
     LIMIT 10
@@ -815,8 +816,8 @@ export async function getRevenueByProfile(
     INNER JOIN jobs j ON j.profile_id = p.profile_id
     WHERE LOWER(j.status) = 'won'
       AND j.won_value IS NOT NULL
-      AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+      AND (${startDate}::timestamptz IS NULL OR j.stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.stage_entered_at <= ${endDate}::timestamptz)
     GROUP BY p.profile_name
     ORDER BY revenue DESC
     LIMIT 10
@@ -922,8 +923,8 @@ export async function getProposalAnalytics(
       ROUND(AVG(gpt_tokens_used)) AS avg_tokens
     FROM jobs
     WHERE gpt_model IS NOT NULL
-      AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${startDate}::timestamptz IS NULL OR stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR stage_entered_at <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
     GROUP BY gpt_model
@@ -960,8 +961,8 @@ export async function getCountryStats(
       ) AS win_rate_pct
     FROM jobs
     WHERE client_country IS NOT NULL
-      AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${startDate}::timestamptz IS NULL OR stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR stage_entered_at <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
     GROUP BY client_country
@@ -1121,8 +1122,8 @@ export async function getAgentKPIMetrics(
       COUNT(CASE WHEN LOWER(status) = 'n/a' THEN 1 END) AS bad_leads
     FROM jobs
     WHERE agent_id = ${agentId}
-      AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${startDate}::timestamptz IS NULL OR stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR stage_entered_at <= ${endDate}::timestamptz)
   `;
   const row = result.rows[0];
   return {
@@ -1184,7 +1185,7 @@ export async function getConversionFunnel(
   profileId?: string
 ): Promise<FunnelStep[]> {
   const { startDate, endDate } = range ?? {};
-  // ONE base dataset filtered by received_at — all funnel steps computed within it
+  // ONE base dataset filtered by stage_entered_at — all funnel steps computed within it
   const result = await sql`
     SELECT
       COUNT(*) AS total_jobs,
@@ -1195,8 +1196,8 @@ export async function getConversionFunnel(
       COUNT(CASE WHEN LOWER(status) IN ('negotiation', 'won') THEN 1 END) AS negotiation,
       COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END) AS won
     FROM jobs
-    WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+    WHERE (${startDate}::timestamptz IS NULL OR stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR stage_entered_at <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
   `;
@@ -1283,8 +1284,8 @@ export async function getPipelineStages(
       COUNT(CASE WHEN LOWER(status) = 'on hold'     THEN 1 END) AS on_hold,
       COUNT(CASE WHEN LOWER(status) = 'n/a'         THEN 1 END) AS na
     FROM jobs
-    WHERE (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+    WHERE (${startDate}::timestamptz IS NULL OR stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR stage_entered_at <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
   `;
@@ -1392,8 +1393,8 @@ export async function getEnhancedAgentStats(
       COUNT(CASE WHEN j.meeting_booked_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END) AS meetings_done
     FROM agents a
     LEFT JOIN jobs j ON j.agent_id = a.id
-      AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+      AND (${startDate}::timestamptz IS NULL OR j.stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.stage_entered_at <= ${endDate}::timestamptz)
       AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
     WHERE a.active = true
       AND (${agentId ?? null}::uuid IS NULL OR a.id = ${agentId ?? null}::uuid)
@@ -1480,8 +1481,8 @@ export async function getEnhancedProfileStats(
       COUNT(CASE WHEN j.meeting_booked_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END) AS reached_meeting
     FROM profiles p
     LEFT JOIN jobs j ON j.profile_id = p.profile_id
-      AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+      AND (${startDate}::timestamptz IS NULL OR j.stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.stage_entered_at <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
     WHERE p.active = true
       AND (${profileId ?? null}::text IS NULL OR p.profile_id = ${profileId ?? null}::text)
@@ -1529,8 +1530,8 @@ export async function getConnectsUsageByProfile(
       COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL THEN 1 END) * 6 AS connects_used
     FROM profiles p
     LEFT JOIN jobs j ON j.profile_id = p.profile_id
-      AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+      AND (${startDate}::timestamptz IS NULL OR j.stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.stage_entered_at <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
     WHERE p.active = true
       AND (${profileId ?? null}::text IS NULL OR p.profile_id = ${profileId ?? null}::text)
@@ -1579,11 +1580,11 @@ export async function getBoostedConnectsSummary(
       )
       AND (
         ${startDate}::timestamptz IS NULL
-        OR COALESCE(j.received_at, t.created_at) >= ${startDate}::timestamptz
+        OR COALESCE(j.stage_entered_at, t.created_at) >= ${startDate}::timestamptz
       )
       AND (
         ${endDate}::timestamptz IS NULL
-        OR COALESCE(j.received_at, t.created_at) <= ${endDate}::timestamptz
+        OR COALESCE(j.stage_entered_at, t.created_at) <= ${endDate}::timestamptz
       )
       AND (
         ${agentId ?? null}::uuid IS NULL
@@ -1622,8 +1623,8 @@ export async function getConnectROIByNiche(
       COUNT(CASE WHEN LOWER(j.status) = 'won' THEN 1 END) AS wins
     FROM jobs j
     JOIN profiles p ON p.profile_id = j.profile_id
-    WHERE (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+    WHERE (${startDate}::timestamptz IS NULL OR j.stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.stage_entered_at <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
     GROUP BY COALESCE(p.stack, 'Unknown')
@@ -1664,8 +1665,8 @@ export async function getFilterQualityAnalysis(
       COUNT(*) AS count
     FROM jobs
     WHERE (outcome = 'lost' OR LOWER(status) IN ('rejected', 'filtered out', 'lost'))
-      AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${startDate}::timestamptz IS NULL OR stage_entered_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR stage_entered_at <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
     GROUP BY
@@ -1767,7 +1768,8 @@ export async function getAvgResponseTime(
 ): Promise<number | null> {
   const { startDate, endDate } = range ?? {};
 
-  // Same base dataset as KPIs: filter by received_at, then avg response time within it
+  // Stays on received_at: the metric measures hours from receipt to proposal sent,
+  // so the date window must be tied to receipt, not status movement.
   const result = await sql`
     SELECT AVG(EXTRACT(EPOCH FROM (proposal_sent_at - received_at)) / 3600) AS avg_hours
     FROM jobs
