@@ -72,6 +72,7 @@ export interface Task {
   attachment_count?: number;
   column_name?: string;
   creator_name?: string | null;
+  prev_column_name?: string | null;
 }
 
 export interface TaskAssignee {
@@ -733,7 +734,8 @@ export async function getProjectTasks(
       COALESCE(cl_stats.total, 0)::int AS checklist_total,
       COALESCE(cl_stats.done, 0)::int AS checklist_done,
       COALESCE(cmt_stats.count, 0)::int AS comment_count,
-      COALESCE(att_stats.count, 0)::int AS attachment_count
+      COALESCE(att_stats.count, 0)::int AS attachment_count,
+      prev_move.old_value AS prev_column_name
     FROM tasks t
     LEFT JOIN columns c ON c.id = t.column_id
     LEFT JOIN agents a ON a.id = t.creator_id
@@ -750,6 +752,13 @@ export async function getProjectTasks(
       SELECT COUNT(*)::int AS count
       FROM file_attachments WHERE task_id = t.id
     ) att_stats ON true
+    LEFT JOIN LATERAL (
+      SELECT old_value
+      FROM activity_log
+      WHERE task_id = t.id AND action_type = 'task_moved' AND field = 'column'
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) prev_move ON true
     WHERE t.project_id = ${projectId}
       AND (${filters.column_id ?? null}::uuid IS NULL OR t.column_id = ${filters.column_id ?? null}::uuid)
       AND (${filters.priority ?? null}::text IS NULL OR t.priority = ${filters.priority ?? null})

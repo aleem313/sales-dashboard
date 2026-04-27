@@ -270,10 +270,15 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
                 {showUpdatedAt && (
                   <span
                     className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground"
-                    title={`Last updated: ${format(new Date(task.updated_at), "MMM d, yyyy h:mm a")}`}
+                    title={`Last updated: ${format(new Date(task.updated_at), "MMM d, yyyy h:mm a")}${task.prev_column_name ? ` (from ${task.prev_column_name})` : ""}`}
                   >
                     <History className="h-3 w-3" />
                     Updated {formatDistanceToNow(new Date(task.updated_at), { addSuffix: true })}
+                    {task.prev_column_name && (
+                      <span className="text-muted-foreground/80">
+                        {" "}from <span className="font-medium">{task.prev_column_name}</span>
+                      </span>
+                    )}
                   </span>
                 )}
 
