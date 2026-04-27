@@ -52,37 +52,100 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
   //
   // Win rate = won / (won + lost) — percentage of decided cards that won.
   // Revenue is the only metric still derived from jobs (won_value lives there).
+  //
   // Funnel KPIs are CUMULATIVE — a card counts toward every stage it has reached
   // or passed. A card currently in Won counts toward Proposals Sent, Proposals
   // Viewed, In Chat, Meetings Booked, and Meetings Done because it must have
-  // moved through them. Lost cards are assumed to have progressed through every
-  // funnel stage before being lost (so 'lost' appears in every cumulative
-  // bucket). On Hold counts toward Proposals Sent only.
+  // moved through them.
+  //
+  // Lost cards use HISTORY-ACCURATE counting via activity_log: a Lost card only
+  // counts in stages it actually visited (e.g., a card that went Proposal
+  // Submitted -> Lost counts toward Proposals Sent but not Meetings Booked).
+  // The lost_visited CTE collects every column name that ever appeared in
+  // activity_log task_moved entries for each Lost task.
+  //
+  // On Hold counts toward Proposals Sent only.
   // Won, Lost, Bad Leads (N/A), Untouched (Todo) remain current-state counts.
   const result = await sql`
+    WITH lost_visited AS (
+      SELECT
+        t.id AS task_id,
+        (
+          SELECT array_agg(DISTINCT LOWER(col_val))
+          FROM (
+            SELECT al.old_value AS col_val
+            FROM activity_log al
+            WHERE al.task_id = t.id
+              AND al.action_type = 'task_moved'
+              AND al.field = 'column'
+              AND al.old_value IS NOT NULL
+            UNION
+            SELECT al.new_value
+            FROM activity_log al
+            WHERE al.task_id = t.id
+              AND al.action_type = 'task_moved'
+              AND al.field = 'column'
+              AND al.new_value IS NOT NULL
+          ) AS combined
+        ) AS cols
+      FROM tasks t
+      JOIN columns c ON c.id = t.column_id
+      WHERE LOWER(c.name) = 'lost'
+    )
     SELECT
       COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN LOWER(c.name) IN (
-        'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won', 'lost', 'on hold'
-      ) THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN LOWER(c.name) IN (
-        'proposal views', 'proposal viewed', 'viewed',
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won', 'lost'
-      ) THEN 1 END) AS proposals_viewed,
-      COUNT(CASE WHEN LOWER(c.name) IN (
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won', 'lost'
-      ) THEN 1 END) AS in_chat,
-      COUNT(CASE WHEN LOWER(c.name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost') THEN 1 END) AS meetings_booked,
-      COUNT(CASE WHEN LOWER(c.name) IN ('meeting done', 'negotiation', 'won', 'lost') THEN 1 END) AS meetings_done,
+      COUNT(CASE WHEN
+        LOWER(c.name) IN (
+          'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won', 'on hold'
+        )
+        OR (LOWER(c.name) = 'lost' AND lv.cols && ARRAY[
+          'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        ]::text[])
+      THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN
+        LOWER(c.name) IN (
+          'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+        OR (LOWER(c.name) = 'lost' AND lv.cols && ARRAY[
+          'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        ]::text[])
+      THEN 1 END) AS proposals_viewed,
+      COUNT(CASE WHEN
+        LOWER(c.name) IN (
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+        OR (LOWER(c.name) = 'lost' AND lv.cols && ARRAY[
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        ]::text[])
+      THEN 1 END) AS in_chat,
+      COUNT(CASE WHEN
+        LOWER(c.name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won')
+        OR (LOWER(c.name) = 'lost' AND lv.cols && ARRAY['meeting scheduled', 'meeting done', 'negotiation', 'won']::text[])
+      THEN 1 END) AS meetings_booked,
+      COUNT(CASE WHEN
+        LOWER(c.name) IN ('meeting done', 'negotiation', 'won')
+        OR (LOWER(c.name) = 'lost' AND lv.cols && ARRAY['meeting done', 'negotiation', 'won']::text[])
+      THEN 1 END) AS meetings_done,
       COUNT(CASE WHEN LOWER(c.name) = 'won' THEN 1 END) AS won,
       COUNT(CASE WHEN LOWER(c.name) = 'lost' THEN 1 END) AS lost,
       ROUND(
@@ -95,6 +158,7 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
     FROM tasks t
     JOIN columns c ON c.id = t.column_id
     LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
+    LEFT JOIN lost_visited lv ON lv.task_id = t.id
     WHERE (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
@@ -1281,12 +1345,16 @@ export async function getPipelineStages(
   // source of truth per CLAUDE.md.
   //
   // Funnel stages (Proposal Submitted → Negotiation) are CUMULATIVE — a card
-  // counts toward every stage it has reached or passed. So a card currently in
+  // counts toward every stage it has reached or passed. A card currently in
   // Won counts in Proposal Submitted, Proposal Views, every Prototype stage,
-  // In Chat, Meeting Booked, Meeting Done, AND Negotiation. Lost cards are
-  // assumed to have progressed through every funnel stage before being lost,
-  // so they're counted in every cumulative bucket. On Hold counts toward
-  // Proposal Submitted only.
+  // In Chat, Meeting Booked, Meeting Done, AND Negotiation.
+  //
+  // Lost cards use HISTORY-ACCURATE counting via activity_log: a Lost card only
+  // counts in stages it actually visited. The lost_visited CTE collects every
+  // column name that ever appeared in activity_log task_moved entries for each
+  // Lost task, then we test ARRAY overlap (&&) per stage.
+  //
+  // On Hold counts toward Proposal Submitted only.
   // Todo, Won, Lost, On Hold, N/A remain current-state (terminal/off-funnel).
   //
   // Date filter: COALESCE(j.stage_entered_at, t.updated_at, t.created_at) — the
@@ -1298,48 +1366,131 @@ export async function getPipelineStages(
   // Profile filter: only meaningful when the task has a linked job — applied via
   // the LEFT JOIN to jobs.
   const result = await sql`
+    WITH lost_visited AS (
+      SELECT
+        t.id AS task_id,
+        (
+          SELECT array_agg(DISTINCT LOWER(col_val))
+          FROM (
+            SELECT al.old_value AS col_val
+            FROM activity_log al
+            WHERE al.task_id = t.id
+              AND al.action_type = 'task_moved'
+              AND al.field = 'column'
+              AND al.old_value IS NOT NULL
+            UNION
+            SELECT al.new_value
+            FROM activity_log al
+            WHERE al.task_id = t.id
+              AND al.action_type = 'task_moved'
+              AND al.field = 'column'
+              AND al.new_value IS NOT NULL
+          ) AS combined
+        ) AS cols
+      FROM tasks t
+      JOIN columns c ON c.id = t.column_id
+      WHERE LOWER(c.name) = 'lost'
+    )
     SELECT
       COUNT(CASE WHEN LOWER(c.name) IN ('todo', 'to do', 'new', 'proposal ready') THEN 1 END) AS todo,
-      COUNT(CASE WHEN LOWER(c.name) IN (
-        'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won', 'lost', 'on hold'
-      ) THEN 1 END) AS proposal_submitted,
-      COUNT(CASE WHEN LOWER(c.name) IN (
-        'proposal views', 'proposal viewed', 'viewed',
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won', 'lost'
-      ) THEN 1 END) AS proposal_views,
-      COUNT(CASE WHEN LOWER(c.name) IN (
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won', 'lost'
-      ) THEN 1 END) AS prototype_required,
-      COUNT(CASE WHEN LOWER(c.name) IN (
-        'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won', 'lost'
-      ) THEN 1 END) AS prototype_done,
-      COUNT(CASE WHEN LOWER(c.name) IN (
-        'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won', 'lost'
-      ) THEN 1 END) AS prototype_submitted,
-      COUNT(CASE WHEN LOWER(c.name) IN (
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won', 'lost'
-      ) THEN 1 END) AS in_chat,
-      COUNT(CASE WHEN LOWER(c.name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost') THEN 1 END) AS meeting_booked,
-      COUNT(CASE WHEN LOWER(c.name) IN ('meeting done', 'negotiation', 'won', 'lost') THEN 1 END) AS meeting_done,
-      COUNT(CASE WHEN LOWER(c.name) IN ('negotiation', 'won', 'lost') THEN 1 END) AS negotiation,
+      COUNT(CASE WHEN
+        LOWER(c.name) IN (
+          'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won', 'on hold'
+        )
+        OR (LOWER(c.name) = 'lost' AND lv.cols && ARRAY[
+          'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        ]::text[])
+      THEN 1 END) AS proposal_submitted,
+      COUNT(CASE WHEN
+        LOWER(c.name) IN (
+          'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+        OR (LOWER(c.name) = 'lost' AND lv.cols && ARRAY[
+          'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        ]::text[])
+      THEN 1 END) AS proposal_views,
+      COUNT(CASE WHEN
+        LOWER(c.name) IN (
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+        OR (LOWER(c.name) = 'lost' AND lv.cols && ARRAY[
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        ]::text[])
+      THEN 1 END) AS prototype_required,
+      COUNT(CASE WHEN
+        LOWER(c.name) IN (
+          'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+        OR (LOWER(c.name) = 'lost' AND lv.cols && ARRAY[
+          'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        ]::text[])
+      THEN 1 END) AS prototype_done,
+      COUNT(CASE WHEN
+        LOWER(c.name) IN (
+          'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+        OR (LOWER(c.name) = 'lost' AND lv.cols && ARRAY[
+          'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        ]::text[])
+      THEN 1 END) AS prototype_submitted,
+      COUNT(CASE WHEN
+        LOWER(c.name) IN (
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+        OR (LOWER(c.name) = 'lost' AND lv.cols && ARRAY[
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        ]::text[])
+      THEN 1 END) AS in_chat,
+      COUNT(CASE WHEN
+        LOWER(c.name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won')
+        OR (LOWER(c.name) = 'lost' AND lv.cols && ARRAY['meeting scheduled', 'meeting done', 'negotiation', 'won']::text[])
+      THEN 1 END) AS meeting_booked,
+      COUNT(CASE WHEN
+        LOWER(c.name) IN ('meeting done', 'negotiation', 'won')
+        OR (LOWER(c.name) = 'lost' AND lv.cols && ARRAY['meeting done', 'negotiation', 'won']::text[])
+      THEN 1 END) AS meeting_done,
+      COUNT(CASE WHEN
+        LOWER(c.name) IN ('negotiation', 'won')
+        OR (LOWER(c.name) = 'lost' AND lv.cols && ARRAY['negotiation', 'won']::text[])
+      THEN 1 END) AS negotiation,
       COUNT(CASE WHEN LOWER(c.name) = 'won' THEN 1 END) AS won,
       COUNT(CASE WHEN LOWER(c.name) = 'lost' THEN 1 END) AS lost,
       COUNT(CASE WHEN LOWER(c.name) = 'on hold' THEN 1 END) AS on_hold,
@@ -1347,6 +1498,7 @@ export async function getPipelineStages(
     FROM tasks t
     JOIN columns c ON c.id = t.column_id
     LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
+    LEFT JOIN lost_visited lv ON lv.task_id = t.id
     WHERE (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
