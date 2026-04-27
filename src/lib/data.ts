@@ -142,7 +142,14 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
       AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
         SELECT 1 FROM task_assignees ta WHERE ta.task_id = tv.task_id AND ta.agent_id = ${agentId ?? null}::uuid
       ))
-      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
+      AND (${profileId ?? null}::text IS NULL
+        OR j.profile_id = ${profileId ?? null}::text
+        OR EXISTS (
+          SELECT 1 FROM task_tag_map ttm
+          JOIN task_tags tt ON tt.id = ttm.tag_id
+          WHERE ttm.task_id = tv.task_id
+            AND LOWER(tt.name) = (SELECT LOWER(profile_name) FROM profiles WHERE profile_id = ${profileId ?? null}::text LIMIT 1)
+        ))
   `;
 
   const row = result.rows[0];
@@ -1257,7 +1264,14 @@ export async function getConversionFunnel(
       AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
         SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
       ))
-      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
+      AND (${profileId ?? null}::text IS NULL
+        OR j.profile_id = ${profileId ?? null}::text
+        OR EXISTS (
+          SELECT 1 FROM task_tag_map ttm
+          JOIN task_tags tt ON tt.id = ttm.tag_id
+          WHERE ttm.task_id = t.id
+            AND LOWER(tt.name) = (SELECT LOWER(profile_name) FROM profiles WHERE profile_id = ${profileId ?? null}::text LIMIT 1)
+        ))
   `;
 
   const r = result.rows[0];
@@ -1300,7 +1314,14 @@ export async function getPipelineNow(agentId?: string, profileId?: string): Prom
       AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
         SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
       ))
-      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
+      AND (${profileId ?? null}::text IS NULL
+        OR j.profile_id = ${profileId ?? null}::text
+        OR EXISTS (
+          SELECT 1 FROM task_tag_map ttm
+          JOIN task_tags tt ON tt.id = ttm.tag_id
+          WHERE ttm.task_id = t.id
+            AND LOWER(tt.name) = (SELECT LOWER(profile_name) FROM profiles WHERE profile_id = ${profileId ?? null}::text LIMIT 1)
+        ))
   `;
 
   const r = result.rows[0];
@@ -1428,7 +1449,14 @@ export async function getPipelineStages(
       AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
         SELECT 1 FROM task_assignees ta WHERE ta.task_id = tv.task_id AND ta.agent_id = ${agentId ?? null}::uuid
       ))
-      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
+      AND (${profileId ?? null}::text IS NULL
+        OR j.profile_id = ${profileId ?? null}::text
+        OR EXISTS (
+          SELECT 1 FROM task_tag_map ttm
+          JOIN task_tags tt ON tt.id = ttm.tag_id
+          WHERE ttm.task_id = tv.task_id
+            AND LOWER(tt.name) = (SELECT LOWER(profile_name) FROM profiles WHERE profile_id = ${profileId ?? null}::text LIMIT 1)
+        ))
   `;
 
   const r = result.rows[0];
@@ -1534,7 +1562,14 @@ export async function getEnhancedAgentStats(
       LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
       WHERE (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) >= ${startDate}::timestamptz)
         AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) <= ${endDate}::timestamptz)
-        AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
+        AND (${profileId ?? null}::text IS NULL
+          OR j.profile_id = ${profileId ?? null}::text
+          OR EXISTS (
+            SELECT 1 FROM task_tag_map ttm
+            JOIN task_tags tt ON tt.id = ttm.tag_id
+            WHERE ttm.task_id = t.id
+              AND LOWER(tt.name) = (SELECT LOWER(profile_name) FROM profiles WHERE profile_id = ${profileId ?? null}::text LIMIT 1)
+          ))
     )
     SELECT
       a.id,
