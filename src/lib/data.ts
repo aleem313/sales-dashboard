@@ -42,32 +42,42 @@ import type {
 export async function getKPIMetrics(range?: DateRange, agentId?: string, profileId?: string): Promise<KPIMetrics> {
   const { startDate, endDate } = range ?? {};
 
-  // ONE base dataset filtered by stage_entered_at (the date the job last changed status).
-  // A job created 10 days ago and moved to Won today appears in today's window.
-  // Metrics are mutually exclusive: Bad Leads (N/A) are excluded from Proposal Sent.
-  // Lifecycle milestones check if a job EVER reached that stage — a job that
-  // reached Meeting Booked and later moved to Lost is still counted for Meeting Booked.
+  // Counts derived from the Task Board (tasks JOIN columns) — the source of
+  // truth per CLAUDE.md. Each metric corresponds 1:1 to its board column, so
+  // KPI cards on the dashboard match the column counts on the task board.
+  //
+  // Date filter: COALESCE(j.stage_entered_at, t.updated_at) — when the card last
+  // changed status. Linked tasks use jobs.stage_entered_at; orphan tasks (no job
+  // linkage) fall back to tasks.updated_at.
+  //
+  // Win rate = won / (won + lost) — percentage of decided cards that won.
+  // Revenue is the only metric still derived from jobs (won_value lives there).
   const result = await sql`
     SELECT
       COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN proposal_sent_at   IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN proposal_viewed_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposals_viewed,
-      COUNT(CASE WHEN in_chat_at         IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS in_chat,
-      COUNT(CASE WHEN meeting_booked_at  IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meetings_booked,
-      COUNT(CASE WHEN meeting_done_at    IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meetings_done,
-      COUNT(CASE WHEN LOWER(status) = 'won'  THEN 1 END) AS won,
-      COUNT(CASE WHEN LOWER(status) = 'lost' THEN 1 END) AS lost,
+      COUNT(CASE WHEN LOWER(c.name) = 'proposal submitted' THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN LOWER(c.name) IN ('proposal views', 'proposal viewed', 'viewed') THEN 1 END) AS proposals_viewed,
+      COUNT(CASE WHEN LOWER(c.name) IN ('in chat', 'following up') THEN 1 END) AS in_chat,
+      COUNT(CASE WHEN LOWER(c.name) = 'meeting scheduled' THEN 1 END) AS meetings_booked,
+      COUNT(CASE WHEN LOWER(c.name) = 'meeting done' THEN 1 END) AS meetings_done,
+      COUNT(CASE WHEN LOWER(c.name) = 'won' THEN 1 END) AS won,
+      COUNT(CASE WHEN LOWER(c.name) = 'lost' THEN 1 END) AS lost,
       ROUND(
-        COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE WHEN proposal_sent_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END), 0) * 100, 1
+        COUNT(CASE WHEN LOWER(c.name) = 'won' THEN 1 END)::DECIMAL /
+        NULLIF(COUNT(CASE WHEN LOWER(c.name) IN ('won', 'lost') THEN 1 END), 0) * 100, 1
       ) AS win_rate,
-      COALESCE(SUM(CASE WHEN LOWER(status) = 'won' THEN won_value END), 0) AS total_revenue,
-      COUNT(CASE WHEN LOWER(status) = 'n/a' THEN 1 END) AS bad_leads
-    FROM jobs
-    WHERE (${startDate}::timestamptz IS NULL OR stage_entered_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR stage_entered_at <= ${endDate}::timestamptz)
-      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
-      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
+      COALESCE(SUM(CASE WHEN LOWER(c.name) = 'won' THEN j.won_value END), 0) AS total_revenue,
+      COUNT(CASE WHEN LOWER(c.name) = 'n/a' THEN 1 END) AS bad_leads,
+      COUNT(CASE WHEN LOWER(c.name) IN ('todo', 'to do', 'new', 'proposal ready') THEN 1 END) AS untouched
+    FROM tasks t
+    JOIN columns c ON c.id = t.column_id
+    LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
+    WHERE (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
+      ))
+      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
   `;
 
   const row = result.rows[0];
@@ -83,7 +93,7 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
     winRate: parseFloat(row.win_rate) || 0,
     totalRevenue: parseFloat(row.total_revenue) || 0,
     badLeads: parseInt(row.bad_leads) || 0,
-    untouched: (parseInt(row.total_jobs) || 0) - (parseInt(row.proposals_sent) || 0) - (parseInt(row.bad_leads) || 0),
+    untouched: parseInt(row.untouched) || 0,
   };
 }
 
@@ -1101,45 +1111,9 @@ export async function getAgentKPIMetrics(
   agentId: string,
   range?: DateRange
 ): Promise<KPIMetrics> {
-  const { startDate, endDate } = range ?? {};
-  // Same base-dataset + mutually exclusive approach as getKPIMetrics, scoped to one agent.
-  // Lifecycle milestone columns use "ever reached" semantics.
-  const result = await sql`
-    SELECT
-      COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN proposal_sent_at   IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN proposal_viewed_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposals_viewed,
-      COUNT(CASE WHEN in_chat_at         IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS in_chat,
-      COUNT(CASE WHEN meeting_booked_at  IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meetings_booked,
-      COUNT(CASE WHEN meeting_done_at    IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meetings_done,
-      COUNT(CASE WHEN LOWER(status) = 'won'  THEN 1 END) AS won,
-      COUNT(CASE WHEN LOWER(status) = 'lost' THEN 1 END) AS lost,
-      ROUND(
-        COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE WHEN proposal_sent_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END), 0) * 100, 1
-      ) AS win_rate,
-      COALESCE(SUM(CASE WHEN LOWER(status) = 'won' THEN won_value END), 0) AS total_revenue,
-      COUNT(CASE WHEN LOWER(status) = 'n/a' THEN 1 END) AS bad_leads
-    FROM jobs
-    WHERE agent_id = ${agentId}
-      AND (${startDate}::timestamptz IS NULL OR stage_entered_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR stage_entered_at <= ${endDate}::timestamptz)
-  `;
-  const row = result.rows[0];
-  return {
-    totalJobs: parseInt(row.total_jobs) || 0,
-    proposalsSent: parseInt(row.proposals_sent) || 0,
-    proposalsViewed: parseInt(row.proposals_viewed) || 0,
-    inChat: parseInt(row.in_chat) || 0,
-    meetingsBooked: parseInt(row.meetings_booked) || 0,
-    meetingsDone: parseInt(row.meetings_done) || 0,
-    won: parseInt(row.won) || 0,
-    lost: parseInt(row.lost) || 0,
-    winRate: parseFloat(row.win_rate) || 0,
-    totalRevenue: parseFloat(row.total_revenue) || 0,
-    badLeads: parseInt(row.bad_leads) || 0,
-    untouched: (parseInt(row.total_jobs) || 0) - (parseInt(row.proposals_sent) || 0) - (parseInt(row.bad_leads) || 0),
-  };
+  // Scoped wrapper around getKPIMetrics — same task-board-derived semantics,
+  // filtered to a single agent via task_assignees.
+  return getKPIMetrics(range, agentId);
 }
 
 // ============================================================
@@ -1185,21 +1159,40 @@ export async function getConversionFunnel(
   profileId?: string
 ): Promise<FunnelStep[]> {
   const { startDate, endDate } = range ?? {};
-  // ONE base dataset filtered by stage_entered_at — all funnel steps computed within it
+  // Funnel derived from the Task Board (tasks JOIN columns). Each step is
+  // cumulative: cards currently in this column OR any column downstream of it.
+  // A card in Won counts toward all earlier stages (Proposals Sent, Responses,
+  // Meetings, Negotiation) since it must have passed through them.
   const result = await sql`
     SELECT
       COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN LOWER(status) NOT IN ('rejected', 'filtered out') OR status IS NULL THEN 1 END) AS passed_filter,
-      COUNT(CASE WHEN proposal_sent_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN proposal_sent_at IS NOT NULL AND LOWER(status) NOT IN ('lost', 'n/a') THEN 1 END) AS responses,
-      COUNT(CASE WHEN meeting_booked_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meetings,
-      COUNT(CASE WHEN LOWER(status) IN ('negotiation', 'won') THEN 1 END) AS negotiation,
-      COUNT(CASE WHEN LOWER(status) = 'won' THEN 1 END) AS won
-    FROM jobs
-    WHERE (${startDate}::timestamptz IS NULL OR stage_entered_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR stage_entered_at <= ${endDate}::timestamptz)
-      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
-      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
+      COUNT(CASE WHEN LOWER(c.name) NOT IN ('rejected', 'filtered out') THEN 1 END) AS passed_filter,
+      COUNT(CASE WHEN LOWER(c.name) IN (
+        'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+        'in chat', 'following up',
+        'meeting scheduled', 'meeting done',
+        'negotiation', 'won', 'lost', 'on hold'
+      ) THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN LOWER(c.name) IN (
+        'proposal views', 'proposal viewed', 'viewed',
+        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+        'in chat', 'following up',
+        'meeting scheduled', 'meeting done',
+        'negotiation', 'won'
+      ) THEN 1 END) AS responses,
+      COUNT(CASE WHEN LOWER(c.name) IN ('meeting done', 'negotiation', 'won') THEN 1 END) AS meetings,
+      COUNT(CASE WHEN LOWER(c.name) IN ('negotiation', 'won') THEN 1 END) AS negotiation,
+      COUNT(CASE WHEN LOWER(c.name) = 'won' THEN 1 END) AS won
+    FROM tasks t
+    JOIN columns c ON c.id = t.column_id
+    LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
+    WHERE (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
+      ))
+      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
   `;
 
   const r = result.rows[0];
@@ -1261,50 +1254,60 @@ export async function getPipelineStages(
 ): Promise<PipelineStage[]> {
   const { startDate, endDate } = range ?? {};
 
-  // Option-B semantics: the five funnel-critical stages (Proposal Submitted,
-  // Proposal Views, In Chat, Meeting Booked, Meeting Done) use "ever reached"
-  // counts via the lifecycle milestone columns, so a job that passed through
-  // a stage and later moved to Lost is still counted under that stage.
-  // Other stages (Todo, Prototype*, Negotiation, Won, Lost, On Hold, N/A) use
-  // current-status counts — they represent where the job is right now.
+  // Counts derived from the Task Board (tasks JOIN columns), which is the
+  // source of truth per CLAUDE.md. Each stage = "cards currently in this column"
+  // so dashboard counts match what users see on the board.
+  //
+  // Date filter: COALESCE(j.stage_entered_at, t.updated_at, t.created_at) — the
+  // best available "when did this card last change status" timestamp. Linked
+  // tasks (n8n-sourced) use jobs.stage_entered_at; orphan tasks (manually created
+  // on the board) fall back to tasks.updated_at.
+  //
+  // Agent filter: task_assignees (matches how the board filters cards by agent).
+  // Profile filter: only meaningful when the task has a linked job — applied via
+  // the LEFT JOIN to jobs.
   const result = await sql`
     SELECT
-      COUNT(CASE WHEN LOWER(status) IN ('todo', 'to do', 'new', 'proposal ready') THEN 1 END) AS todo,
-      COUNT(CASE WHEN proposal_sent_at   IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposal_submitted,
-      COUNT(CASE WHEN proposal_viewed_at IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS proposal_views,
-      COUNT(CASE WHEN LOWER(status) = 'prototype required'  THEN 1 END) AS prototype_required,
-      COUNT(CASE WHEN LOWER(status) = 'prototype done'      THEN 1 END) AS prototype_done,
-      COUNT(CASE WHEN LOWER(status) IN ('prototype submitted', 'prototype sent') THEN 1 END) AS prototype_submitted,
-      COUNT(CASE WHEN in_chat_at         IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS in_chat,
-      COUNT(CASE WHEN meeting_booked_at  IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meeting_booked,
-      COUNT(CASE WHEN meeting_done_at    IS NOT NULL AND LOWER(status) != 'n/a' THEN 1 END) AS meeting_done,
-      COUNT(CASE WHEN LOWER(status) = 'negotiation' THEN 1 END) AS negotiation,
-      COUNT(CASE WHEN LOWER(status) = 'won'         THEN 1 END) AS won,
-      COUNT(CASE WHEN LOWER(status) = 'lost'        THEN 1 END) AS lost,
-      COUNT(CASE WHEN LOWER(status) = 'on hold'     THEN 1 END) AS on_hold,
-      COUNT(CASE WHEN LOWER(status) = 'n/a'         THEN 1 END) AS na
-    FROM jobs
-    WHERE (${startDate}::timestamptz IS NULL OR stage_entered_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR stage_entered_at <= ${endDate}::timestamptz)
-      AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
-      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
+      COUNT(CASE WHEN LOWER(c.name) IN ('todo', 'to do', 'new', 'proposal ready') THEN 1 END) AS todo,
+      COUNT(CASE WHEN LOWER(c.name) = 'proposal submitted' THEN 1 END) AS proposal_submitted,
+      COUNT(CASE WHEN LOWER(c.name) IN ('proposal views', 'proposal viewed', 'viewed') THEN 1 END) AS proposal_views,
+      COUNT(CASE WHEN LOWER(c.name) = 'prototype required' THEN 1 END) AS prototype_required,
+      COUNT(CASE WHEN LOWER(c.name) = 'prototype done' THEN 1 END) AS prototype_done,
+      COUNT(CASE WHEN LOWER(c.name) IN ('prototype submitted', 'prototype sent') THEN 1 END) AS prototype_submitted,
+      COUNT(CASE WHEN LOWER(c.name) IN ('in chat', 'following up') THEN 1 END) AS in_chat,
+      COUNT(CASE WHEN LOWER(c.name) = 'meeting scheduled' THEN 1 END) AS meeting_booked,
+      COUNT(CASE WHEN LOWER(c.name) = 'meeting done' THEN 1 END) AS meeting_done,
+      COUNT(CASE WHEN LOWER(c.name) = 'negotiation' THEN 1 END) AS negotiation,
+      COUNT(CASE WHEN LOWER(c.name) = 'won' THEN 1 END) AS won,
+      COUNT(CASE WHEN LOWER(c.name) = 'lost' THEN 1 END) AS lost,
+      COUNT(CASE WHEN LOWER(c.name) = 'on hold' THEN 1 END) AS on_hold,
+      COUNT(CASE WHEN LOWER(c.name) = 'n/a' THEN 1 END) AS na
+    FROM tasks t
+    JOIN columns c ON c.id = t.column_id
+    LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
+    WHERE (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) <= ${endDate}::timestamptz)
+      AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
+      ))
+      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
   `;
 
   const r = result.rows[0];
   const n = (v: unknown) => parseInt(String(v ?? 0)) || 0;
 
-  // Fixed stage order, matching the board column order. Subtitles indicate
-  // which counts are historical vs current-status so the UI can be honest.
+  // Fixed stage order, matching the board column order. All counts now reflect
+  // current column position, so subtitles describe what the column means.
   return [
     { key: "Todo",                label: "Todo",        count: n(r.todo),                subtitle: "Pending proposals" },
-    { key: "Proposal Submitted",  label: "Submitted",   count: n(r.proposal_submitted),  subtitle: "Ever reached" },
-    { key: "Proposal Views",      label: "Views",       count: n(r.proposal_views),      subtitle: "Ever reached" },
+    { key: "Proposal Submitted",  label: "Submitted",   count: n(r.proposal_submitted),  subtitle: "Currently here" },
+    { key: "Proposal Views",      label: "Views",       count: n(r.proposal_views),      subtitle: "Currently here" },
     { key: "Prototype Required",  label: "Proto Req.",  count: n(r.prototype_required),  subtitle: "Build needed" },
     { key: "Prototype Done",      label: "Proto Done",  count: n(r.prototype_done),      subtitle: "Ready to send" },
     { key: "Prototype Submitted", label: "Proto Sent",  count: n(r.prototype_submitted), subtitle: "Awaiting feedback" },
-    { key: "In Chat",             label: "In Chat",     count: n(r.in_chat),             subtitle: "Ever reached" },
-    { key: "Meeting Scheduled",   label: "Mtg Booked",  count: n(r.meeting_booked),      subtitle: "Ever reached" },
-    { key: "Meeting Done",        label: "Mtg Done",    count: n(r.meeting_done),        subtitle: "Ever reached" },
+    { key: "In Chat",             label: "In Chat",     count: n(r.in_chat),             subtitle: "Currently here" },
+    { key: "Meeting Scheduled",   label: "Mtg Booked",  count: n(r.meeting_booked),      subtitle: "Currently here" },
+    { key: "Meeting Done",        label: "Mtg Done",    count: n(r.meeting_done),        subtitle: "Currently here" },
     { key: "Negotiation",         label: "Negotiation", count: n(r.negotiation),         subtitle: "Hot leads" },
     { key: "Won",                 label: "Won",         count: n(r.won),                 subtitle: "Closed won" },
     { key: "Lost",                label: "Lost",        count: n(r.lost),                subtitle: "Closed lost" },
@@ -1372,30 +1375,48 @@ export async function getEnhancedAgentStats(
 ): Promise<EnhancedAgentStats[]> {
   const { startDate, endDate } = range ?? {};
 
+  // Counts derived from the Task Board: each agent's tasks (via task_assignees),
+  // grouped by current column. Win rate uses won/(won+lost) — % of decided
+  // cards that won. Revenue and avg_response_hours stay on jobs (only linked
+  // tasks have won_value and received_at).
   const result = await sql`
+    WITH scoped_tasks AS (
+      SELECT
+        ta.agent_id,
+        t.id AS task_id,
+        c.name AS col_name,
+        j.profile_id,
+        j.won_value,
+        j.proposal_sent_at,
+        j.received_at
+      FROM tasks t
+      JOIN task_assignees ta ON ta.task_id = t.id
+      JOIN columns c ON c.id = t.column_id
+      LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
+      WHERE (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) <= ${endDate}::timestamptz)
+        AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
+    )
     SELECT
       a.id,
       a.name,
-      COUNT(j.id) AS total_jobs,
-      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN LOWER(j.status) = 'won' THEN 1 END) AS won,
-      COUNT(CASE WHEN LOWER(j.status) = 'lost' THEN 1 END) AS lost,
+      COUNT(s.task_id) AS total_jobs,
+      COUNT(CASE WHEN LOWER(s.col_name) = 'proposal submitted' THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN LOWER(s.col_name) = 'won' THEN 1 END) AS won,
+      COUNT(CASE WHEN LOWER(s.col_name) = 'lost' THEN 1 END) AS lost,
       ROUND(
-        COUNT(CASE WHEN LOWER(j.status) = 'won' THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END), 0) * 100, 1
+        COUNT(CASE WHEN LOWER(s.col_name) = 'won' THEN 1 END)::DECIMAL /
+        NULLIF(COUNT(CASE WHEN LOWER(s.col_name) IN ('won', 'lost') THEN 1 END), 0) * 100, 1
       ) AS win_rate_pct,
-      COALESCE(SUM(CASE WHEN LOWER(j.status) = 'won' THEN j.won_value END), 0) AS total_revenue,
+      COALESCE(SUM(CASE WHEN LOWER(s.col_name) = 'won' THEN s.won_value END), 0) AS total_revenue,
       AVG(
-        CASE WHEN j.proposal_sent_at IS NOT NULL
-        THEN EXTRACT(EPOCH FROM (j.proposal_sent_at - j.received_at)) / 3600
+        CASE WHEN s.proposal_sent_at IS NOT NULL AND s.received_at IS NOT NULL
+        THEN EXTRACT(EPOCH FROM (s.proposal_sent_at - s.received_at)) / 3600
         END
       ) AS avg_response_hours,
-      COUNT(CASE WHEN j.meeting_booked_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END) AS meetings_done
+      COUNT(CASE WHEN LOWER(s.col_name) = 'meeting done' THEN 1 END) AS meetings_done
     FROM agents a
-    LEFT JOIN jobs j ON j.agent_id = a.id
-      AND (${startDate}::timestamptz IS NULL OR j.stage_entered_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR j.stage_entered_at <= ${endDate}::timestamptz)
-      AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
+    LEFT JOIN scoped_tasks s ON s.agent_id = a.id
     WHERE a.active = true
       AND (${agentId ?? null}::uuid IS NULL OR a.id = ${agentId ?? null}::uuid)
     GROUP BY a.id, a.name
@@ -1406,7 +1427,11 @@ export async function getEnhancedAgentStats(
     const proposalsSent = parseInt(row.proposals_sent) || 0;
     const won = parseInt(row.won) || 0;
     const meetings = parseInt(row.meetings_done) || 0;
-    const convRate = proposalsSent > 0 ? Math.round((won / proposalsSent) * 1000) / 10 : 0;
+    const totalJobs = parseInt(row.total_jobs) || 0;
+    // Conversion rate: % of all the agent's cards that ended up Won.
+    // (Old "won/proposalsSent" formula only worked under cumulative semantics;
+    // with current-state column counts it produced impossible >100% values.)
+    const convRate = totalJobs > 0 ? Math.round((won / totalJobs) * 1000) / 10 : 0;
 
     // Score: weighted from win_rate (40%), conversion (30%), speed (30%)
     const winRate = parseFloat(row.win_rate_pct) || 0;
@@ -1417,7 +1442,7 @@ export async function getEnhancedAgentStats(
     return {
       id: row.id,
       name: row.name,
-      total_jobs: parseInt(row.total_jobs) || 0,
+      total_jobs: totalJobs,
       proposals_sent: proposalsSent,
       won,
       lost: parseInt(row.lost) || 0,
@@ -1462,28 +1487,49 @@ export async function getEnhancedProfileStats(
 ): Promise<EnhancedProfileStats[]> {
   const { startDate, endDate } = range ?? {};
 
+  // Counts derived from the Task Board: profile is taken from the linked job
+  // when available. Profiles only count tasks that have a linked job (since the
+  // profile-task link runs through jobs.profile_id) — this is fine because
+  // orphan/manual tasks have no profile association anyway.
   const result = await sql`
+    WITH scoped_tasks AS (
+      SELECT
+        j.profile_id,
+        t.id AS task_id,
+        c.name AS col_name,
+        j.won_value,
+        j.agent_id
+      FROM tasks t
+      JOIN columns c ON c.id = t.column_id
+      JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
+      WHERE (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) <= ${endDate}::timestamptz)
+        AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
+    )
     SELECT
       p.id,
       p.profile_id,
       p.profile_name,
       p.stack,
-      COUNT(j.id) AS total_jobs,
-      COUNT(CASE WHEN LOWER(j.status) = 'won' THEN 1 END) AS won,
+      COUNT(s.task_id) AS total_jobs,
+      COUNT(CASE WHEN LOWER(s.col_name) = 'won' THEN 1 END) AS won,
       ROUND(
-        COUNT(CASE WHEN LOWER(j.status) = 'won' THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE WHEN LOWER(j.status) IN ('won','lost') THEN 1 END), 0) * 100, 1
+        COUNT(CASE WHEN LOWER(s.col_name) = 'won' THEN 1 END)::DECIMAL /
+        NULLIF(COUNT(CASE WHEN LOWER(s.col_name) IN ('won', 'lost') THEN 1 END), 0) * 100, 1
       ) AS win_rate_pct,
-      AVG(CASE WHEN LOWER(j.status) = 'won' THEN j.won_value END) AS avg_won_value,
-      COALESCE(SUM(CASE WHEN LOWER(j.status) = 'won' THEN j.won_value END), 0) AS total_revenue,
-      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END) AS moved_past_submitted,
-      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN j.meeting_booked_at IS NOT NULL AND LOWER(j.status) != 'n/a' THEN 1 END) AS reached_meeting
+      AVG(CASE WHEN LOWER(s.col_name) = 'won' THEN s.won_value END) AS avg_won_value,
+      COALESCE(SUM(CASE WHEN LOWER(s.col_name) = 'won' THEN s.won_value END), 0) AS total_revenue,
+      COUNT(CASE WHEN LOWER(s.col_name) IN (
+        'proposal views', 'proposal viewed', 'viewed',
+        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+        'in chat', 'following up',
+        'meeting scheduled', 'meeting done',
+        'negotiation', 'won'
+      ) THEN 1 END) AS responded,
+      COUNT(CASE WHEN LOWER(s.col_name) = 'proposal submitted' THEN 1 END) AS proposals_sent,
+      COUNT(CASE WHEN LOWER(s.col_name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN 1 END) AS reached_meeting
     FROM profiles p
-    LEFT JOIN jobs j ON j.profile_id = p.profile_id
-      AND (${startDate}::timestamptz IS NULL OR j.stage_entered_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR j.stage_entered_at <= ${endDate}::timestamptz)
-      AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
+    LEFT JOIN scoped_tasks s ON s.profile_id = p.profile_id
     WHERE p.active = true
       AND (${profileId ?? null}::text IS NULL OR p.profile_id = ${profileId ?? null}::text)
     GROUP BY p.id, p.profile_id, p.profile_name, p.stack
@@ -1491,8 +1537,9 @@ export async function getEnhancedProfileStats(
   `;
 
   return result.rows.map((row) => {
-    const proposals = parseInt(row.proposals_sent) || 0;
-    const movedPast = parseInt(row.moved_past_submitted) || 0;
+    const totalJobs = parseInt(row.total_jobs) || 0;
+    const proposalsSent = parseInt(row.proposals_sent) || 0;
+    const responded = parseInt(row.responded) || 0;
     const reached = parseInt(row.reached_meeting) || 0;
 
     return {
@@ -1501,16 +1548,18 @@ export async function getEnhancedProfileStats(
       profile_name: row.profile_name,
       stack: row.stack,
       niche: row.stack,
-      total_jobs: parseInt(row.total_jobs) || 0,
-      proposals_sent: proposals,
+      total_jobs: totalJobs,
+      proposals_sent: proposalsSent,
       won: parseInt(row.won) || 0,
       win_rate_pct: row.win_rate_pct ? parseFloat(row.win_rate_pct) : null,
       avg_won_value: row.avg_won_value
         ? parseFloat(parseFloat(row.avg_won_value).toFixed(0))
         : null,
       total_revenue: parseFloat(row.total_revenue) || 0,
-      response_rate: proposals > 0 ? Math.round((movedPast / proposals) * 100) : 0,
-      interview_rate: proposals > 0 ? Math.round((reached / proposals) * 100) : 0,
+      // Response rate: % of all the profile's submitted-or-later cards that
+      // received a response (moved past Proposal Submitted).
+      response_rate: totalJobs > 0 ? Math.round((responded / totalJobs) * 100) : 0,
+      interview_rate: totalJobs > 0 ? Math.round((reached / totalJobs) * 100) : 0,
     };
   });
 }
