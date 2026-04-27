@@ -58,7 +58,7 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
       COUNT(CASE WHEN LOWER(c.name) = 'proposal submitted' THEN 1 END) AS proposals_sent,
       COUNT(CASE WHEN LOWER(c.name) IN ('proposal views', 'proposal viewed', 'viewed') THEN 1 END) AS proposals_viewed,
       COUNT(CASE WHEN LOWER(c.name) IN ('in chat', 'following up') THEN 1 END) AS in_chat,
-      COUNT(CASE WHEN LOWER(c.name) = 'meeting scheduled' THEN 1 END) AS meetings_booked,
+      COUNT(CASE WHEN LOWER(c.name) IN ('meeting scheduled', 'meeting done') THEN 1 END) AS meetings_booked,
       COUNT(CASE WHEN LOWER(c.name) = 'meeting done' THEN 1 END) AS meetings_done,
       COUNT(CASE WHEN LOWER(c.name) = 'won' THEN 1 END) AS won,
       COUNT(CASE WHEN LOWER(c.name) = 'lost' THEN 1 END) AS lost,
