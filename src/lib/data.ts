@@ -1412,23 +1412,17 @@ export async function getPipelineStages(
         'meeting scheduled', 'meeting done',
         'negotiation', 'won'
       ]::text[] THEN 1 END) AS proposal_views,
+      -- Prototype is an OPTIONAL branch, not a linear funnel step. A card only
+      -- counts toward a Prototype tile if it actually visited a prototype column.
+      -- Reaching In Chat / Meeting / Negotiation / Won does NOT imply Prototype.
       COUNT(CASE WHEN tv.visited && ARRAY[
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
+        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent'
       ]::text[] THEN 1 END) AS prototype_required,
       COUNT(CASE WHEN tv.visited && ARRAY[
-        'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
+        'prototype done', 'prototype submitted', 'prototype sent'
       ]::text[] THEN 1 END) AS prototype_done,
       COUNT(CASE WHEN tv.visited && ARRAY[
-        'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
+        'prototype submitted', 'prototype sent'
       ]::text[] THEN 1 END) AS prototype_submitted,
       COUNT(CASE WHEN tv.visited && ARRAY[
         'in chat', 'following up',
