@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { PipelineKanban } from "@/components/pipeline/pipeline-kanban";
 import { PipelineTable } from "@/components/pipeline/pipeline-table";
-import { getPipelineStages, getActiveJobsInPipeline, getAllProfiles } from "@/lib/data";
+import { getPipelineStages, getPipelineBucketCounts, getActiveJobsInPipeline, getAllProfiles } from "@/lib/data";
 import { parseDateRange } from "@/lib/date-utils";
 import { AutoRefresh } from "@/components/auto-refresh";
 
@@ -23,28 +23,15 @@ export default async function MyPipelinePage({
   const range = parseDateRange(params);
   const profileId = params.profile || undefined;
 
-  const [stages, jobs, allProfiles] = await Promise.all([
+  const [stages, bucketCounts, jobs, allProfiles] = await Promise.all([
     getPipelineStages(range, agentId, profileId),
+    getPipelineBucketCounts(agentId, profileId),
     getActiveJobsInPipeline(agentId, profileId),
     getAllProfiles(),
   ]);
   const agentProfiles = allProfiles.filter((p) => p.agent_id === agentId);
 
-  const cardBuckets: Record<string, string> = {
-    "to do": "todo", "todo": "todo", "new": "todo", "proposal ready": "todo",
-    "proposal submitted": "submitted", "submitted": "submitted", "sent": "submitted", "following up": "submitted",
-    "prototype required": "proto", "prototype done": "proto", "prototype sent": "proto",
-    "meeting scheduled": "meeting", "meeting done": "meeting",
-    "negotiation": "negotiation",
-  };
-
-  const counts: Record<string, number> = { todo: 0, submitted: 0, proto: 0, meeting: 0, negotiation: 0 };
-  for (const s of stages) {
-    const bucket = cardBuckets[s.key.toLowerCase()];
-    if (bucket) counts[bucket] += s.count;
-  }
-
-  const { todo, submitted, proto, meeting, negotiation } = counts;
+  const { todo, submitted, proto, meeting, negotiation } = bucketCounts;
 
   return (
     <>
