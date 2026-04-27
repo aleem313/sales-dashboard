@@ -55,9 +55,9 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
   // Funnel KPIs are CUMULATIVE — a card counts toward every stage it has reached
   // or passed. A card currently in Won counts toward Proposals Sent, Proposals
   // Viewed, In Chat, Meetings Booked, and Meetings Done because it must have
-  // moved through them. Lost and On Hold count toward Proposals Sent only
-  // (matches getConversionFunnel convention) since we can't tell how far they
-  // progressed before falling off the path.
+  // moved through them. Lost cards are assumed to have progressed through every
+  // funnel stage before being lost (so 'lost' appears in every cumulative
+  // bucket). On Hold counts toward Proposals Sent only.
   // Won, Lost, Bad Leads (N/A), Untouched (Todo) remain current-state counts.
   const result = await sql`
     SELECT
@@ -74,15 +74,15 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
         'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
         'in chat', 'following up',
         'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
+        'negotiation', 'won', 'lost'
       ) THEN 1 END) AS proposals_viewed,
       COUNT(CASE WHEN LOWER(c.name) IN (
         'in chat', 'following up',
         'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
+        'negotiation', 'won', 'lost'
       ) THEN 1 END) AS in_chat,
-      COUNT(CASE WHEN LOWER(c.name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN 1 END) AS meetings_booked,
-      COUNT(CASE WHEN LOWER(c.name) IN ('meeting done', 'negotiation', 'won') THEN 1 END) AS meetings_done,
+      COUNT(CASE WHEN LOWER(c.name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost') THEN 1 END) AS meetings_booked,
+      COUNT(CASE WHEN LOWER(c.name) IN ('meeting done', 'negotiation', 'won', 'lost') THEN 1 END) AS meetings_done,
       COUNT(CASE WHEN LOWER(c.name) = 'won' THEN 1 END) AS won,
       COUNT(CASE WHEN LOWER(c.name) = 'lost' THEN 1 END) AS lost,
       ROUND(
@@ -1283,10 +1283,11 @@ export async function getPipelineStages(
   // Funnel stages (Proposal Submitted → Negotiation) are CUMULATIVE — a card
   // counts toward every stage it has reached or passed. So a card currently in
   // Won counts in Proposal Submitted, Proposal Views, every Prototype stage,
-  // In Chat, Meeting Booked, Meeting Done, AND Negotiation. Lost and On Hold
-  // count toward Proposal Submitted only (matches getConversionFunnel) since
-  // we can't tell how far they progressed before leaving the path.
-  // Todo, Won, Lost, On Hold, N/A remain current-state.
+  // In Chat, Meeting Booked, Meeting Done, AND Negotiation. Lost cards are
+  // assumed to have progressed through every funnel stage before being lost,
+  // so they're counted in every cumulative bucket. On Hold counts toward
+  // Proposal Submitted only.
+  // Todo, Won, Lost, On Hold, N/A remain current-state (terminal/off-funnel).
   //
   // Date filter: COALESCE(j.stage_entered_at, t.updated_at, t.created_at) — the
   // best available "when did this card last change status" timestamp. Linked
@@ -1311,34 +1312,34 @@ export async function getPipelineStages(
         'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
         'in chat', 'following up',
         'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
+        'negotiation', 'won', 'lost'
       ) THEN 1 END) AS proposal_views,
       COUNT(CASE WHEN LOWER(c.name) IN (
         'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
         'in chat', 'following up',
         'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
+        'negotiation', 'won', 'lost'
       ) THEN 1 END) AS prototype_required,
       COUNT(CASE WHEN LOWER(c.name) IN (
         'prototype done', 'prototype submitted', 'prototype sent',
         'in chat', 'following up',
         'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
+        'negotiation', 'won', 'lost'
       ) THEN 1 END) AS prototype_done,
       COUNT(CASE WHEN LOWER(c.name) IN (
         'prototype submitted', 'prototype sent',
         'in chat', 'following up',
         'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
+        'negotiation', 'won', 'lost'
       ) THEN 1 END) AS prototype_submitted,
       COUNT(CASE WHEN LOWER(c.name) IN (
         'in chat', 'following up',
         'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
+        'negotiation', 'won', 'lost'
       ) THEN 1 END) AS in_chat,
-      COUNT(CASE WHEN LOWER(c.name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN 1 END) AS meeting_booked,
-      COUNT(CASE WHEN LOWER(c.name) IN ('meeting done', 'negotiation', 'won') THEN 1 END) AS meeting_done,
-      COUNT(CASE WHEN LOWER(c.name) IN ('negotiation', 'won') THEN 1 END) AS negotiation,
+      COUNT(CASE WHEN LOWER(c.name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won', 'lost') THEN 1 END) AS meeting_booked,
+      COUNT(CASE WHEN LOWER(c.name) IN ('meeting done', 'negotiation', 'won', 'lost') THEN 1 END) AS meeting_done,
+      COUNT(CASE WHEN LOWER(c.name) IN ('negotiation', 'won', 'lost') THEN 1 END) AS negotiation,
       COUNT(CASE WHEN LOWER(c.name) = 'won' THEN 1 END) AS won,
       COUNT(CASE WHEN LOWER(c.name) = 'lost' THEN 1 END) AS lost,
       COUNT(CASE WHEN LOWER(c.name) = 'on hold' THEN 1 END) AS on_hold,
