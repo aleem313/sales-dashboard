@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { BoardColumn, Task, ProjectMember, CustomFieldDefinition, SavedView } from "@/lib/task-data";
+import { getDateRangeFromPreset, type PresetValue } from "@/components/date-range-picker";
 
 const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
@@ -295,15 +296,28 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       )
         return false;
 
-      // Custom field filters (including virtual fields for due_date, created_at)
+      // Custom field filters (including virtual fields for due_date, created_at, updated_at)
       for (const cf of customFieldFilters) {
         const cfValues = (t.custom_fields ?? {}) as Record<string, unknown>;
         // Virtual fields map to task-level properties
         const val = cf.fieldId === "_due_date" ? t.due_date
           : cf.fieldId === "_created_at" ? t.created_at
+          : cf.fieldId === "_updated_at" ? t.updated_at
           : cfValues[cf.fieldId];
 
         switch (cf.operator) {
+          case "in_range": {
+            // Used by Created At / Updated At preset dropdown.
+            if (!val || !cf.value) return false;
+            try {
+              const { from, to } = getDateRangeFromPreset(cf.value as PresetValue);
+              const ts = new Date(String(val)).getTime();
+              if (ts < from.getTime() || ts > to.getTime()) return false;
+            } catch {
+              return false;
+            }
+            break;
+          }
           case "equals":
             if (String(val ?? "") !== String(cf.value)) return false;
             break;

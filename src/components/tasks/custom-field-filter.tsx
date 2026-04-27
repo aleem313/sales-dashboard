@@ -20,6 +20,19 @@ import { cn } from "@/lib/utils";
 import { useBoardStore } from "@/lib/stores/board-store";
 import type { CustomFieldDefinition } from "@/lib/task-data";
 
+// Preset options mirror DateRangePicker (top navbar).
+const DATE_PRESETS: { value: string; label: string }[] = [
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "7d", label: "Last 7 days" },
+  { value: "14d", label: "Last 14 days" },
+  { value: "30d", label: "Last 30 days" },
+  { value: "this_month", label: "This month" },
+  { value: "last_month", label: "Last month" },
+  { value: "6m", label: "Last 6 months" },
+  { value: "1y", label: "1 year" },
+];
+
 // Virtual field for Reason (N/A status). Uses _reason key in custom_fields.
 const REASON_OPTIONS = [
   "Old job", "Duplicate", "Location loc", "Low Higher rate",
@@ -74,6 +87,12 @@ const OPERATORS_BY_TYPE: Record<string, { value: string; label: string }[]> = {
     { value: "after", label: "after" },
     { value: "is_empty", label: "is empty" },
   ],
+  // Built-in Created At / Updated At fields use a preset dropdown matching the top navbar.
+  date_preset: [
+    { value: "in_range", label: "in range" },
+    { value: "is_empty", label: "is empty" },
+    { value: "is_not_empty", label: "is not empty" },
+  ],
   boolean: [
     { value: "is_true", label: "is true" },
     { value: "is_false", label: "is false" },
@@ -89,16 +108,24 @@ export function MoreFilters({ customFields }: MoreFiltersProps) {
   const filters = store.customFieldFilters;
   const expanded = filters.length > 0;
 
-  // Inject virtual fields for built-in date fields + Reason
+  // Inject virtual fields for built-in date fields + Reason.
+  // Created At / Updated At use the date_preset type so the value picker becomes
+  // a preset dropdown (Today, Yesterday, Last 7 days, …) matching the top navbar.
   const DUE_DATE_VIRTUAL: CustomFieldDefinition = {
     id: "_due_date", project_id: "", name: "Due Date", field_type: "date",
     options: null, required: false, position: 9997, archived: false, show_on_card: false, created_at: "",
   };
   const CREATED_AT_VIRTUAL: CustomFieldDefinition = {
-    id: "_created_at", project_id: "", name: "Created At", field_type: "date",
+    id: "_created_at", project_id: "", name: "Created At",
+    field_type: "date_preset" as CustomFieldDefinition["field_type"],
     options: null, required: false, position: 9998, archived: false, show_on_card: false, created_at: "",
   };
-  const allFields = [...customFields, DUE_DATE_VIRTUAL, CREATED_AT_VIRTUAL, REASON_VIRTUAL_FIELD];
+  const UPDATED_AT_VIRTUAL: CustomFieldDefinition = {
+    id: "_updated_at", project_id: "", name: "Updated At",
+    field_type: "date_preset" as CustomFieldDefinition["field_type"],
+    options: null, required: false, position: 9998, archived: false, show_on_card: false, created_at: "",
+  };
+  const allFields = [...customFields, DUE_DATE_VIRTUAL, CREATED_AT_VIRTUAL, UPDATED_AT_VIRTUAL, REASON_VIRTUAL_FIELD];
 
   if (allFields.length === 0) return null;
 
@@ -215,6 +242,20 @@ export function MoreFilters({ customFields }: MoreFiltersProps) {
                         onChange={(e) => updateFilter(index, { value: e.target.value })}
                         className="h-7 w-[130px] text-xs"
                       />
+                    ) : (field?.field_type as string) === "date_preset" ? (
+                      <Select
+                        value={String(filter.value ?? "")}
+                        onValueChange={(v) => updateFilter(index, { value: v })}
+                      >
+                        <SelectTrigger className="h-7 w-[140px] text-xs">
+                          <SelectValue placeholder="Select range..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DATE_PRESETS.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     ) : (
                       <Input
                         type={field?.field_type === "number" ? "number" : "text"}
