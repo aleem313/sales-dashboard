@@ -316,6 +316,7 @@ ClickUp integration has been **fully removed** as of Milestone 8. The following 
 6. **Board columns** (14 total): Todo, Proposal Submitted, Proposal Views, Prototype Required, Prototype Done, Prototype Submitted, In Chat, Meeting Scheduled, Meeting Done, Negotiation, Lost, On Hold, N/A, Won
 7. **Pipeline Now grouping**: Todo | In Progress (Proposal Submitted, Proposal Views, Prototype Required/Done/Submitted, In Chat, On Hold) | Meetings (Meeting Scheduled/Done) | Negotiation
 8. KPI calculations in `data.ts` depend on these exact status strings — if board columns are renamed, update the KPI queries
+9. **Dashboard counts derive from the Task Board, not jobs lifecycle milestones.** As of 2026-04-27, `getKPIMetrics`, `getAgentKPIMetrics`, `getPipelineStages`, `getConversionFunnel`, `getEnhancedAgentStats`, and `getEnhancedProfileStats` all count `tasks JOIN columns` (current column = current status), not `jobs.proposal_sent_at IS NOT NULL` style lifecycle milestones. This matches the task board exactly — including manually-created "orphan" tasks that have no job linkage. Date filter uses `COALESCE(j.stage_entered_at, t.updated_at, t.created_at)`. Agent filter uses `task_assignees`. Profile filter uses the linked job's `profile_id`. Win rate is `won / (won + lost)`. Revenue still comes from `jobs.won_value` (orphan tasks have no won_value).
 
 ## Key Reference Files
 
