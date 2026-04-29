@@ -1,4 +1,3 @@
-// src/hooks/use-column-load-more.ts
 "use client";
 
 import { useEffect, useRef } from "react";
