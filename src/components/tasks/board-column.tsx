@@ -27,7 +27,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, MoreHorizontal, Pencil, Palette, Gauge, CheckCircle2, Trash2 } from "lucide-react";
+import { Plus, MoreHorizontal, Pencil, Palette, Gauge, CheckCircle2, Trash2, Loader2 } from "lucide-react";
+import { useBoardStore } from "@/lib/stores/board-store";
+import { useColumnLoadMore } from "@/hooks/use-column-load-more";
 import { SortableTaskCard, TaskCardContent } from "./task-card";
 import { toast } from "sonner";
 import type { BoardColumn as ColumnType, Task } from "@/lib/task-data";
@@ -85,13 +87,16 @@ export function BoardColumnComponent({
       </div>
     );
   }
-  const isOverWip = column.wip_limit != null && tasks.length > column.wip_limit;
-  const isAtWip = column.wip_limit != null && tasks.length === column.wip_limit;
-
   const { setNodeRef, isOver } = useDroppable({
     id: `column-${column.id}`,
     data: { type: "column", columnId: column.id },
   });
+
+  const totalCount = useBoardStore((s) => s.columnCounts[column.id]);
+  const displayCount = totalCount ?? tasks.length;
+
+  const isOverWip = column.wip_limit != null && displayCount > column.wip_limit;
+  const isAtWip = column.wip_limit != null && displayCount === column.wip_limit;
 
   const taskIds = tasks.map((t) => t.id);
 
@@ -188,7 +193,7 @@ export function BoardColumnComponent({
               : "bg-muted text-muted-foreground"
           )}
         >
-          {tasks.length}{column.wip_limit != null && `/${column.wip_limit}`}
+          {displayCount}{column.wip_limit != null && `/${column.wip_limit}`}
         </span>
 
         {/* Admin column menu */}
@@ -271,6 +276,7 @@ export function BoardColumnComponent({
             ))
           )}
         </SortableContext>
+        <ColumnLoadMoreSentinel columnId={column.id} />
       </div>
 
       {/* Color picker dialog */}
@@ -363,6 +369,20 @@ export function BoardColumnComponent({
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function ColumnLoadMoreSentinel({ columnId }: { columnId: string }) {
+  const { ref, hasMore, loading } = useColumnLoadMore(columnId);
+  if (!hasMore && !loading) return null;
+  return (
+    <div ref={ref} className="flex items-center justify-center py-2">
+      {loading ? (
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      ) : (
+        <span className="text-[11px] text-muted-foreground/60">Scroll to load more</span>
+      )}
     </div>
   );
 }
