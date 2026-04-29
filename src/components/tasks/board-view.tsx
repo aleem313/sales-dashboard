@@ -287,7 +287,15 @@ export function BoardView({ columns: serverColumns, buckets, projectId, members,
         newPosition = Math.floor((colTasks[targetIndex - 1].position + colTasks[targetIndex].position) / 2);
       }
 
-      const sourceColumnId = prev?.columnId ?? task.column_id;
+      // After handleDragOver, task.column_id is already the target. We rely on
+      // `prev` (set in handleDragStart) for the source. If it's missing, bail
+      // — count adjustments would be wrong without it.
+      if (!prev) {
+        store.setActiveTask(null);
+        store.revertMove();
+        return;
+      }
+      const sourceColumnId = prev.columnId;
       const crossColumn = sourceColumnId !== targetColumnId;
       if (crossColumn) {
         store.adjustColumnCount(sourceColumnId, -1);
@@ -324,6 +332,12 @@ export function BoardView({ columns: serverColumns, buckets, projectId, members,
                 try {
                   await moveTaskAction(task.id, prev.columnId, prev.position);
                 } catch {
+                  // Reverse the undo's optimistic mutations.
+                  store.moveTask(task.id, targetColumnId, 0);
+                  if (crossColumn) {
+                    store.adjustColumnCount(sourceColumnId, -1);
+                    store.adjustColumnCount(targetColumnId, +1);
+                  }
                   toast.error("Failed to undo");
                 }
               },
@@ -382,6 +396,7 @@ export function BoardView({ columns: serverColumns, buckets, projectId, members,
       await deleteTaskAction(taskId);
       toast.success("Task deleted");
     } catch {
+      if (task) store.addTask(task);
       if (fromColumn) store.adjustColumnCount(fromColumn, +1);
       toast.error("Failed to delete task");
     }
