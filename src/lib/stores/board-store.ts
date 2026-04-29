@@ -201,6 +201,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   loadMoreForColumn: async (columnId, query) => {
     const state = get();
+    if (state.isDragging) return;
     if (state.columnLoading[columnId]) return;
     if (!state.columnHasMore[columnId]) return;
     if (!state.projectId) return;

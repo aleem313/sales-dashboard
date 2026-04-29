@@ -22,6 +22,10 @@ export function useColumnLoadMore(columnId: string) {
     if (!hasMore) return;
 
     const el = ref.current;
+    // Find the column's own scroll container so the observer fires only on
+    // intra-column scroll, not on initial page render where short columns
+    // would already be inside the page viewport.
+    const scrollRoot = el.closest("[data-column-scroll]") as HTMLElement | null;
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -32,7 +36,7 @@ export function useColumnLoadMore(columnId: string) {
           }
         }
       },
-      { root: null, rootMargin: "200px 0px", threshold: 0 }
+      { root: scrollRoot, rootMargin: "200px 0px", threshold: 0 }
     );
 
     observer.observe(el);

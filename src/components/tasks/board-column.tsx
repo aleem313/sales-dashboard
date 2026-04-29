@@ -247,6 +247,7 @@ export function BoardColumnComponent({
       {/* Droppable card area */}
       <div
         ref={setNodeRef}
+        data-column-scroll
         className={cn(
           "flex-1 space-y-2 overflow-y-auto pr-1 pb-4 rounded-lg transition-colors min-h-[80px]",
           isOver && "bg-primary/5 ring-2 ring-primary/20 ring-inset"
