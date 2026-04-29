@@ -182,7 +182,7 @@ export interface TaskFilters {
   sort_dir?: "asc" | "desc";
 }
 
-interface ColumnBucket {
+export interface ColumnBucket {
   tasks: Task[];
   totalCount: number;
   hasMore: boolean;
@@ -735,6 +735,27 @@ export async function reorderColumns(projectId: string, orderedIds: string[]): P
 // TASK QUERIES
 // ============================================================
 
+/**
+ * Loads assignees + tags for each task in-place. Sequential per-task because
+ * @vercel/postgres tagged template doesn't support array-binding for IN clauses.
+ */
+async function hydrateAssigneesAndTags(tasks: Task[]): Promise<void> {
+  for (const task of tasks) {
+    const assignees = await sql`
+      SELECT a.id AS agent_id, a.name, a.email, a.avatar_url
+      FROM task_assignees ta JOIN agents a ON a.id = ta.agent_id
+      WHERE ta.task_id = ${task.id}
+    `;
+    task.assignees = assignees.rows as unknown as TaskAssignee[];
+    const taskTags = await sql`
+      SELECT tt.id, tt.name, tt.color
+      FROM task_tag_map ttm JOIN task_tags tt ON tt.id = ttm.tag_id
+      WHERE ttm.task_id = ${task.id}
+    `;
+    task.tags = taskTags.rows as unknown as TaskTag[];
+  }
+}
+
 export async function getProjectTasks(
   projectId: string,
   filters: TaskFilters = {}
@@ -805,43 +826,17 @@ export async function getProjectTasks(
 
   const tasks = result.rows as Task[];
 
-  // Batch-load assignees and tags for all tasks
   if (tasks.length > 0) {
-    // Load per-task; batch loading with arrays not supported by @vercel/postgres tagged template
-    const assigneeMap = new Map<string, TaskAssignee[]>();
-    const tagMap = new Map<string, TaskTag[]>();
-
-    for (const task of tasks) {
-      const assignees = await sql`
-        SELECT a.id AS agent_id, a.name, a.email, a.avatar_url
-        FROM task_assignees ta
-        JOIN agents a ON a.id = ta.agent_id
-        WHERE ta.task_id = ${task.id}
-      `;
-      assigneeMap.set(task.id, assignees.rows as unknown as TaskAssignee[]);
-
-      const taskTags = await sql`
-        SELECT tt.id, tt.name, tt.color
-        FROM task_tag_map ttm
-        JOIN task_tags tt ON tt.id = ttm.tag_id
-        WHERE ttm.task_id = ${task.id}
-      `;
-      tagMap.set(task.id, taskTags.rows as unknown as TaskTag[]);
-    }
-
-    for (const task of tasks) {
-      task.assignees = assigneeMap.get(task.id) ?? [];
-      task.tags = tagMap.get(task.id) ?? [];
-    }
+    await hydrateAssigneesAndTags(tasks);
   }
 
   return tasks;
 }
 
 /**
- * Returns counts + first N filtered tasks per column for one project, in a single
- * pass using PARTITION BY. Counts always reflect filters; tasks reflect filters AND
- * the per-column slice.
+ * Returns counts + first N filtered tasks per column for one project. Two queries:
+ * a GROUP BY counts query, plus a ROW_NUMBER PARTITION BY column query for the slice.
+ * Counts always reflect filters; tasks reflect filters AND the per-column slice.
  */
 export async function getProjectColumnsTasksPaged(
   projectId: string,
@@ -936,28 +931,21 @@ export async function getProjectColumnsTasksPaged(
           OR NOT EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id)
         )
     )
-    SELECT * FROM filtered WHERE rn <= ${initialLimit}
+    SELECT
+      id, project_id, column_id, title, description, priority, due_date, start_date,
+      position, creator_id, custom_fields, created_at, updated_at,
+      column_name, creator_name, last_status_at, prev_column_name,
+      checklist_total, checklist_done, comment_count, attachment_count
+    FROM filtered WHERE rn <= ${initialLimit}
   `;
 
   const tasks = pageResult.rows as Task[];
 
-  // Hydrate assignees + tags per task (mirrors getProjectTasks pattern).
-  for (const task of tasks) {
-    const assignees = await sql`
-      SELECT a.id AS agent_id, a.name, a.email, a.avatar_url
-      FROM task_assignees ta JOIN agents a ON a.id = ta.agent_id
-      WHERE ta.task_id = ${task.id}
-    `;
-    task.assignees = assignees.rows as unknown as TaskAssignee[];
-    const taskTags = await sql`
-      SELECT tt.id, tt.name, tt.color
-      FROM task_tag_map ttm JOIN task_tags tt ON tt.id = ttm.tag_id
-      WHERE ttm.task_id = ${task.id}
-    `;
-    task.tags = taskTags.rows as unknown as TaskTag[];
-  }
+  await hydrateAssigneesAndTags(tasks);
 
-  // Build buckets keyed by column_id, defaulting to empty for columns with zero matches.
+  // Counts result populates the bucket map; columns with zero matches simply don't appear.
+  // The fallback inside the page-tasks loop guards against READ-COMMITTED races where a
+  // task could appear in the paged result for a column that had zero rows in the counts query.
   const buckets: Record<string, ColumnBucket> = {};
   for (const row of countsResult.rows) {
     const cid = row.column_id as string;
@@ -1048,20 +1036,7 @@ export async function getColumnTasksPage(
   const hasMore = rows.length > limit;
   const tasks = hasMore ? rows.slice(0, limit) : rows;
 
-  for (const task of tasks) {
-    const assignees = await sql`
-      SELECT a.id AS agent_id, a.name, a.email, a.avatar_url
-      FROM task_assignees ta JOIN agents a ON a.id = ta.agent_id
-      WHERE ta.task_id = ${task.id}
-    `;
-    task.assignees = assignees.rows as unknown as TaskAssignee[];
-    const taskTags = await sql`
-      SELECT tt.id, tt.name, tt.color
-      FROM task_tag_map ttm JOIN task_tags tt ON tt.id = ttm.tag_id
-      WHERE ttm.task_id = ${task.id}
-    `;
-    task.tags = taskTags.rows as unknown as TaskTag[];
-  }
+  await hydrateAssigneesAndTags(tasks);
 
   return { tasks, hasMore };
 }
