@@ -43,50 +43,81 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
   const { startDate, endDate } = range ?? {};
 
   // Counts derived from the Task Board (tasks JOIN columns) — the source of
-  // truth per CLAUDE.md. Each metric corresponds 1:1 to its board column, so
-  // KPI cards on the dashboard match the column counts on the task board.
+  // truth per CLAUDE.md. Win rate = won / (won + lost). Revenue is the only
+  // metric still derived from jobs.won_value.
   //
-  // Date filter: COALESCE(j.stage_entered_at, t.updated_at) — when the card last
-  // changed status. Linked tasks use jobs.stage_entered_at; orphan tasks (no job
-  // linkage) fall back to tasks.updated_at.
+  // Funnel KPIs (Proposals Sent / Viewed, In Chat, Meetings Booked / Done) are
+  // gated by FIRST entry into each metric's funnel-stage set, not by "card last
+  // touched in range". A card moved Submitted -> Views today had its proposal
+  // sent earlier — counting it as "Proposals Sent today" would be wrong. We
+  // compute per-task `first_<metric>_at` = LEAST(earliest move INTO any column
+  // in this metric's funnel, t.created_at IF the task was already in a funnel
+  // column at creation). The latter is detected when (a) the task has no
+  // column-move history and its current column is in the funnel, OR (b) the
+  // task's earliest column-move row has old_value in the funnel (i.e. it was
+  // in the funnel before the first logged move).
   //
-  // Win rate = won / (won + lost) — percentage of decided cards that won.
-  // Revenue is the only metric still derived from jobs (won_value lives there).
-  //
-  // Funnel KPIs are CUMULATIVE and HISTORY-ACCURATE — a card counts toward
-  // every stage it has actually visited per activity_log, not by funnel-order
-  // assumption. The activity_history CTE aggregates every column name appearing
-  // in task_moved entries per task. The visited array per task is that history
-  // unioned with the current column (so tasks with no moves still count toward
-  // their current column). Each stage tests array overlap (&&) against the
-  // funnel columns from that stage onward.
-  //
-  // Examples:
-  //   - Card moved Proposal Submitted -> Won: counts in Proposals Sent + Won,
-  //     NOT in Meetings Booked / Meetings Done it never visited.
-  //   - Card moved Proposal Submitted -> In Chat -> Meeting Done -> Lost:
-  //     counts in Proposals Sent, Proposals Viewed*, In Chat, Meetings Booked,
-  //     Meetings Done. (* views counted because In Chat is downstream of Views.)
-  //   - Card created in Lost with no moves: counts in Lost only.
-  //
-  // Note: a stage's array includes every funnel column from that stage onward,
-  // so reaching a downstream column implies reaching this one.
-  //
-  // Won, Lost, Bad Leads (N/A), Untouched (Todo) remain current-state counts.
+  // Won, Lost, Bad Leads (N/A), Untouched (Todo), and total_revenue remain
+  // current-state metrics gated by COALESCE(stage_entered_at, updated_at,
+  // created_at). total_jobs (intake) is gated by tv.created_at.
   const result = await sql`
-    WITH activity_history AS (
-      SELECT
+    WITH earliest_move AS (
+      SELECT DISTINCT ON (task_id)
         task_id,
-        array_agg(DISTINCT col) AS cols
-      FROM (
-        SELECT task_id, LOWER(old_value) AS col
-        FROM activity_log
-        WHERE action_type = 'task_moved' AND field = 'column' AND old_value IS NOT NULL
-        UNION ALL
-        SELECT task_id, LOWER(new_value)
-        FROM activity_log
-        WHERE action_type = 'task_moved' AND field = 'column' AND new_value IS NOT NULL
-      ) sub
+        LOWER(old_value) AS old_lower
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+      ORDER BY task_id, created_at
+    ),
+    move_in_proposals_sent AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+      GROUP BY task_id
+    ),
+    move_in_proposals_viewed AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+      GROUP BY task_id
+    ),
+    move_in_in_chat AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+      GROUP BY task_id
+    ),
+    move_in_meetings_booked AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won')
+      GROUP BY task_id
+    ),
+    move_in_meetings_done AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN ('meeting done', 'negotiation', 'won')
       GROUP BY task_id
     ),
     task_visited AS (
@@ -98,64 +129,121 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
         t.created_at,
         c.name AS col_name,
         LOWER(c.name) AS col_lower,
-        COALESCE(ah.cols, ARRAY[]::text[]) || ARRAY[LOWER(c.name)] AS visited
+        LEAST(
+          mips.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_proposals_sent_at,
+        LEAST(
+          mipv.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_proposals_viewed_at,
+        LEAST(
+          mic.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_in_chat_at,
+        LEAST(
+          mimb.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_meetings_booked_at,
+        LEAST(
+          mimd.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN ('meeting done', 'negotiation', 'won') THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN ('meeting done', 'negotiation', 'won') THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_meetings_done_at
       FROM tasks t
       JOIN columns c ON c.id = t.column_id
-      LEFT JOIN activity_history ah ON ah.task_id = t.id
+      LEFT JOIN earliest_move em ON em.task_id = t.id
+      LEFT JOIN move_in_proposals_sent mips ON mips.task_id = t.id
+      LEFT JOIN move_in_proposals_viewed mipv ON mipv.task_id = t.id
+      LEFT JOIN move_in_in_chat mic ON mic.task_id = t.id
+      LEFT JOIN move_in_meetings_booked mimb ON mimb.task_id = t.id
+      LEFT JOIN move_in_meetings_done mimd ON mimd.task_id = t.id
     )
-    -- Date predicate split per-metric (non-obvious): "Jobs Received" (total_jobs)
-    -- is an INTAKE count gated by tv.created_at — it must match what the user
-    -- sees as "today's new arrivals" on the task board. Every other metric is
-    -- status-based and gated by COALESCE(stage_entered_at, updated_at, created_at).
-    -- Each metric carries its own FILTER so the row-scan WHERE only enforces
-    -- agent/profile scoping and a union date predicate (created_at OR status-time
-    -- in window) to avoid pre-filtering rows out of the union of both predicates.
-    -- Any cached row in stats_cache will naturally expire on its 5-min TTL.
+    -- Per-metric date predicates:
+    --   total_jobs        -> tv.created_at (intake — "today's new arrivals")
+    --   proposals_sent..meetings_done -> first_<metric>_at (first funnel entry)
+    --   won/lost/bad_leads/untouched/total_revenue -> COALESCE(stage_entered, updated, created)
+    --     (current-state metrics — "card is in this state AND was last touched in window")
     SELECT
       COUNT(*) FILTER (
         WHERE (${startDate}::timestamptz IS NULL OR tv.created_at >= ${startDate}::timestamptz)
           AND (${endDate}::timestamptz IS NULL OR tv.created_at <= ${endDate}::timestamptz)
       ) AS total_jobs,
       COUNT(*) FILTER (
-        WHERE tv.visited && ARRAY[
-          'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
-          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-          'in chat', 'following up',
-          'meeting scheduled', 'meeting done',
-          'negotiation', 'won'
-        ]::text[]
-        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
-        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+        WHERE tv.first_proposals_sent_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_proposals_sent_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_proposals_sent_at <= ${endDate}::timestamptz)
       ) AS proposals_sent,
       COUNT(*) FILTER (
-        WHERE tv.visited && ARRAY[
-          'proposal views', 'proposal viewed', 'viewed',
-          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-          'in chat', 'following up',
-          'meeting scheduled', 'meeting done',
-          'negotiation', 'won'
-        ]::text[]
-        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
-        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+        WHERE tv.first_proposals_viewed_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_proposals_viewed_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_proposals_viewed_at <= ${endDate}::timestamptz)
       ) AS proposals_viewed,
       COUNT(*) FILTER (
-        WHERE tv.visited && ARRAY[
-          'in chat', 'following up',
-          'meeting scheduled', 'meeting done',
-          'negotiation', 'won'
-        ]::text[]
-        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
-        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+        WHERE tv.first_in_chat_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_in_chat_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_in_chat_at <= ${endDate}::timestamptz)
       ) AS in_chat,
       COUNT(*) FILTER (
-        WHERE tv.visited && ARRAY['meeting scheduled', 'meeting done', 'negotiation', 'won']::text[]
-        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
-        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+        WHERE tv.first_meetings_booked_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_meetings_booked_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_meetings_booked_at <= ${endDate}::timestamptz)
       ) AS meetings_booked,
       COUNT(*) FILTER (
-        WHERE tv.visited && ARRAY['meeting done', 'negotiation', 'won']::text[]
-        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
-        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+        WHERE tv.first_meetings_done_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_meetings_done_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_meetings_done_at <= ${endDate}::timestamptz)
       ) AS meetings_done,
       COUNT(*) FILTER (
         WHERE tv.col_lower = 'won'
@@ -196,17 +284,7 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
       ) AS untouched
     FROM task_visited tv
     LEFT JOIN jobs j ON j.job_id = (tv.custom_fields->>'_job_id')
-    -- Row-scan: keep a row if EITHER its created_at OR its status-time falls in
-    -- the window. Per-metric FILTERs above re-apply the correct predicate.
-    WHERE (
-        (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
-        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
-        OR (
-          (${startDate}::timestamptz IS NULL OR tv.created_at >= ${startDate}::timestamptz)
-          AND (${endDate}::timestamptz IS NULL OR tv.created_at <= ${endDate}::timestamptz)
-        )
-      )
-      AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
+    WHERE (${agentId ?? null}::uuid IS NULL OR EXISTS (
         SELECT 1 FROM task_assignees ta WHERE ta.task_id = tv.task_id AND ta.agent_id = ${agentId ?? null}::uuid
       ))
       AND (${profileId ?? null}::text IS NULL
@@ -1298,45 +1376,178 @@ export async function getConversionFunnel(
   profileId?: string
 ): Promise<FunnelStep[]> {
   const { startDate, endDate } = range ?? {};
-  // Funnel derived from the Task Board (tasks JOIN columns). Each step is
-  // cumulative: cards currently in this column OR any column downstream of it.
-  // A card in Won counts toward all earlier stages (Proposals Sent, Responses,
-  // Meetings, Negotiation) since it must have passed through them.
+  // Cumulative funnel steps (Proposals Sent, Responses, Meetings Done, Negotiation)
+  // are gated by FIRST entry into each metric's funnel-stage set, computed via
+  // per-metric move_in_* CTEs + created_at fallback for tasks created already
+  // in-funnel. Jobs Received uses created_at (intake). Passed Filter, Won remain
+  // current-state gated by COALESCE(stage_entered_at, updated_at, created_at).
   const result = await sql`
+    WITH earliest_move AS (
+      SELECT DISTINCT ON (task_id)
+        task_id,
+        LOWER(old_value) AS old_lower
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+      ORDER BY task_id, created_at
+    ),
+    move_in_proposals_sent AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+      GROUP BY task_id
+    ),
+    move_in_proposals_viewed AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+      GROUP BY task_id
+    ),
+    move_in_meetings_done AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN ('meeting done', 'negotiation', 'won')
+      GROUP BY task_id
+    ),
+    move_in_negotiation AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN ('negotiation', 'won')
+      GROUP BY task_id
+    ),
+    task_visited AS (
+      SELECT
+        t.id AS task_id,
+        t.column_id,
+        t.custom_fields,
+        t.updated_at,
+        t.created_at,
+        LOWER(c.name) AS col_lower,
+        LEAST(
+          mips.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_proposals_sent_at,
+        LEAST(
+          mipv.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_proposals_viewed_at,
+        LEAST(
+          mimd.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN ('meeting done', 'negotiation', 'won') THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN ('meeting done', 'negotiation', 'won') THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_meetings_done_at,
+        LEAST(
+          mineg.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN ('negotiation', 'won') THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN ('negotiation', 'won') THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_negotiation_at
+      FROM tasks t
+      JOIN columns c ON c.id = t.column_id
+      LEFT JOIN earliest_move em ON em.task_id = t.id
+      LEFT JOIN move_in_proposals_sent mips ON mips.task_id = t.id
+      LEFT JOIN move_in_proposals_viewed mipv ON mipv.task_id = t.id
+      LEFT JOIN move_in_meetings_done mimd ON mimd.task_id = t.id
+      LEFT JOIN move_in_negotiation mineg ON mineg.task_id = t.id
+    )
     SELECT
-      COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN LOWER(c.name) NOT IN ('rejected', 'filtered out') THEN 1 END) AS passed_filter,
-      COUNT(CASE WHEN LOWER(c.name) IN (
-        'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won', 'lost', 'on hold'
-      ) THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN LOWER(c.name) IN (
-        'proposal views', 'proposal viewed', 'viewed',
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
-      ) THEN 1 END) AS responses,
-      COUNT(CASE WHEN LOWER(c.name) IN ('meeting done', 'negotiation', 'won') THEN 1 END) AS meetings,
-      COUNT(CASE WHEN LOWER(c.name) IN ('negotiation', 'won') THEN 1 END) AS negotiation,
-      COUNT(CASE WHEN LOWER(c.name) = 'won' THEN 1 END) AS won
-    FROM tasks t
-    JOIN columns c ON c.id = t.column_id
-    LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
-    WHERE (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) <= ${endDate}::timestamptz)
-      AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
-        SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
+      COUNT(*) FILTER (
+        WHERE (${startDate}::timestamptz IS NULL OR tv.created_at >= ${startDate}::timestamptz)
+          AND (${endDate}::timestamptz IS NULL OR tv.created_at <= ${endDate}::timestamptz)
+      ) AS total_jobs,
+      COUNT(*) FILTER (
+        WHERE tv.col_lower NOT IN ('rejected', 'filtered out')
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS passed_filter,
+      COUNT(*) FILTER (
+        WHERE tv.first_proposals_sent_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_proposals_sent_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_proposals_sent_at <= ${endDate}::timestamptz)
+      ) AS proposals_sent,
+      COUNT(*) FILTER (
+        WHERE tv.first_proposals_viewed_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_proposals_viewed_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_proposals_viewed_at <= ${endDate}::timestamptz)
+      ) AS responses,
+      COUNT(*) FILTER (
+        WHERE tv.first_meetings_done_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_meetings_done_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_meetings_done_at <= ${endDate}::timestamptz)
+      ) AS meetings,
+      COUNT(*) FILTER (
+        WHERE tv.first_negotiation_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_negotiation_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_negotiation_at <= ${endDate}::timestamptz)
+      ) AS negotiation,
+      COUNT(*) FILTER (
+        WHERE tv.col_lower = 'won'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS won
+    FROM task_visited tv
+    LEFT JOIN jobs j ON j.job_id = (tv.custom_fields->>'_job_id')
+    WHERE (${agentId ?? null}::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM task_assignees ta WHERE ta.task_id = tv.task_id AND ta.agent_id = ${agentId ?? null}::uuid
       ))
       AND (${profileId ?? null}::text IS NULL
         OR j.profile_id = ${profileId ?? null}::text
         OR EXISTS (
           SELECT 1 FROM task_tag_map ttm
           JOIN task_tags tt ON tt.id = ttm.tag_id
-          WHERE ttm.task_id = t.id
+          WHERE ttm.task_id = tv.task_id
             AND LOWER(tt.name) = (SELECT LOWER(profile_name) FROM profiles WHERE profile_id = ${profileId ?? null}::text LIMIT 1)
         ))
   `;
@@ -1407,47 +1618,100 @@ export async function getPipelineStages(
 ): Promise<PipelineStage[]> {
   const { startDate, endDate } = range ?? {};
 
-  // Counts derived from the Task Board (tasks JOIN columns), which is the
-  // source of truth per CLAUDE.md.
-  //
-  // Funnel stages (Proposal Submitted → Negotiation) are CUMULATIVE and
-  // HISTORY-ACCURATE — a card counts toward every stage it has actually
-  // visited per activity_log, not by funnel-order assumption. The
-  // activity_history CTE aggregates every column name appearing in task_moved
-  // entries per task. visited = history ∪ {current column}, so tasks with no
-  // moves still count toward their current column. Each stage tests array
-  // overlap (&&) against the funnel columns from that stage onward.
-  //
-  // A Won card moved Proposal Submitted -> Won (skipping intermediate stages)
-  // counts in Proposal Submitted + Won only. A Lost card moved Proposal
-  // Submitted -> In Chat -> Lost counts in Proposal Submitted, Proposal Views,
-  // and In Chat. Cards created in any column with no moves count only in their
-  // current column.
-  //
-  // Todo, Won, Lost, On Hold, N/A tiles themselves remain current-state.
-  //
-  // Date filter: COALESCE(j.stage_entered_at, t.updated_at, t.created_at) — the
-  // best available "when did this card last change status" timestamp. Linked
-  // tasks (n8n-sourced) use jobs.stage_entered_at; orphan tasks (manually created
-  // on the board) fall back to tasks.updated_at.
-  //
-  // Agent filter: task_assignees (matches how the board filters cards by agent).
-  // Profile filter: only meaningful when the task has a linked job — applied via
-  // the LEFT JOIN to jobs.
+  // Cumulative funnel tiles (Proposal Submitted, Views, Prototype branches,
+  // In Chat, Mtg Booked/Done, Negotiation) are gated by FIRST entry into each
+  // tile's funnel-stage set, computed via per-metric move_in_* CTEs +
+  // created_at fallback for tasks created already in-funnel. Todo, Won, Lost,
+  // On Hold, N/A tiles remain current-state gated by COALESCE(stage_entered_at,
+  // updated_at, created_at).
   const result = await sql`
-    WITH activity_history AS (
-      SELECT
+    WITH earliest_move AS (
+      SELECT DISTINCT ON (task_id)
         task_id,
-        array_agg(DISTINCT col) AS cols
-      FROM (
-        SELECT task_id, LOWER(old_value) AS col
-        FROM activity_log
-        WHERE action_type = 'task_moved' AND field = 'column' AND old_value IS NOT NULL
-        UNION ALL
-        SELECT task_id, LOWER(new_value)
-        FROM activity_log
-        WHERE action_type = 'task_moved' AND field = 'column' AND new_value IS NOT NULL
-      ) sub
+        LOWER(old_value) AS old_lower
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+      ORDER BY task_id, created_at
+    ),
+    move_in_proposals_sent AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+      GROUP BY task_id
+    ),
+    move_in_proposals_viewed AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+      GROUP BY task_id
+    ),
+    move_in_proto_req AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent'
+        )
+      GROUP BY task_id
+    ),
+    move_in_proto_done AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN ('prototype done', 'prototype submitted', 'prototype sent')
+      GROUP BY task_id
+    ),
+    move_in_proto_sub AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN ('prototype submitted', 'prototype sent')
+      GROUP BY task_id
+    ),
+    move_in_in_chat AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+      GROUP BY task_id
+    ),
+    move_in_meetings_booked AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won')
+      GROUP BY task_id
+    ),
+    move_in_meetings_done AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN ('meeting done', 'negotiation', 'won')
+      GROUP BY task_id
+    ),
+    move_in_negotiation AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN ('negotiation', 'won')
       GROUP BY task_id
     ),
     task_visited AS (
@@ -1458,56 +1722,201 @@ export async function getPipelineStages(
         t.updated_at,
         t.created_at,
         LOWER(c.name) AS col_lower,
-        COALESCE(ah.cols, ARRAY[]::text[]) || ARRAY[LOWER(c.name)] AS visited
+        LEAST(
+          mips.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_proposals_sent_at,
+        LEAST(
+          mipv.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_proposals_viewed_at,
+        LEAST(
+          mpr.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_proto_req_at,
+        LEAST(
+          mpd.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN ('prototype done', 'prototype submitted', 'prototype sent') THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN ('prototype done', 'prototype submitted', 'prototype sent') THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_proto_done_at,
+        LEAST(
+          mps.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN ('prototype submitted', 'prototype sent') THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN ('prototype submitted', 'prototype sent') THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_proto_sub_at,
+        LEAST(
+          mic.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_in_chat_at,
+        LEAST(
+          mimb.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_meetings_booked_at,
+        LEAST(
+          mimd.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN ('meeting done', 'negotiation', 'won') THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN ('meeting done', 'negotiation', 'won') THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_meetings_done_at,
+        LEAST(
+          mineg.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN ('negotiation', 'won') THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN ('negotiation', 'won') THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_negotiation_at
       FROM tasks t
       JOIN columns c ON c.id = t.column_id
-      LEFT JOIN activity_history ah ON ah.task_id = t.id
+      LEFT JOIN earliest_move em ON em.task_id = t.id
+      LEFT JOIN move_in_proposals_sent mips ON mips.task_id = t.id
+      LEFT JOIN move_in_proposals_viewed mipv ON mipv.task_id = t.id
+      LEFT JOIN move_in_proto_req mpr ON mpr.task_id = t.id
+      LEFT JOIN move_in_proto_done mpd ON mpd.task_id = t.id
+      LEFT JOIN move_in_proto_sub mps ON mps.task_id = t.id
+      LEFT JOIN move_in_in_chat mic ON mic.task_id = t.id
+      LEFT JOIN move_in_meetings_booked mimb ON mimb.task_id = t.id
+      LEFT JOIN move_in_meetings_done mimd ON mimd.task_id = t.id
+      LEFT JOIN move_in_negotiation mineg ON mineg.task_id = t.id
     )
     SELECT
-      COUNT(CASE WHEN tv.col_lower IN ('todo', 'to do', 'new', 'proposal ready') THEN 1 END) AS todo,
-      COUNT(CASE WHEN tv.visited && ARRAY[
-        'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
-      ]::text[] THEN 1 END) AS proposal_submitted,
-      COUNT(CASE WHEN tv.visited && ARRAY[
-        'proposal views', 'proposal viewed', 'viewed',
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
-      ]::text[] THEN 1 END) AS proposal_views,
-      -- Prototype is an OPTIONAL branch, not a linear funnel step. A card only
-      -- counts toward a Prototype tile if it actually visited a prototype column.
-      -- Reaching In Chat / Meeting / Negotiation / Won does NOT imply Prototype.
-      COUNT(CASE WHEN tv.visited && ARRAY[
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent'
-      ]::text[] THEN 1 END) AS prototype_required,
-      COUNT(CASE WHEN tv.visited && ARRAY[
-        'prototype done', 'prototype submitted', 'prototype sent'
-      ]::text[] THEN 1 END) AS prototype_done,
-      COUNT(CASE WHEN tv.visited && ARRAY[
-        'prototype submitted', 'prototype sent'
-      ]::text[] THEN 1 END) AS prototype_submitted,
-      COUNT(CASE WHEN tv.visited && ARRAY[
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
-      ]::text[] THEN 1 END) AS in_chat,
-      COUNT(CASE WHEN tv.visited && ARRAY['meeting scheduled', 'meeting done', 'negotiation', 'won']::text[] THEN 1 END) AS meeting_booked,
-      COUNT(CASE WHEN tv.visited && ARRAY['meeting done', 'negotiation', 'won']::text[] THEN 1 END) AS meeting_done,
-      COUNT(CASE WHEN tv.visited && ARRAY['negotiation', 'won']::text[] THEN 1 END) AS negotiation,
-      COUNT(CASE WHEN tv.col_lower = 'won' THEN 1 END) AS won,
-      COUNT(CASE WHEN tv.col_lower = 'lost' THEN 1 END) AS lost,
-      COUNT(CASE WHEN tv.col_lower = 'on hold' THEN 1 END) AS on_hold,
-      COUNT(CASE WHEN tv.col_lower = 'n/a' THEN 1 END) AS na
+      COUNT(*) FILTER (
+        WHERE tv.col_lower IN ('todo', 'to do', 'new', 'proposal ready')
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS todo,
+      COUNT(*) FILTER (
+        WHERE tv.first_proposals_sent_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_proposals_sent_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_proposals_sent_at <= ${endDate}::timestamptz)
+      ) AS proposal_submitted,
+      COUNT(*) FILTER (
+        WHERE tv.first_proposals_viewed_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_proposals_viewed_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_proposals_viewed_at <= ${endDate}::timestamptz)
+      ) AS proposal_views,
+      COUNT(*) FILTER (
+        WHERE tv.first_proto_req_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_proto_req_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_proto_req_at <= ${endDate}::timestamptz)
+      ) AS prototype_required,
+      COUNT(*) FILTER (
+        WHERE tv.first_proto_done_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_proto_done_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_proto_done_at <= ${endDate}::timestamptz)
+      ) AS prototype_done,
+      COUNT(*) FILTER (
+        WHERE tv.first_proto_sub_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_proto_sub_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_proto_sub_at <= ${endDate}::timestamptz)
+      ) AS prototype_submitted,
+      COUNT(*) FILTER (
+        WHERE tv.first_in_chat_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_in_chat_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_in_chat_at <= ${endDate}::timestamptz)
+      ) AS in_chat,
+      COUNT(*) FILTER (
+        WHERE tv.first_meetings_booked_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_meetings_booked_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_meetings_booked_at <= ${endDate}::timestamptz)
+      ) AS meeting_booked,
+      COUNT(*) FILTER (
+        WHERE tv.first_meetings_done_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_meetings_done_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_meetings_done_at <= ${endDate}::timestamptz)
+      ) AS meeting_done,
+      COUNT(*) FILTER (
+        WHERE tv.first_negotiation_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR tv.first_negotiation_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR tv.first_negotiation_at <= ${endDate}::timestamptz)
+      ) AS negotiation,
+      COUNT(*) FILTER (
+        WHERE tv.col_lower = 'won'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS won,
+      COUNT(*) FILTER (
+        WHERE tv.col_lower = 'lost'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS lost,
+      COUNT(*) FILTER (
+        WHERE tv.col_lower = 'on hold'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS on_hold,
+      COUNT(*) FILTER (
+        WHERE tv.col_lower = 'n/a'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS na
     FROM task_visited tv
     LEFT JOIN jobs j ON j.job_id = (tv.custom_fields->>'_job_id')
-    WHERE (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
-      AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
+    WHERE (${agentId ?? null}::uuid IS NULL OR EXISTS (
         SELECT 1 FROM task_assignees ta WHERE ta.task_id = tv.task_id AND ta.agent_id = ${agentId ?? null}::uuid
       ))
       AND (${profileId ?? null}::text IS NULL
@@ -1652,55 +2061,149 @@ export async function getEnhancedAgentStats(
 ): Promise<EnhancedAgentStats[]> {
   const { startDate, endDate } = range ?? {};
 
-  // Counts derived from the Task Board: each agent's tasks (via task_assignees),
-  // grouped by current column. Win rate uses won/(won+lost) — % of decided
-  // cards that won. Revenue and avg_response_hours stay on jobs (only linked
-  // tasks have won_value and received_at).
+  // proposals_sent / meetings_done use first entry into each metric's funnel
+  // window (matches getKPIMetrics). won/lost stay current-state, gated by
+  // COALESCE(stage_entered_at, updated_at, created_at). total_jobs uses created_at.
   const result = await sql`
-    WITH scoped_tasks AS (
+    WITH earliest_move AS (
+      SELECT DISTINCT ON (task_id)
+        task_id,
+        LOWER(old_value) AS old_lower
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+      ORDER BY task_id, created_at
+    ),
+    move_in_proposals_sent AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+      GROUP BY task_id
+    ),
+    move_in_meetings_done AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN ('meeting done', 'negotiation', 'won')
+      GROUP BY task_id
+    ),
+    agent_scoped_tasks AS (
       SELECT
         ta.agent_id,
         t.id AS task_id,
+        t.created_at,
+        t.updated_at,
         c.name AS col_name,
+        LOWER(c.name) AS col_lower,
         j.profile_id,
         j.won_value,
         j.proposal_sent_at,
-        j.received_at
+        j.received_at,
+        j.stage_entered_at,
+        LEAST(
+          mips.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_proposals_sent_at,
+        LEAST(
+          mimd.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN ('meeting done', 'negotiation', 'won') THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN ('meeting done', 'negotiation', 'won') THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_meetings_done_at
       FROM tasks t
       JOIN task_assignees ta ON ta.task_id = t.id
       JOIN columns c ON c.id = t.column_id
+      LEFT JOIN earliest_move em ON em.task_id = t.id
+      LEFT JOIN move_in_proposals_sent mips ON mips.task_id = t.id
+      LEFT JOIN move_in_meetings_done mimd ON mimd.task_id = t.id
       LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
-      WHERE (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) >= ${startDate}::timestamptz)
-        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) <= ${endDate}::timestamptz)
-        AND (${profileId ?? null}::text IS NULL
-          OR j.profile_id = ${profileId ?? null}::text
-          OR EXISTS (
-            SELECT 1 FROM task_tag_map ttm
-            JOIN task_tags tt ON tt.id = ttm.tag_id
-            WHERE ttm.task_id = t.id
-              AND LOWER(tt.name) = (SELECT LOWER(profile_name) FROM profiles WHERE profile_id = ${profileId ?? null}::text LIMIT 1)
-          ))
+      WHERE (${profileId ?? null}::text IS NULL
+        OR j.profile_id = ${profileId ?? null}::text
+        OR EXISTS (
+          SELECT 1 FROM task_tag_map ttm
+          JOIN task_tags tt ON tt.id = ttm.tag_id
+          WHERE ttm.task_id = t.id
+            AND LOWER(tt.name) = (SELECT LOWER(profile_name) FROM profiles WHERE profile_id = ${profileId ?? null}::text LIMIT 1)
+        ))
     )
     SELECT
       a.id,
       a.name,
-      COUNT(s.task_id) AS total_jobs,
-      COUNT(CASE WHEN LOWER(s.col_name) = 'proposal submitted' THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN LOWER(s.col_name) = 'won' THEN 1 END) AS won,
-      COUNT(CASE WHEN LOWER(s.col_name) = 'lost' THEN 1 END) AS lost,
+      COUNT(s.task_id) FILTER (
+        WHERE (${startDate}::timestamptz IS NULL OR s.created_at >= ${startDate}::timestamptz)
+          AND (${endDate}::timestamptz IS NULL OR s.created_at <= ${endDate}::timestamptz)
+      ) AS total_jobs,
+      COUNT(*) FILTER (
+        WHERE s.first_proposals_sent_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR s.first_proposals_sent_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR s.first_proposals_sent_at <= ${endDate}::timestamptz)
+      ) AS proposals_sent,
+      COUNT(*) FILTER (
+        WHERE s.col_lower = 'won'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) <= ${endDate}::timestamptz)
+      ) AS won,
+      COUNT(*) FILTER (
+        WHERE s.col_lower = 'lost'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) <= ${endDate}::timestamptz)
+      ) AS lost,
       ROUND(
-        COUNT(CASE WHEN LOWER(s.col_name) = 'won' THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE WHEN LOWER(s.col_name) IN ('won', 'lost') THEN 1 END), 0) * 100, 1
+        COUNT(*) FILTER (
+          WHERE s.col_lower = 'won'
+          AND (${startDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) >= ${startDate}::timestamptz)
+          AND (${endDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) <= ${endDate}::timestamptz)
+        )::DECIMAL /
+        NULLIF(COUNT(*) FILTER (
+          WHERE s.col_lower IN ('won', 'lost')
+          AND (${startDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) >= ${startDate}::timestamptz)
+          AND (${endDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) <= ${endDate}::timestamptz)
+        ), 0) * 100, 1
       ) AS win_rate_pct,
-      COALESCE(SUM(CASE WHEN LOWER(s.col_name) = 'won' THEN s.won_value END), 0) AS total_revenue,
+      COALESCE(SUM(s.won_value) FILTER (
+        WHERE s.col_lower = 'won'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) <= ${endDate}::timestamptz)
+      ), 0) AS total_revenue,
       AVG(
         CASE WHEN s.proposal_sent_at IS NOT NULL AND s.received_at IS NOT NULL
         THEN EXTRACT(EPOCH FROM (s.proposal_sent_at - s.received_at)) / 3600
         END
+      ) FILTER (
+        WHERE (${startDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) <= ${endDate}::timestamptz)
       ) AS avg_response_hours,
-      COUNT(CASE WHEN LOWER(s.col_name) = 'meeting done' THEN 1 END) AS meetings_done
+      COUNT(*) FILTER (
+        WHERE s.first_meetings_done_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR s.first_meetings_done_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR s.first_meetings_done_at <= ${endDate}::timestamptz)
+      ) AS meetings_done
     FROM agents a
-    LEFT JOIN scoped_tasks s ON s.agent_id = a.id
+    LEFT JOIN agent_scoped_tasks s ON s.agent_id = a.id
     WHERE a.active = true
       AND (${agentId ?? null}::uuid IS NULL OR a.id = ${agentId ?? null}::uuid)
     GROUP BY a.id, a.name
@@ -1771,49 +2274,173 @@ export async function getEnhancedProfileStats(
 ): Promise<EnhancedProfileStats[]> {
   const { startDate, endDate } = range ?? {};
 
-  // Counts derived from the Task Board: profile is taken from the linked job
-  // when available. Profiles only count tasks that have a linked job (since the
-  // profile-task link runs through jobs.profile_id) — this is fine because
-  // orphan/manual tasks have no profile association anyway.
+  // proposals_sent / responded / reached_meeting use first entry into each
+  // metric's funnel window (matches getKPIMetrics). won stays current-state,
+  // gated by COALESCE(stage_entered_at, updated_at, created_at). total_jobs
+  // uses created_at. Profile link is via jobs.profile_id (orphan tasks have no profile).
   const result = await sql`
-    WITH scoped_tasks AS (
+    WITH earliest_move AS (
+      SELECT DISTINCT ON (task_id)
+        task_id,
+        LOWER(old_value) AS old_lower
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+      ORDER BY task_id, created_at
+    ),
+    move_in_proposals_sent AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+      GROUP BY task_id
+    ),
+    move_in_responded AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+      GROUP BY task_id
+    ),
+    move_in_reached_meeting AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won')
+      GROUP BY task_id
+    ),
+    profile_scoped_tasks AS (
       SELECT
         j.profile_id,
         t.id AS task_id,
+        t.created_at,
+        t.updated_at,
         c.name AS col_name,
+        LOWER(c.name) AS col_lower,
         j.won_value,
-        j.agent_id
+        j.agent_id,
+        j.stage_entered_at,
+        LEAST(
+          mips.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_proposals_sent_at,
+        LEAST(
+          mir.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_responded_at,
+        LEAST(
+          mirm.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_reached_meeting_at
       FROM tasks t
       JOIN columns c ON c.id = t.column_id
       JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
-      WHERE (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) >= ${startDate}::timestamptz)
-        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.updated_at, t.created_at) <= ${endDate}::timestamptz)
-        AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
+      LEFT JOIN earliest_move em ON em.task_id = t.id
+      LEFT JOIN move_in_proposals_sent mips ON mips.task_id = t.id
+      LEFT JOIN move_in_responded mir ON mir.task_id = t.id
+      LEFT JOIN move_in_reached_meeting mirm ON mirm.task_id = t.id
+      WHERE (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
     )
     SELECT
       p.id,
       p.profile_id,
       p.profile_name,
       p.stack,
-      COUNT(s.task_id) AS total_jobs,
-      COUNT(CASE WHEN LOWER(s.col_name) = 'won' THEN 1 END) AS won,
+      COUNT(s.task_id) FILTER (
+        WHERE (${startDate}::timestamptz IS NULL OR s.created_at >= ${startDate}::timestamptz)
+          AND (${endDate}::timestamptz IS NULL OR s.created_at <= ${endDate}::timestamptz)
+      ) AS total_jobs,
+      COUNT(*) FILTER (
+        WHERE s.col_lower = 'won'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) <= ${endDate}::timestamptz)
+      ) AS won,
       ROUND(
-        COUNT(CASE WHEN LOWER(s.col_name) = 'won' THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE WHEN LOWER(s.col_name) IN ('won', 'lost') THEN 1 END), 0) * 100, 1
+        COUNT(*) FILTER (
+          WHERE s.col_lower = 'won'
+          AND (${startDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) >= ${startDate}::timestamptz)
+          AND (${endDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) <= ${endDate}::timestamptz)
+        )::DECIMAL /
+        NULLIF(COUNT(*) FILTER (
+          WHERE s.col_lower IN ('won', 'lost')
+          AND (${startDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) >= ${startDate}::timestamptz)
+          AND (${endDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) <= ${endDate}::timestamptz)
+        ), 0) * 100, 1
       ) AS win_rate_pct,
-      AVG(CASE WHEN LOWER(s.col_name) = 'won' THEN s.won_value END) AS avg_won_value,
-      COALESCE(SUM(CASE WHEN LOWER(s.col_name) = 'won' THEN s.won_value END), 0) AS total_revenue,
-      COUNT(CASE WHEN LOWER(s.col_name) IN (
-        'proposal views', 'proposal viewed', 'viewed',
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
-      ) THEN 1 END) AS responded,
-      COUNT(CASE WHEN LOWER(s.col_name) = 'proposal submitted' THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN LOWER(s.col_name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN 1 END) AS reached_meeting
+      AVG(s.won_value) FILTER (
+        WHERE s.col_lower = 'won'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) <= ${endDate}::timestamptz)
+      ) AS avg_won_value,
+      COALESCE(SUM(s.won_value) FILTER (
+        WHERE s.col_lower = 'won'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(s.stage_entered_at, s.updated_at, s.created_at) <= ${endDate}::timestamptz)
+      ), 0) AS total_revenue,
+      COUNT(*) FILTER (
+        WHERE s.first_responded_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR s.first_responded_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR s.first_responded_at <= ${endDate}::timestamptz)
+      ) AS responded,
+      COUNT(*) FILTER (
+        WHERE s.first_proposals_sent_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR s.first_proposals_sent_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR s.first_proposals_sent_at <= ${endDate}::timestamptz)
+      ) AS proposals_sent,
+      COUNT(*) FILTER (
+        WHERE s.first_reached_meeting_at IS NOT NULL
+        AND (${startDate}::timestamptz IS NULL OR s.first_reached_meeting_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR s.first_reached_meeting_at <= ${endDate}::timestamptz)
+      ) AS reached_meeting
     FROM profiles p
-    LEFT JOIN scoped_tasks s ON s.profile_id = p.profile_id
+    LEFT JOIN profile_scoped_tasks s ON s.profile_id = p.profile_id
     WHERE p.active = true
       AND (${profileId ?? null}::text IS NULL OR p.profile_id = ${profileId ?? null}::text)
     GROUP BY p.id, p.profile_id, p.profile_name, p.stack
