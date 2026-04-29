@@ -100,8 +100,8 @@ export function HeaderControls({ agents, profiles, hideFilters, hideAgentFilter 
               onChange={handleSelectChange}
               className="appearance-none cursor-pointer rounded-[7px] border border-border bg-transparent py-1.5 pr-7 pl-8 text-[13.5px] font-semibold text-muted-foreground transition-all hover:border-[var(--primary)] hover:text-foreground focus:border-[var(--primary)] focus:text-foreground focus:outline-none min-w-[100px]"
             >
-              <option value="">PKT</option>
-              <option value="et">Eastern</option>
+              <option value="">Eastern</option>
+              <option value="pkt">PKT</option>
             </select>
             <span className="pointer-events-none absolute right-2 text-[12px] text-muted-foreground">
               ▾
