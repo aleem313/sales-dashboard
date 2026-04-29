@@ -81,25 +81,24 @@ Middleware (`src/middleware.ts`) enforces auth and redirects agents away from ad
 - **Active workflow**: "multiple webhooks" (EWnZg3svZWwcIRs4) — 8 Vollna webhooks per agent (Sana, Laiba, Khansa, Saim, Shayan, Craig, Rebekah, Nawal) → Claude AI proposals → Board task creation → Dashboard webhook
 - **Webhook payload**: Nested format with `job`, `client`, `routing`, `scores`, `proposal`, `outcome` fields. Normalized by `/api/webhook/n8n` route.
 - **Outcome values received by dashboard**: `proposal_created`, `gpt_error`, `rejected`, `no_profile`, `weekend`, `inactive`, `duplicate`. Computed in `Format Dashboard Event` (fallback: `item.taskName && item.proposal → 'proposal_created'`).
-- **Internal `_result` values actually emitted by `Process Job`** (current state, 2026-04-29): only `proceed`, `no_profile`, `rejected`. The `Route Job` Switch has rules for `inactive`, `duplicate`, and `weekend` as well, but those branches are unreachable because `Process Job` never sets those values and the `Check Active Hours` weekend gate is currently disconnected (see Gotchas).
+- **Internal `_result` values actually emitted by `Process Job`** (current state, 2026-04-29): only `proceed`, `no_profile`, `rejected`. The `Route Job` Switch has rules for `inactive`, `duplicate`, and `weekend` as well, but those branches are unreachable because `Process Job` never sets those values.
 
 ### n8n → Task Board Architecture
 
-The n8n workflow delivers processed jobs to the **Task Board** after AI proposal generation. As of 2026-04-29, `Format ClickUp Task` fans out to **four** parallel downstreams (each environment receives both a Board task creation AND a dashboard event):
+The n8n workflow delivers processed jobs to the **Task Board** after AI proposal generation. As of 2026-04-29, `Format ClickUp Task` fans out to **three** parallel downstreams (each environment receives both a Board task creation AND a dashboard event):
 
 ```
-Format ClickUp Task ┬─► Create ClickUp Task               (legacy — removable, ClickUp killed in M8)
-                    ├─► Create Board Task                  → Vercel  POST /api/v1/webhooks/tasks   (Bearer n8n-board-sync, tasks table)
+Format ClickUp Task ┬─► Create Board Task                  → Vercel  POST /api/v1/webhooks/tasks   (Bearer n8n-board-sync, tasks table)
                     ├─► Create Board Task - Self-Hosted    → Contabo POST /api/v1/webhooks/tasks   (Bearer n8n-board-sync, tasks table)
                     └─► Format Dashboard Event ┬─► Send to Dashboard              → Vercel  POST /api/webhook/n8n     (HMAC, jobs table)
                                                 └─► Send to Self-Hosted Dashboard  → Contabo POST http://157.173.110.62/api/webhook/n8n
 ```
 
-Per environment there are two writes: the Board API (`/api/v1/webhooks/tasks`, populates `tasks` table) and the dashboard webhook (`/api/webhook/n8n`, populates `jobs` table + auto-assigns agent / creates profile / adds `vollna-auto` tag). All four HTTP nodes use `neverError: true` so a down environment never breaks the pipeline.
+Per environment there are two writes: the Board API (`/api/v1/webhooks/tasks`, populates `tasks` table) and the dashboard webhook (`/api/webhook/n8n`, populates `jobs` table + auto-assigns agent / creates profile / adds `vollna-auto` tag). All four active HTTP nodes use `neverError: true` so a down environment never breaks the pipeline.
 
-The payload shape is identical between the Vercel and Contabo dashboard sinks — `clickup.taskId` / `clickup.taskUrl` are always `null` because Format Dashboard Event runs before any ClickUp API response exists. Outcome detection falls back to `item.taskName && item.proposal → 'proposal_created'` which is already coded in the Format Dashboard Event Code node.
+The payload shape is identical between the Vercel and Contabo dashboard sinks — `clickup.taskId` / `clickup.taskUrl` are always `null` (legacy fields preserved for backward compat with the dashboard schema). Outcome detection falls back to `item.taskName && item.proposal → 'proposal_created'` which is already coded in the Format Dashboard Event Code node.
 
-If/when ClickUp is removed, deleting `Create ClickUp Task` is safe — the remaining three downstreams (two Board APIs + Format Dashboard Event) keep operating unchanged.
+The legacy `Create ClickUp Task` sink was removed on 2026-04-29 (TD-7) — ClickUp had been killed in M8 and the sink was dead weight.
 
 - **Board API**: `POST /api/v1/webhooks/tasks` with Bearer token auth (`n8n-board-sync`). Falls back to default project.
 - **Payload mapping**: Task title = `[profile] Job Title`, description = rich formatted proposal + job snapshot. Job metadata stored in `custom_fields` (`_job_id`, `_job_url`, `_budget`, `_skills`, `_proposal`, `_assigned_agent`, `_profile_name`, `_source`, client data)
@@ -222,7 +221,7 @@ Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variabl
 - **Merge node must stay on v3.2** — v3.2 gracefully handles partial inputs (one webhook fires, others ignored); v3 passes through on ANY input causing parallel downstream execution and OOM crashes. Do NOT downgrade to v3.
 - **Merge `numberInputs` must equal webhook count** — currently 8 (Sana, Laiba, Khansa, Saim, Shayan, Craig, Rebekah, Nawal).
 - **Each Respond node feeds a unique Merge input index** — Sana=0, Laiba=1, Khansa=2, Saim=3, Shayan=4, Craig=5, Rebekah=6, Nawal=7. `Merge All Webhooks` has `numberInputs: 8`. Restored on 2026-04-29 via `n8n_update_partial_workflow` (12 ops: remove + re-add for 6 Respond nodes) after a regression in which 7 of 8 Respond nodes had collided on input `0`. Verified live by Vollna firing test jobs that landed on the Task Board correctly. **Do not change this** — Merge v3.2 only guarantees per-agent isolation when each agent has its own dedicated input.
-- **`Check Active Hours` weekend + time gate (currently DISCONNECTED, 2026-04-29)** — this Code node implements a Mon–Fri 16:10 → 02:00 Asia/Karachi (PKT) gate (returns `[]` on Saturdays/Sundays via `getDay()` check, otherwise filters by minute-of-day). It is currently **orphaned in workflow `EWnZg3svZWwcIRs4`** with zero inbound and zero outbound connections. The active path runs `Merge All Webhooks → Process Job` directly, so weekend / off-hours events are NOT filtered at the workflow level. The only filtering Process Job does is `_result: 'rejected'` for missing profile-mapping fetch or empty payloads. To re-enable the gate, splice it between `Merge All Webhooks` and `Process Job`. Do NOT debug "nothing is happening" on weekends by blaming this node — it isn't running.
+- **`Check Active Hours` node has been REMOVED (2026-04-29)** — the workflow no longer enforces a business-hours / weekend gate. All Vollna webhook events flow `Merge All Webhooks → Process Job` directly, regardless of day or time. Vollna is the gating mechanism: agents pause/resume their own feeds outside working hours. If a future requirement needs business-hours filtering, splice a fresh Code node between `Merge All Webhooks` and `Process Job` — do not look for the old node, it isn't there.
 - **Parallel dashboard sinks** — `Format Dashboard Event` fans out to `Send to Dashboard` (Vercel) AND `Send to Self-Hosted Dashboard` (Contabo `157.173.110.62`) in parallel. Both use `neverError: true`. When editing the Format Dashboard Event code, verify both sinks receive the same shape.
 
 ### Adding a New Profile/Webhook Node to n8n

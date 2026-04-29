@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-29T13:52:21.631Z",
+  "updatedAt": "2026-04-29T16:04:52.479Z",
   "createdAt": "2026-03-05T17:20:23.376Z",
   "id": "EWnZg3svZWwcIRs4",
   "name": "multiple webhooks",
@@ -229,45 +229,6 @@
         1280,
         64
       ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=https://api.clickup.com/api/v2/list/{{ $json.clickup_list_id }}/task",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "clickUpApi",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.taskBody) }}",
-        "options": {}
-      },
-      "id": "82b3eb32-5759-48a4-872f-01df9d5427b3",
-      "name": "Create ClickUp Task",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        1504,
-        64
-      ],
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 2000,
-      "credentials": {
-        "clickUpApi": {
-          "id": "0M8vRzxHZsZjgRc3",
-          "name": "Ikonicdev"
-        }
-      },
-      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -585,19 +546,6 @@
       "position": [
         624,
         384
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Check if current time is within active hours (16:10 PM - 2:00 AM PKT, Monday-Friday)\nconst now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Karachi' }));\nconst day = now.getDay();\nconst hour = now.getHours();\nconst minute = now.getMinutes();\n\n// Skip on Saturday (6) and Sunday (0)\nif (day === 0 || day === 6) {\n  return [];\n}\n\n// Convert current time to minutes since midnight\nconst currentMinutes = hour * 60 + minute;\n\n// Start time: 16:10 (970 minutes)\nconst startMinutes = 16 * 60 + 10;\n\n// End time: 2:00 AM next day (120 minutes)\nconst endMinutes = 2 * 60;\n\n// Check if within time window (spans midnight)\nconst isActiveHours = currentMinutes >= startMinutes || currentMinutes < endMinutes;\n\nif (isActiveHours) {\n  // Return all input items during active hours\n  return $input.all();\n} else {\n  // Return empty array outside active hours\n  return [];\n}"
-      },
-      "id": "f90ea9a3-d430-447c-86a4-f8d2714708db",
-      "name": "Check Active Hours",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -400,
-        112
       ]
     },
     {
@@ -934,11 +882,6 @@
       "main": [
         [
           {
-            "node": "Create ClickUp Task",
-            "type": "main",
-            "index": 0
-          },
-          {
             "node": "Create Board Task",
             "type": "main",
             "index": 0
@@ -1038,17 +981,6 @@
         ]
       ]
     },
-    "Merge All Webhooks": {
-      "main": [
-        [
-          {
-            "node": "Process Job",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Extract Error": {
       "main": [
         [
@@ -1107,11 +1039,6 @@
             "index": 0
           }
         ]
-      ]
-    },
-    "Check Active Hours": {
-      "main": [
-        []
       ]
     },
     "Respond - Sana": {
@@ -1220,6 +1147,17 @@
             "node": "Merge All Webhooks",
             "type": "main",
             "index": 6
+          }
+        ]
+      ]
+    },
+    "Merge All Webhooks": {
+      "main": [
+        [
+          {
+            "node": "Process Job",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -10828,6 +10766,46 @@
         "022049488178288860008": {
           "status": "success",
           "timestamp": 1777471280176
+        },
+        "022049510481481303420": {
+          "status": "success",
+          "timestamp": 1777476920837
+        },
+        "022049500536703037649": {
+          "status": "gpt_failed",
+          "timestamp": 1777476984542
+        },
+        "022049286198447372039": {
+          "status": "success",
+          "timestamp": 1777477040705
+        },
+        "022049510575006298321": {
+          "status": "success",
+          "timestamp": 1777477098097
+        },
+        "022049515719125510914": {
+          "status": "success",
+          "timestamp": 1777478358566
+        },
+        "022049516147481019072": {
+          "status": "success",
+          "timestamp": 1777477946547
+        },
+        "022049516847749802754": {
+          "status": "success",
+          "timestamp": 1777478240313
+        },
+        "022049517755845255125": {
+          "status": "success",
+          "timestamp": 1777478304365
+        },
+        "022049518352812878594": {
+          "status": "gpt_failed",
+          "timestamp": 1777478434826
+        },
+        "022049519266453924610": {
+          "status": "success",
+          "timestamp": 1777478601858
         }
       },
       "hookRotation": {
@@ -10843,7 +10821,7 @@
         "khansa": "A",
         "laiba": "A",
         "craig": "B",
-        "sana": "A"
+        "sana": "B"
       }
     }
   },
@@ -10851,9 +10829,9 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "b9b837a9-f226-472e-aeb8-b4092c963334",
-  "activeVersionId": "b9b837a9-f226-472e-aeb8-b4092c963334",
-  "versionCounter": 2588,
+  "versionId": "cf490d93-28de-4194-aa3a-94d9279ea760",
+  "activeVersionId": "cf490d93-28de-4194-aa3a-94d9279ea760",
+  "versionCounter": 2609,
   "triggerCount": 8,
   "shared": [
     {
@@ -10876,9 +10854,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-04-29T13:52:21.633Z",
-    "createdAt": "2026-04-29T13:52:21.633Z",
-    "versionId": "b9b837a9-f226-472e-aeb8-b4092c963334",
+    "updatedAt": "2026-04-29T16:04:52.481Z",
+    "createdAt": "2026-04-29T16:04:52.481Z",
+    "versionId": "cf490d93-28de-4194-aa3a-94d9279ea760",
     "workflowId": "EWnZg3svZWwcIRs4",
     "nodes": [
       {
@@ -11103,45 +11081,6 @@
           1280,
           64
         ]
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "=https://api.clickup.com/api/v2/list/{{ $json.clickup_list_id }}/task",
-          "authentication": "predefinedCredentialType",
-          "nodeCredentialType": "clickUpApi",
-          "sendHeaders": true,
-          "headerParameters": {
-            "parameters": [
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              }
-            ]
-          },
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify($json.taskBody) }}",
-          "options": {}
-        },
-        "id": "82b3eb32-5759-48a4-872f-01df9d5427b3",
-        "name": "Create ClickUp Task",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.4,
-        "position": [
-          1504,
-          64
-        ],
-        "retryOnFail": true,
-        "maxTries": 3,
-        "waitBetweenTries": 2000,
-        "credentials": {
-          "clickUpApi": {
-            "id": "0M8vRzxHZsZjgRc3",
-            "name": "Ikonicdev"
-          }
-        },
-        "onError": "continueRegularOutput"
       },
       {
         "parameters": {
@@ -11459,19 +11398,6 @@
         "position": [
           624,
           384
-        ]
-      },
-      {
-        "parameters": {
-          "jsCode": "// Check if current time is within active hours (16:10 PM - 2:00 AM PKT, Monday-Friday)\nconst now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Karachi' }));\nconst day = now.getDay();\nconst hour = now.getHours();\nconst minute = now.getMinutes();\n\n// Skip on Saturday (6) and Sunday (0)\nif (day === 0 || day === 6) {\n  return [];\n}\n\n// Convert current time to minutes since midnight\nconst currentMinutes = hour * 60 + minute;\n\n// Start time: 16:10 (970 minutes)\nconst startMinutes = 16 * 60 + 10;\n\n// End time: 2:00 AM next day (120 minutes)\nconst endMinutes = 2 * 60;\n\n// Check if within time window (spans midnight)\nconst isActiveHours = currentMinutes >= startMinutes || currentMinutes < endMinutes;\n\nif (isActiveHours) {\n  // Return all input items during active hours\n  return $input.all();\n} else {\n  // Return empty array outside active hours\n  return [];\n}"
-        },
-        "id": "f90ea9a3-d430-447c-86a4-f8d2714708db",
-        "name": "Check Active Hours",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          -400,
-          112
         ]
       },
       {
@@ -11808,11 +11734,6 @@
         "main": [
           [
             {
-              "node": "Create ClickUp Task",
-              "type": "main",
-              "index": 0
-            },
-            {
               "node": "Create Board Task",
               "type": "main",
               "index": 0
@@ -11912,17 +11833,6 @@
           ]
         ]
       },
-      "Merge All Webhooks": {
-        "main": [
-          [
-            {
-              "node": "Process Job",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
       "Extract Error": {
         "main": [
           [
@@ -11981,11 +11891,6 @@
               "index": 0
             }
           ]
-        ]
-      },
-      "Check Active Hours": {
-        "main": [
-          []
         ]
       },
       "Respond - Sana": {
@@ -12097,6 +12002,17 @@
             }
           ]
         ]
+      },
+      "Merge All Webhooks": {
+        "main": [
+          [
+            {
+              "node": "Process Job",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Aleem Ahmed",
@@ -12105,18 +12021,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-04-29T13:52:22.326Z",
-        "id": 283,
+        "createdAt": "2026-04-29T16:04:53.018Z",
+        "id": 287,
         "workflowId": "EWnZg3svZWwcIRs4",
-        "versionId": "b9b837a9-f226-472e-aeb8-b4092c963334",
+        "versionId": "cf490d93-28de-4194-aa3a-94d9279ea760",
         "event": "activated",
         "userId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
       },
       {
-        "createdAt": "2026-04-29T13:52:21.889Z",
-        "id": 282,
+        "createdAt": "2026-04-29T16:04:52.671Z",
+        "id": 286,
         "workflowId": "EWnZg3svZWwcIRs4",
-        "versionId": "b9b837a9-f226-472e-aeb8-b4092c963334",
+        "versionId": "cf490d93-28de-4194-aa3a-94d9279ea760",
         "event": "deactivated",
         "userId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
       }
