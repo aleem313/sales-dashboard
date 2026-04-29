@@ -383,9 +383,10 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
   }
 
   // Use store tasks grouped by column — respects active filters.
-  // Display order:
-  //   - "Todo" column → latest first (created_at DESC)
-  //   - every other column → priority (urgent→high→medium→low), tie-break created_at DESC
+  // Display order (universal across all columns):
+  //   1. priority (urgent → high → medium → low → none)
+  //   2. last_status_at DESC (most recent task_moved; falls back to created_at)
+  //   3. created_at DESC
   // Internal drag math (inside DnD handlers) still uses position via store.getTasksByColumn.
   const filteredTasks = store.getFilteredTasks();
   const getColumnTasks = (columnId: string) => {
