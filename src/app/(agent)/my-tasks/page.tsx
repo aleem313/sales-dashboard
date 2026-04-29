@@ -22,7 +22,7 @@ import { parseBoardFiltersFromSearchParams, firstSearchParam, INITIAL_PER_COLUMN
 import { getAgentById } from "@/lib/data";
 import { BoardStoreInitializer } from "@/components/tasks/board-store-initializer";
 import { BoardFilterBar } from "@/components/tasks/board-filter-bar";
-import { AutoRefresh } from "@/components/auto-refresh";
+import { BoardAutoRefresh } from "@/components/tasks/board-auto-refresh";
 
 interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -145,7 +145,7 @@ function AgentBoardSelector({ projects, currentProjectId }: { projects: { id: st
 export default function MyTasksPage({ searchParams }: Props) {
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
-      <AutoRefresh interval={5000} runInBackground />
+      <BoardAutoRefresh interval={5000} runInBackground />
       <Suspense
         fallback={
           <>
