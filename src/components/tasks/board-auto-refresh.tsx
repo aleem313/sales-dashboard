@@ -21,13 +21,21 @@ export function BoardAutoRefresh({
   const refreshBoard = useBoardStore((s) => s.refreshBoard);
 
   useEffect(() => {
+    // `cancelled` short-circuits any tick that's mid-flight when the effect
+    // tears down (e.g. URL navigation / modal open). The store's own
+    // paginationVersion guard handles the orthogonal filter-change race.
+    let cancelled = false;
     const id = setInterval(() => {
+      if (cancelled) return;
       if (!runInBackground && document.hidden) return;
       const filters = parseBoardFiltersFromSearchParams(sp ?? new URLSearchParams());
       const query = serializeBoardFiltersToQuery(filters);
       refreshBoard(query);
     }, interval);
-    return () => clearInterval(id);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [interval, runInBackground, sp, refreshBoard]);
 
   return null;
