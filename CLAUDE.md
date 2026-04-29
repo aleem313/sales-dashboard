@@ -20,12 +20,14 @@ No test framework is configured. There are no unit/integration tests.
 
 ## Deployment
 
+> **2026-04-29 transition note:** The n8n workflow no longer dual-writes to Vercel — only Contabo sinks remain (the two Vercel-targeting nodes `Create Board Task` and `Send to Dashboard` were removed). The Vercel deployment itself may still be running for transition; the user has not yet decided whether to tear it down. See `docs/n8n_workflow_prd.md` §12 for the change record. The two-target description below reflects the **historical** repo deploy targets, not the current n8n write topology.
+
 The app is deployed **to two targets simultaneously** from `main`:
 
 1. **Vercel** (primary) — `https://sales-dashboard-snowy-beta.vercel.app`, backed by Neon Postgres. Git push triggers Vercel's own deploy. Vercel handles cron jobs defined in `vercel.json`.
 2. **Contabo self-hosted** — `http://157.173.110.62` on a Ubuntu 24.04 VPS, Docker-native, Postgres 17 in a sibling container. Deployed by `.github/workflows/deploy-contabo.yml` on every push to `main`: SSH → `git reset --hard` → `docker compose --env-file .env.production -f docker-compose.server.yml up -d --build` → healthcheck → done. See `docker/DEPLOY-CONTABO.md` for the runbook.
 
-Both deployments receive the same n8n webhook traffic via parallel sink nodes in the workflow (see "n8n Integration" below). No local dev workflow — all changes must be production-ready.
+Historically both deployments received the same n8n webhook traffic via parallel sink nodes in the workflow. As of 2026-04-29 only Contabo receives n8n writes (see "n8n Integration" below). No local dev workflow — all changes must be production-ready.
 
 **CI/CD key files:**
 - `.github/workflows/deploy-contabo.yml` — **active** auto-deploy pipeline (push to main)
@@ -85,20 +87,18 @@ Middleware (`src/middleware.ts`) enforces auth and redirects agents away from ad
 
 ### n8n → Task Board Architecture
 
-The n8n workflow delivers processed jobs to the **Task Board** after AI proposal generation. As of 2026-04-29, `Format ClickUp Task` fans out to **three** parallel downstreams (each environment receives both a Board task creation AND a dashboard event):
+The n8n workflow delivers processed jobs to the **Task Board** after AI proposal generation. As of 2026-04-29, `Format ClickUp Task` fans out to **two** parallel downstreams (Contabo only — see history below):
 
 ```
-Format ClickUp Task ┬─► Create Board Task                  → Vercel  POST /api/v1/webhooks/tasks   (Bearer n8n-board-sync, tasks table)
-                    ├─► Create Board Task - Self-Hosted    → Contabo POST /api/v1/webhooks/tasks   (Bearer n8n-board-sync, tasks table)
-                    └─► Format Dashboard Event ┬─► Send to Dashboard              → Vercel  POST /api/webhook/n8n     (HMAC, jobs table)
-                                                └─► Send to Self-Hosted Dashboard  → Contabo POST http://157.173.110.62/api/webhook/n8n
+Format ClickUp Task ┬─► Create Board Task - Self-Hosted    → Contabo POST /api/v1/webhooks/tasks   (Bearer n8n-board-sync, tasks table)
+                    └─► Format Dashboard Event ──► Send to Self-Hosted Dashboard  → Contabo POST http://157.173.110.62/api/webhook/n8n
 ```
 
-Per environment there are two writes: the Board API (`/api/v1/webhooks/tasks`, populates `tasks` table) and the dashboard webhook (`/api/webhook/n8n`, populates `jobs` table + auto-assigns agent / creates profile / adds `vollna-auto` tag). All four active HTTP nodes use `neverError: true` so a down environment never breaks the pipeline.
+There are two writes per event: the Board API (`/api/v1/webhooks/tasks`, populates `tasks` table) and the dashboard webhook (`/api/webhook/n8n`, populates `jobs` table + auto-assigns agent / creates profile / adds `vollna-auto` tag). Both active HTTP nodes use `neverError: true` so a transient blip never breaks the pipeline — but with the Vercel parallel retired, a Contabo outage now means lost leads (no failover). See PRD TD-10 / TD-5.
 
-The payload shape is identical between the Vercel and Contabo dashboard sinks — `clickup.taskId` / `clickup.taskUrl` are always `null` (legacy fields preserved for backward compat with the dashboard schema). Outcome detection falls back to `item.taskName && item.proposal → 'proposal_created'` which is already coded in the Format Dashboard Event Code node.
+The dashboard payload shape preserves `clickup.taskId` / `clickup.taskUrl` as `null` (legacy fields kept for backward compat with the dashboard schema). Outcome detection falls back to `item.taskName && item.proposal → 'proposal_created'` which is already coded in the Format Dashboard Event Code node.
 
-The legacy `Create ClickUp Task` sink was removed on 2026-04-29 (TD-7) — ClickUp had been killed in M8 and the sink was dead weight.
+History: the legacy `Create ClickUp Task` sink was removed on 2026-04-29 (TD-7) — ClickUp had been killed in M8 and the sink was dead weight. The two Vercel-targeting sinks (`Create Board Task` and `Send to Dashboard`) were also removed on 2026-04-29 — the user retired the Vercel deployment and consolidated writes on Contabo. `Process Job`'s profile-mapping fetch still has Vercel as a fallback URL pending a separate decision (PRD §13).
 
 - **Board API**: `POST /api/v1/webhooks/tasks` with Bearer token auth (`n8n-board-sync`). Falls back to default project.
 - **Payload mapping**: Task title = `[profile] Job Title`, description = rich formatted proposal + job snapshot. Job metadata stored in `custom_fields` (`_job_id`, `_job_url`, `_budget`, `_skills`, `_proposal`, `_assigned_agent`, `_profile_name`, `_source`, client data)

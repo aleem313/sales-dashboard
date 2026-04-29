@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-29T16:04:52.479Z",
+  "updatedAt": "2026-04-29T17:19:17.858Z",
   "createdAt": "2026-03-05T17:20:23.376Z",
   "id": "EWnZg3svZWwcIRs4",
   "name": "multiple webhooks",
@@ -240,39 +240,6 @@
       "typeVersion": 2,
       "position": [
         1728,
-        256
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://sales-dashboard-snowy-beta.vercel.app/api/webhook/n8n",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json) }}",
-        "options": {
-          "response": {
-            "response": {
-              "neverError": true
-            }
-          }
-        }
-      },
-      "id": "e4188b24-4dc6-4bc3-b0a5-ab5870746470",
-      "name": "Send to Dashboard",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        1952,
         256
       ]
     },
@@ -628,44 +595,6 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://sales-dashboard-snowy-beta.vercel.app/api/v1/webhooks/tasks",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "Bearer n8n-board-sync"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }) } }) }}",
-        "options": {
-          "response": {
-            "response": {
-              "neverError": true
-            }
-          }
-        }
-      },
-      "id": "c7882884-857b-480c-b379-dcf6905f7335",
-      "name": "Create Board Task",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        1504,
-        -144
-      ],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
         "httpMethod": "POST",
         "path": "rebekah-profile-webhook",
         "responseMode": "responseNode",
@@ -882,11 +811,6 @@
       "main": [
         [
           {
-            "node": "Create Board Task",
-            "type": "main",
-            "index": 0
-          },
-          {
             "node": "Format Dashboard Event",
             "type": "main",
             "index": 0
@@ -902,11 +826,6 @@
     "Format Dashboard Event": {
       "main": [
         [
-          {
-            "node": "Send to Dashboard",
-            "type": "main",
-            "index": 0
-          },
           {
             "node": "Send to Self-Hosted Dashboard",
             "type": "main",
@@ -10806,6 +10725,66 @@
         "022049519266453924610": {
           "status": "success",
           "timestamp": 1777478601858
+        },
+        "022049520026702185852": {
+          "status": "success",
+          "timestamp": 1777478901715
+        },
+        "022049522090547217788": {
+          "status": "success",
+          "timestamp": 1777479979685
+        },
+        "022049522626612823420": {
+          "status": "success",
+          "timestamp": 1777479743520
+        },
+        "022049523357619395432": {
+          "status": "gpt_failed",
+          "timestamp": 1777479866783
+        },
+        "022049526548612547264": {
+          "status": "success",
+          "timestamp": 1777480401782
+        },
+        "022049481950540143464": {
+          "status": "success",
+          "timestamp": 1777480762755
+        },
+        "022049529137846012881": {
+          "status": "success",
+          "timestamp": 1777481668808
+        },
+        "022049485647903599362": {
+          "status": "gpt_failed",
+          "timestamp": 1777481956427
+        },
+        "022049530522698810048": {
+          "status": "success",
+          "timestamp": 1777481598769
+        },
+        "022049531756354340220": {
+          "status": "gpt_failed",
+          "timestamp": 1777482319232
+        },
+        "022049533430006164226": {
+          "status": "success",
+          "timestamp": 1777482559489
+        },
+        "022049533068457095537": {
+          "status": "gpt_failed",
+          "timestamp": 1777482196681
+        },
+        "022049532829498678120": {
+          "status": "success",
+          "timestamp": 1777482438841
+        },
+        "022049490613753420648": {
+          "status": "success",
+          "timestamp": 1777482678636
+        },
+        "022049536184878963560": {
+          "status": "success",
+          "timestamp": 1777482861405
         }
       },
       "hookRotation": {
@@ -10829,9 +10808,9 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "cf490d93-28de-4194-aa3a-94d9279ea760",
-  "activeVersionId": "cf490d93-28de-4194-aa3a-94d9279ea760",
-  "versionCounter": 2609,
+  "versionId": "e251bf20-e3bf-4dfd-b8d0-00ba4e156f39",
+  "activeVersionId": "e251bf20-e3bf-4dfd-b8d0-00ba4e156f39",
+  "versionCounter": 2633,
   "triggerCount": 8,
   "shared": [
     {
@@ -10854,9 +10833,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-04-29T16:04:52.481Z",
-    "createdAt": "2026-04-29T16:04:52.481Z",
-    "versionId": "cf490d93-28de-4194-aa3a-94d9279ea760",
+    "updatedAt": "2026-04-29T17:19:17.861Z",
+    "createdAt": "2026-04-29T17:19:17.861Z",
+    "versionId": "e251bf20-e3bf-4dfd-b8d0-00ba4e156f39",
     "workflowId": "EWnZg3svZWwcIRs4",
     "nodes": [
       {
@@ -11092,39 +11071,6 @@
         "typeVersion": 2,
         "position": [
           1728,
-          256
-        ]
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "https://sales-dashboard-snowy-beta.vercel.app/api/webhook/n8n",
-          "sendHeaders": true,
-          "headerParameters": {
-            "parameters": [
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              }
-            ]
-          },
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify($json) }}",
-          "options": {
-            "response": {
-              "response": {
-                "neverError": true
-              }
-            }
-          }
-        },
-        "id": "e4188b24-4dc6-4bc3-b0a5-ab5870746470",
-        "name": "Send to Dashboard",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.4,
-        "position": [
-          1952,
           256
         ]
       },
@@ -11480,44 +11426,6 @@
       },
       {
         "parameters": {
-          "method": "POST",
-          "url": "https://sales-dashboard-snowy-beta.vercel.app/api/v1/webhooks/tasks",
-          "sendHeaders": true,
-          "headerParameters": {
-            "parameters": [
-              {
-                "name": "Authorization",
-                "value": "Bearer n8n-board-sync"
-              },
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              }
-            ]
-          },
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }) } }) }}",
-          "options": {
-            "response": {
-              "response": {
-                "neverError": true
-              }
-            }
-          }
-        },
-        "id": "c7882884-857b-480c-b379-dcf6905f7335",
-        "name": "Create Board Task",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.4,
-        "position": [
-          1504,
-          -144
-        ],
-        "onError": "continueRegularOutput"
-      },
-      {
-        "parameters": {
           "httpMethod": "POST",
           "path": "rebekah-profile-webhook",
           "responseMode": "responseNode",
@@ -11734,11 +11642,6 @@
         "main": [
           [
             {
-              "node": "Create Board Task",
-              "type": "main",
-              "index": 0
-            },
-            {
               "node": "Format Dashboard Event",
               "type": "main",
               "index": 0
@@ -11754,11 +11657,6 @@
       "Format Dashboard Event": {
         "main": [
           [
-            {
-              "node": "Send to Dashboard",
-              "type": "main",
-              "index": 0
-            },
             {
               "node": "Send to Self-Hosted Dashboard",
               "type": "main",
@@ -12021,18 +11919,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-04-29T16:04:53.018Z",
-        "id": 287,
+        "createdAt": "2026-04-29T17:19:18.399Z",
+        "id": 289,
         "workflowId": "EWnZg3svZWwcIRs4",
-        "versionId": "cf490d93-28de-4194-aa3a-94d9279ea760",
+        "versionId": "e251bf20-e3bf-4dfd-b8d0-00ba4e156f39",
         "event": "activated",
         "userId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
       },
       {
-        "createdAt": "2026-04-29T16:04:52.671Z",
-        "id": 286,
+        "createdAt": "2026-04-29T17:19:18.038Z",
+        "id": 288,
         "workflowId": "EWnZg3svZWwcIRs4",
-        "versionId": "cf490d93-28de-4194-aa3a-94d9279ea760",
+        "versionId": "e251bf20-e3bf-4dfd-b8d0-00ba4e156f39",
         "event": "deactivated",
         "userId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
       }
