@@ -22,6 +22,8 @@ export async function GET(
 
   const sp = request.nextUrl.searchParams;
   const filters = parseBoardFiltersFromSearchParams(sp);
+  // Column scoping comes from the URL segment, not the filter bag.
+  filters.columnId = undefined;
   const offset = Math.max(0, parseInt(sp.get("offset") ?? "0", 10) || 0);
   const limit = Math.min(50, Math.max(1, parseInt(sp.get("limit") ?? String(PAGE_SIZE), 10) || PAGE_SIZE));
 
