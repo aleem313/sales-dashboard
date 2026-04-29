@@ -73,6 +73,8 @@ export interface Task {
   column_name?: string;
   creator_name?: string | null;
   prev_column_name?: string | null;
+  /** Most recent task_moved activity_log timestamp; falls back to created_at when no moves recorded. */
+  last_status_at?: string | null;
 }
 
 export interface TaskAssignee {
@@ -735,7 +737,8 @@ export async function getProjectTasks(
       COALESCE(cl_stats.done, 0)::int AS checklist_done,
       COALESCE(cmt_stats.count, 0)::int AS comment_count,
       COALESCE(att_stats.count, 0)::int AS attachment_count,
-      prev_move.old_value AS prev_column_name
+      last_move.prev_column_name,
+      last_move.last_status_at
     FROM tasks t
     LEFT JOIN columns c ON c.id = t.column_id
     LEFT JOIN agents a ON a.id = t.creator_id
@@ -753,12 +756,12 @@ export async function getProjectTasks(
       FROM file_attachments WHERE task_id = t.id
     ) att_stats ON true
     LEFT JOIN LATERAL (
-      SELECT old_value
+      SELECT created_at AS last_status_at, old_value AS prev_column_name
       FROM activity_log
       WHERE task_id = t.id AND action_type = 'task_moved' AND field = 'column'
       ORDER BY created_at DESC
       LIMIT 1
-    ) prev_move ON true
+    ) last_move ON true
     WHERE t.project_id = ${projectId}
       AND (${filters.column_id ?? null}::uuid IS NULL OR t.column_id = ${filters.column_id ?? null}::uuid)
       AND (${filters.priority ?? null}::text IS NULL OR t.priority = ${filters.priority ?? null})
