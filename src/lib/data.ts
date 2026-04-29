@@ -1953,55 +1953,6 @@ export async function getPipelineStages(
   ];
 }
 
-/**
- * Current-state counts for the 5 top stat cards on /pipeline and /my-pipeline.
- * Each bucket is computed from the task's CURRENT column — never cumulative —
- * so a single card visiting Prototype Required AND Prototype Done isn't counted
- * twice. Uses the same task-based filter logic as getPipelineStages (agent via
- * task_assignees; profile via linked job's profile_id OR a tag whose name
- * matches the profile's name).
- */
-export async function getPipelineBucketCounts(
-  agentId?: string,
-  profileId?: string
-): Promise<{ todo: number; submitted: number; proto: number; meeting: number; negotiation: number }> {
-  const result = await sql`
-    SELECT
-      COUNT(CASE WHEN LOWER(c.name) IN ('todo', 'to do', 'new', 'proposal ready') THEN 1 END)::int AS todo,
-      COUNT(CASE WHEN LOWER(c.name) IN (
-        'proposal submitted', 'submitted', 'sent', 'following up',
-        'proposal views', 'proposal viewed', 'viewed', 'in chat'
-      ) THEN 1 END)::int AS submitted,
-      COUNT(CASE WHEN LOWER(c.name) IN (
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent'
-      ) THEN 1 END)::int AS proto,
-      COUNT(CASE WHEN LOWER(c.name) IN ('meeting scheduled', 'meeting done') THEN 1 END)::int AS meeting,
-      COUNT(CASE WHEN LOWER(c.name) = 'negotiation' THEN 1 END)::int AS negotiation
-    FROM tasks t
-    JOIN columns c ON c.id = t.column_id
-    LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
-    WHERE (${agentId ?? null}::uuid IS NULL OR EXISTS (
-        SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
-      ))
-      AND (${profileId ?? null}::text IS NULL
-        OR j.profile_id = ${profileId ?? null}::text
-        OR EXISTS (
-          SELECT 1 FROM task_tag_map ttm
-          JOIN task_tags tt ON tt.id = ttm.tag_id
-          WHERE ttm.task_id = t.id
-            AND LOWER(tt.name) = (SELECT LOWER(profile_name) FROM profiles WHERE profile_id = ${profileId ?? null}::text LIMIT 1)
-        ))
-  `;
-  const r = result.rows[0];
-  return {
-    todo: r.todo ?? 0,
-    submitted: r.submitted ?? 0,
-    proto: r.proto ?? 0,
-    meeting: r.meeting ?? 0,
-    negotiation: r.negotiation ?? 0,
-  };
-}
-
 export async function getActiveJobsInPipeline(agentId?: string, profileId?: string): Promise<PipelineJob[]> {
   const result = await sql`
     SELECT

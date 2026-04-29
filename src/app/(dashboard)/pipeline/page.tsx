@@ -4,7 +4,6 @@ import { PipelineKanban } from "@/components/pipeline/pipeline-kanban";
 import { PipelineTable } from "@/components/pipeline/pipeline-table";
 import {
   getPipelineStages,
-  getPipelineBucketCounts,
   getActiveJobsInPipeline,
   getAllAgents,
   getAllProfiles,
@@ -24,15 +23,21 @@ export default async function PipelinePage({
   const profileId = typeof params.profile === "string" ? params.profile : undefined;
   const range = parseDateRange(params);
 
-  const [stages, bucketCounts, jobs, allAgents, allProfiles] = await Promise.all([
+  const [stages, jobs, allAgents, allProfiles] = await Promise.all([
     getPipelineStages(range, agentId, profileId),
-    getPipelineBucketCounts(agentId, profileId),
     getActiveJobsInPipeline(agentId, profileId),
     getAllAgents(),
     getAllProfiles(),
   ]);
 
-  const { todo, submitted, proto, meeting, negotiation } = bucketCounts;
+  // Bucket counts derived from cumulative first-entry stage counts so the cards
+  // and the kanban below stay consistent under the same date filter.
+  const stageCount = new Map(stages.map((s) => [s.key, s.count]));
+  const todo = stageCount.get("Todo") ?? 0;
+  const submitted = stageCount.get("Proposal Submitted") ?? 0;
+  const proto = stageCount.get("Prototype Required") ?? 0;
+  const meeting = stageCount.get("Meeting Scheduled") ?? 0;
+  const negotiation = stageCount.get("Negotiation") ?? 0;
 
   return (
     <>
