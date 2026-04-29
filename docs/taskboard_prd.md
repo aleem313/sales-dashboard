@@ -358,7 +358,59 @@ Actor is recorded as `actor_id` (FK → agents) or `actor_label` (e.g. `"Automat
 
 ### 12.2 Cumulative funnel impact
 
-The activity log is the **substrate for cumulative funnel KPIs**. `getKPIMetrics` and `getPipelineStages` build an `activity_history` CTE that aggregates every column name visited per task (from `task_moved` rows) and tests stage-by-stage overlap. This is what makes the funnel history-accurate even when cards are dragged through columns out of order. **Any tooling that mutates a task without going through `moveTask` will be invisible to the funnel.**
+The activity log is the **substrate for cumulative funnel KPIs**. Five dashboard query functions in `src/lib/data.ts` — `getKPIMetrics`, `getConversionFunnel`, `getPipelineStages`, `getEnhancedAgentStats`, `getEnhancedProfileStats` — derive cumulative counts from `activity_log.task_moved` rows. **Any tooling that mutates a task without going through `moveTask` will be invisible to the funnel.**
+
+#### 12.2.1 Funnel-stage sets
+
+Each cumulative metric defines a set of column names; a task is counted toward the metric if its **first move into ANY stage in that set** falls inside the date filter. The sets are nested:
+
+| Metric | Funnel-stage set (case-insensitive) |
+|---|---|
+| Proposals Sent | proposal submitted, proposal views, proposal viewed, viewed, prototype required, prototype done, prototype submitted, prototype sent, in chat, following up, meeting scheduled, meeting done, negotiation, won |
+| Proposals Viewed *(a.k.a. Responded)* | drops `proposal submitted` from the above |
+| In Chat | in chat, following up, meeting scheduled, meeting done, negotiation, won |
+| Meetings Booked *(a.k.a. Reached Meeting)* | meeting scheduled, meeting done, negotiation, won |
+| Meetings Done | meeting done, negotiation, won |
+
+#### 12.2.2 Date-filter semantics — first-entry rule (2026-04-29)
+
+Cumulative funnel KPIs **date-filter on `first_<metric>_at`**, the timestamp of the task's first move into that metric's funnel-stage set. Implementation pattern (replicated across all five functions):
+
+1. `earliest_move` CTE — for each task, the `LOWER(old_value)` of its earliest `task_moved` (used to detect tasks created already in-funnel).
+2. `move_in_<metric>` CTE — `MIN(activity_log.created_at)` of `task_moved` rows where `LOWER(new_value)` ∈ that metric's funnel-stage set.
+3. A per-task `task_visited` (or `agent_scoped_tasks`/`profile_scoped_tasks`) CTE that emits `first_<metric>_at = LEAST(move_in_<metric>.first_in, created_at_fallback)`. The fallback fires when (a) the task has no `task_moved` rows AND its current column is in the funnel set, or (b) the task's earliest move's `old_value` was already in the set (i.e. it was created in-funnel and then moved).
+4. Each cumulative KPI is `COUNT(*) FILTER (WHERE first_<metric>_at BETWEEN $start AND $end)`.
+
+This was changed on 2026-04-29 (commit `ebe8122`) from a prior single date predicate `COALESCE(j.stage_entered_at, t.updated_at, t.created_at) BETWEEN $start AND $end`, which incorrectly answered "last status touch in range" — a card moved Views → In Chat today would wrongly count as "Proposals Sent today" even though its proposal was sent days earlier.
+
+#### 12.2.3 Current-state tiles vs cumulative tiles
+
+These tiles **do not** use `first_<metric>_at`. They keep the existing predicate `LOWER(col_name) = '<column>' AND COALESCE(j.stage_entered_at, t.updated_at, t.created_at) BETWEEN $start AND $end`:
+
+- Won (terminal)
+- Lost (terminal)
+- Bad Leads (N/A column)
+- Untouched (Todo column)
+- On Hold
+- Total Revenue (`SUM(jobs.won_value)` over current Won within the COALESCE range)
+- Win-rate denominator
+
+`total_jobs` (Jobs Received) uses `t.created_at` (intake), neither cumulative nor current-state.
+
+#### 12.2.4 Won-shortcut consequence (intentional)
+
+Because `won` is the terminal element of every cumulative funnel-stage set, a card that lands in Won today has `first_<metric>_at = today` for **every** cumulative tile (unless it had earlier history at a given level). So a Submitted→Won card today inflates Proposals Viewed / In Chat / Meetings tiles for today even though it never visited those columns. This is the cumulative semantic ("reached at-least-this-level"). Confirmed desired by the user on 2026-04-29.
+
+#### 12.2.5 Worked examples
+
+- Card moved to Proposal Submitted today, then In Chat today → counts in **Proposals Sent today** (first_proposals_sent_at = today) and **In Chat today** (first_in_chat_at = today). Currently in In Chat (current-state tiles unaffected).
+- Card moved to Proposal Submitted 6 days ago, today moved to Won → with the **last-7-days** filter, counts in Proposals Sent (first move 6 days ago), Won (current-state today), Proposals Viewed / In Chat / Meetings Booked / Meetings Done (Won-shortcut: first move into each of those funnel sets = today, since the card never visited the intermediate stages).
+- Card sat in Proposal Submitted for 10 days, yesterday moved to Meeting Done → with the **yesterday** filter, counts in Meetings Booked + Meetings Done (first move into those sets = yesterday). Does NOT count in Proposals Sent (first move = 10 days ago, outside yesterday). With the **today** filter, counts nowhere (no activity today).
+
+#### 12.2.6 Caveats
+
+- Relies on `activity_log` integrity. `task_moved` entries are written by `moveTaskAction`; any move that bypasses this (e.g. raw `PATCH /api/tasks/[id]/move` API call without sync) is invisible to the funnel.
+- `getEnhancedProfileStats` per-profile sums are smaller than `getKPIMetrics` totals because the profile link runs through `JOIN jobs` — orphan tasks (no `_job_id`) have no profile.
 
 ---
 
@@ -751,7 +803,8 @@ These are tracked in `plan.md` as Milestones 6 and 7.
 | **Column / Status** | A `columns` row. A vertical lane on the board with a name and color. |
 | **Task / Card** | A `tasks` row. A unit of work that moves through columns. |
 | **Lifecycle milestone** | A timestamp on `jobs` recording the first time a card reached a stage (proposal_sent_at, proposal_viewed_at, in_chat_at, meeting_booked_at, meeting_done_at). Preserved via COALESCE on every move. |
-| **Funnel** | The cumulative view of lifecycle milestones, computed via the `activity_history` CTE on `activity_log`. |
+| **Funnel** | The cumulative view of lifecycle milestones, computed via per-metric `move_in_<metric>` CTEs over `activity_log` task_moved rows. Each cumulative tile date-filters on the task's first entry into the metric's funnel-stage set (`first_<metric>_at`). See §12.2 for the full date-filter semantics. |
+| **First-entry rule** | The cumulative funnel date-filter convention (2026-04-29 onward): "Proposals Sent today" means "the card's first move into Proposal Submitted (or any later funnel stage) was today," not "any task touched today." |
 | **Profile** | A `profiles` row representing one Upwork (or Freelancer/Fiverr/LinkedIn) workstream owned by exactly one agent. Drives n8n routing. |
 | **Vollna** | The third-party Upwork scraper that feeds n8n. |
 | **n8n** | The automation platform (`ikonicdev.app.n8n.cloud`) that processes Vollna events and POSTs into `/api/v1/webhooks/tasks`. |

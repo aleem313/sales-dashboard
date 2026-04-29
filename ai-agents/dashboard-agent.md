@@ -103,7 +103,7 @@ The Dashboard Agent **must not**:
 | Conversion funnel | §7, §12.2 | `getConversionFunnel` in `lib/data.ts` |
 | Agent/profile stats | §3 | `getEnhancedAgentStats`, `getEnhancedProfileStats` in `lib/data.ts` |
 | Revenue | §7 | `SUM(jobs.won_value)` aggregations |
-| Date range filtering | §25.1 | `COALESCE(j.stage_entered_at, t.updated_at, t.created_at)` |
+| Date range filtering (per-metric) | §25.1 | Cumulative funnel: `first_<metric>_at` via `move_in_<metric>` CTEs. Current-state: `COALESCE(j.stage_entered_at, t.updated_at, t.created_at)`. Intake: `t.created_at`. |
 | Caching | §25.1 | `stats_cache` table, 5-min TTL, busted via `revalidatePath` calls from Card Agent |
 | Dashboard auto-refresh | §19 | `<AutoRefresh interval={15000} />` (no `runInBackground` — pauses on hidden) |
 | Charts | §1 (Recharts) | `components/overview/*`, `components/pipeline/*`, `components/analytics/*` |
@@ -117,24 +117,69 @@ The Dashboard Agent **must not**:
 
 | Question | Field to use | Why |
 |---|---|---|
-| "When did the card enter its current stage?" | `jobs.stage_entered_at` | Updated by Card Agent on every move |
-| "When was the card last touched?" | `tasks.updated_at` | Auto-set by trigger on any task change |
-| "When was the first time the card reached stage X?" | `jobs.<milestone>_at` (e.g. `proposal_sent_at`) | COALESCE-protected first-reach timestamp |
-| "What was the historical path of the card?" | `activity_log` rows where `action_type='task_moved'` | Activity history substrate |
-| "When was the card originally created?" | `tasks.created_at` | **Only** for "newly created" surfaces, never for status freshness |
+| "When did the card first enter the funnel stage X (cumulatively)?" | `first_<metric>_at` from per-metric `move_in_<metric>` CTE + `created_at` fallback | The load-bearing predicate for **all cumulative funnel KPIs**. See §7.2. |
+| "When did the card last touch its current stage?" | `COALESCE(j.stage_entered_at, t.updated_at, t.created_at)` | Used only for **current-state tiles** (Won, Lost, Bad Leads, Untouched, On Hold, Revenue). |
+| "When was the card created (intake)?" | `tasks.created_at` | Used by **Jobs Received** / `total_jobs`. Also the fallback inside `first_<metric>_at` for tasks created already in-funnel. |
+| "When did the card enter its current stage?" | `jobs.stage_entered_at` | Updated by Card Agent on every move; used as one input to current-state predicates. |
+| "When was the card last touched?" | `tasks.updated_at` | Auto-set by trigger on any task change; used inside the `COALESCE` for current-state predicates. |
+| "When was the first time the card reached lifecycle milestone X (per linked job)?" | `jobs.<milestone>_at` (e.g. `proposal_sent_at`) | COALESCE-protected on each move. **Not currently the dashboard predicate** — funnel KPIs use `first_<metric>_at` from `activity_log` instead, so orphan tasks count too. |
+| "What was the historical path of the card?" | `activity_log` rows where `action_type='task_moved'` | Activity-history substrate; the source for `move_in_<metric>` CTEs. |
 
-**Status-based aggregations MUST use `updated_at` (or `stage_entered_at`), NEVER `created_at`.** This is a load-bearing rule.
+**Load-bearing rules:**
+- **Cumulative funnel KPIs MUST date-filter on `first_<metric>_at`.** Never on `COALESCE(stage_entered_at, updated_at, created_at)` and never by funnel-order assumption.
+- **Current-state tiles MUST use `LOWER(col_name) = '...'` + `COALESCE(...)`.** Never on `first_<metric>_at`.
+- **`total_jobs` MUST use `t.created_at`.** It is intake, not status-based.
 
-### 7.2 Date range filter expression
+### 7.2 Date range filter expression — per metric
+
+There is no longer a single date predicate. Each metric carries its own `FILTER (WHERE ...)`:
+
+| Metric class | Date predicate |
+|---|---|
+| **Cumulative funnel** (Proposals Sent, Proposals Viewed, In Chat, Meetings Booked, Meetings Done; per-agent and per-profile equivalents) | `first_<metric>_at BETWEEN $start AND $end` |
+| **Current-state column** (Won, Lost, Bad Leads, Untouched, On Hold) | `LOWER(col_name) = '<column>' AND COALESCE(j.stage_entered_at, t.updated_at, t.created_at) BETWEEN $start AND $end` |
+| **Revenue** | `LOWER(col_name) = 'won' AND COALESCE(...) BETWEEN $start AND $end`, summing `jobs.won_value` |
+| **Intake** (Jobs Received / `total_jobs`) | `t.created_at BETWEEN $start AND $end` |
+
+The `first_<metric>_at` value is computed per task via:
 
 ```sql
-COALESCE(j.stage_entered_at, t.updated_at, t.created_at) BETWEEN $start AND $end
+WITH earliest_move AS (
+  SELECT DISTINCT ON (task_id) task_id, LOWER(old_value) AS old_lower
+  FROM activity_log
+  WHERE action_type = 'task_moved' AND field = 'column'
+  ORDER BY task_id, created_at
+),
+move_in_<metric> AS (
+  SELECT task_id, MIN(created_at) AS first_in
+  FROM activity_log
+  WHERE action_type = 'task_moved' AND field = 'column'
+    AND LOWER(new_value) IN (<metric_funnel_stages>)
+  GROUP BY task_id
+),
+task_visited AS (
+  SELECT
+    t.id AS task_id, ...,
+    LEAST(
+      mim.first_in,
+      CASE
+        WHEN em.task_id IS NULL AND LOWER(c.name) IN (<metric_funnel_stages>) THEN t.created_at
+        WHEN em.task_id IS NOT NULL AND em.old_lower IN (<metric_funnel_stages>) THEN t.created_at
+        ELSE NULL
+      END
+    ) AS first_<metric>_at
+  FROM tasks t
+  JOIN columns c ON c.id = t.column_id
+  LEFT JOIN earliest_move em ON em.task_id = t.id
+  LEFT JOIN move_in_<metric> mim ON mim.task_id = t.id
+)
 ```
 
-This priority order matches the actual data shape:
-- `stage_entered_at` exists for every linked job (default NOW(), backfilled in migration 015)
-- `updated_at` exists for every task
-- `created_at` is the absolute fallback
+This pattern is replicated across `getKPIMetrics`, `getConversionFunnel`, `getPipelineStages`, `getEnhancedAgentStats`, `getEnhancedProfileStats` (all in `src/lib/data.ts`). `getAgentKPIMetrics` and `getKPIMetricsWithDeltas` flow through `getKPIMetrics`.
+
+**Won-shortcut consequence (intentional):** because every cumulative funnel-stage set includes `won` as the terminal state, a card that lands in Won today has `first_<metric>_at = today` for every cumulative tile (unless it had earlier history in a given level). So a Submitted→Won card today inflates Proposals Viewed / In Chat / Meetings tiles for today even though it never visited those columns. This is the cumulative semantic ("reached at-least-this-level"). Confirmed desired by user on 2026-04-29.
+
+**Orphan asymmetry (intentional):** `getEnhancedProfileStats` uses `JOIN jobs` because the profile link runs through `jobs.profile_id`. Orphan tasks (no `_job_id`) have no profile, so the per-profile sums are smaller than `getKPIMetrics` totals. Per CLAUDE.md ClickUp-removal rule #9.
 
 ### 7.3 Pipeline groupings (PRD §7 — do not rename)
 
@@ -148,27 +193,34 @@ This priority order matches the actual data shape:
 | **Lost** *(terminal)* | `Lost` |
 | **Bad Leads** | `N/A` |
 
-### 7.4 Funnel stages (cumulative — PRD §12.2)
+### 7.4 Funnel-stage sets (cumulative — PRD §12.2)
 
-The `activity_history` CTE aggregates every column name a task has ever visited (from `task_moved` rows in `activity_log`). The per-task `visited` array = history ∪ {current column}. Each cumulative stage tests array overlap (`&&`) against the funnel columns from that stage onward:
+Each cumulative metric defines a set of column names it counts as "membership"; a task is counted for a metric if its first move into ANY stage in that set falls within the date range. The sets are nested (each later metric is a subset of the earlier one):
 
-- **Proposals Sent** = visited any of: Proposal Submitted → Won
-- **Proposals Viewed** = visited any of: Proposal Views → Won
-- **In Chat** = visited any of: In Chat → Won
-- **Meetings Booked** = visited any of: Meeting Scheduled → Won
-- **Won** = current state Won
-- **Lost** = current state Lost
+| Metric | Funnel-stage set (LOWER) |
+|---|---|
+| **Proposals Sent** | proposal submitted, proposal views, proposal viewed, viewed, prototype required, prototype done, prototype submitted, prototype sent, in chat, following up, meeting scheduled, meeting done, negotiation, won |
+| **Proposals Viewed** *(a.k.a. Responded)* | proposal views, proposal viewed, viewed, prototype required, prototype done, prototype submitted, prototype sent, in chat, following up, meeting scheduled, meeting done, negotiation, won |
+| **In Chat** | in chat, following up, meeting scheduled, meeting done, negotiation, won |
+| **Meetings Booked** *(a.k.a. Reached Meeting)* | meeting scheduled, meeting done, negotiation, won |
+| **Meetings Done** | meeting done, negotiation, won |
+| **Won** *(current-state)* | LOWER(col_name) = 'won' |
+| **Lost** *(current-state)* | LOWER(col_name) = 'lost' |
+| **Bad Leads** *(current-state)* | LOWER(col_name) = 'n/a' |
+| **Untouched** *(current-state)* | LOWER(col_name) IN ('todo', 'to do', 'new', 'proposal ready') |
 
-**Caveat**: relies on `activity_log` integrity. Card Agent writes `task_moved` entries via `moveTaskAction`; any move that bypasses this is invisible to the funnel.
+**Caveat:** relies on `activity_log` integrity. Card Agent writes `task_moved` entries via `moveTaskAction`; any move that bypasses this (e.g. raw `PATCH /api/tasks/[id]/move`) is invisible to the funnel.
 
 ### 7.5 KPI rules
 
 - Counts derive from `tasks JOIN columns`, **not** from `jobs` lifecycle alone — this includes orphan tasks (manually created, no `_job_id`).
-- Win rate = `won / (won + lost)`.
-- Revenue = `SUM(jobs.won_value)`. Orphan tasks have NULL `won_value` and are excluded.
+- **Cumulative funnel KPIs date-filter on `first_<metric>_at`** computed per §7.2. Do NOT use `COALESCE(stage_entered_at, updated_at, created_at)` for these.
+- **Current-state tiles** (Won, Lost, Bad Leads, Untouched, On Hold) use `LOWER(col_name) = '...'` plus the `COALESCE(...)` predicate.
+- **`total_jobs` (Jobs Received)** uses `t.created_at`.
+- Win rate = `won / (won + lost)` — both numerator and denominator are current-state.
+- Revenue = `SUM(jobs.won_value)` for cards currently Won within the COALESCE range. Orphan tasks have NULL `won_value` and are excluded.
 - Agent filter: filter via `task_assignees` (a card with no assignees is excluded from per-agent counts unless explicitly counted as "Unassigned").
-- Profile filter: filter via the linked job's `profile_id`. Orphan tasks have no profile and fall outside profile filters.
-- Won, Lost, Bad Leads (N/A), Untouched (Todo), and On Hold tiles are **current-state** counts (use `column_id`, not history).
+- Profile filter: filter via the linked job's `profile_id`. Orphan tasks have no profile and fall outside profile filters — `getEnhancedProfileStats` per-profile sums are correctly smaller than `getKPIMetrics` totals.
 
 ### 7.6 Caching
 
@@ -282,7 +334,9 @@ Examples:
 
 ## 11. Safety Rules
 
-- **`updatedAt` rule (load-bearing)**: status-based aggregations MUST use `updated_at` or `stage_entered_at`. `created_at` is reserved for "newly created" surfaces only. Violating this rule silently breaks every funnel and KPI.
+- **First-entry rule (load-bearing, 2026-04-29)**: cumulative funnel KPIs MUST date-filter on `first_<metric>_at` computed via per-metric `move_in_<metric>` CTEs (see §7.2). Never reuse the `COALESCE(stage_entered_at, updated_at, created_at)` predicate for cumulative funnel counts — it answers "last status touch in range" and silently double-counts cards that moved between later stages.
+- **Current-state vs cumulative**: current-state tiles (Won, Lost, Bad Leads, Untouched, On Hold, Revenue) use `LOWER(col_name) = '...'` plus `COALESCE(...)`. Cumulative tiles use `first_<metric>_at`. Mixing the two predicates breaks parity between admin and agent dashboards.
+- **`total_jobs` is intake**: must use `t.created_at`. Never `COALESCE(...)` and never `first_<metric>_at`.
 - **Pipeline grouping strings are an API**: PRD §6 / §7 strings are referenced in SQL `WHERE c.name IN (...)` clauses. Renaming them requires a coordinated change with Taskboard Agent (column rename) and a SQL update here.
 - **Revenue source**: `jobs.won_value` only. Never extrapolate from `budget_min/max` or proposal estimates.
 - **Funnel logic**: never count by funnel-order assumption. Always use the `activity_history` CTE pattern (PRD §12.2).
