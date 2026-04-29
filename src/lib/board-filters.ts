@@ -1,7 +1,7 @@
 // src/lib/board-filters.ts
 import type { ReadonlyURLSearchParams } from "next/navigation";
 import type { TaskPriority } from "@/lib/task-data";
-import { getDateRangeFromPreset, type PresetValue } from "@/components/date-range-picker";
+import { getDateRangeFromPreset, type PresetValue } from "@/lib/date-presets";
 
 export const INITIAL_PER_COLUMN = 5;
 export const PAGE_SIZE = 10;
