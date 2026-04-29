@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   DndContext,
@@ -37,7 +37,7 @@ import type { BoardColumn, Task, ProjectMember, CustomFieldDefinition } from "@/
 
 interface BoardViewProps {
   columns: BoardColumn[];
-  tasks: Task[];
+  buckets: Record<string, { tasks: Task[]; totalCount: number; hasMore: boolean }>;
   projectId?: string;
   members?: ProjectMember[];
   isAdmin?: boolean;
@@ -94,10 +94,14 @@ function SortableColumn({
   );
 }
 
-export function BoardView({ columns: serverColumns, tasks, projectId, members, isAdmin, agentId, customFields }: BoardViewProps) {
+export function BoardView({ columns: serverColumns, buckets, projectId, members, isAdmin, agentId, customFields }: BoardViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  useNewTaskNotifier(tasks, { enabled: !isAdmin });
+  const flatTasks = useMemo(
+    () => Object.values(buckets).flatMap((b) => b.tasks),
+    [buckets]
+  );
+  useNewTaskNotifier(flatTasks, { enabled: !isAdmin });
   const [addToColumn, setAddToColumn] = useState<string | null>(null);
   const [modalTaskId, setModalTaskId] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -124,14 +128,15 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
   // Initialize Zustand store from server data
   const store = useBoardStore();
   useEffect(() => {
-    store.initBoard({
+    store.initBoardPaged({
       columns: serverColumns,
-      tasks,
+      buckets,
       members: members ?? [],
       projectId: projectId ?? "",
+      customFields,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverColumns, tasks, members, projectId]);
+  }, [serverColumns, buckets, members, projectId]);
 
   // Open create modal when column "+" is clicked
   useEffect(() => {
@@ -267,17 +272,26 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
       // Now persist to server
       const prev = store.previousState;
 
-      // Calculate position for server
+      // Calculate position for server. If we're dropping past the loaded tail of a
+      // column that still has unloaded tasks, send `null` so the server appends.
       const colTasks = store.getTasksByColumn(targetColumnId).filter((t) => t.id !== task.id);
-      let newPosition: number;
+      const targetHasUnloadedTail = !!store.columnHasMore[targetColumnId];
+      let newPosition: number | null;
       if (colTasks.length === 0) {
         newPosition = 1000;
       } else if (targetIndex <= 0) {
         newPosition = colTasks[0].position - 1000;
       } else if (targetIndex >= colTasks.length) {
-        newPosition = colTasks[colTasks.length - 1].position + 1000;
+        newPosition = targetHasUnloadedTail ? null : colTasks[colTasks.length - 1].position + 1000;
       } else {
         newPosition = Math.floor((colTasks[targetIndex - 1].position + colTasks[targetIndex].position) / 2);
+      }
+
+      const sourceColumnId = prev?.columnId ?? task.column_id;
+      const crossColumn = sourceColumnId !== targetColumnId;
+      if (crossColumn) {
+        store.adjustColumnCount(sourceColumnId, -1);
+        store.adjustColumnCount(targetColumnId, +1);
       }
 
       try {
@@ -286,11 +300,15 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
         // Clear drag lock so initBoard can run with fresh server data
         store.setActiveTask(null);
 
-        // Update the store position to match what was persisted
-        store.updateTask(task.id, { position: newPosition, column_id: targetColumnId });
+        // Update the store position to match what was persisted (only when we sent a number)
+        if (typeof newPosition === "number") {
+          store.updateTask(task.id, { position: newPosition, column_id: targetColumnId });
+        } else {
+          store.updateTask(task.id, { column_id: targetColumnId });
+        }
 
-        // Undo toast
-        if (prev && (prev.columnId !== targetColumnId || prev.position !== newPosition)) {
+        // Undo toast — keep existing logic
+        if (prev && (prev.columnId !== targetColumnId || (typeof newPosition === "number" && prev.position !== newPosition))) {
           const col = columnOrder.find((c) => c.id === targetColumnId);
           toast(`Moved to ${col?.name ?? "column"}`, {
             icon: <Undo2 className="h-4 w-4" />,
@@ -299,6 +317,10 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
               label: "Undo",
               onClick: async () => {
                 store.moveTask(task.id, prev.columnId, 0);
+                if (crossColumn) {
+                  store.adjustColumnCount(targetColumnId, -1);
+                  store.adjustColumnCount(sourceColumnId, +1);
+                }
                 try {
                   await moveTaskAction(task.id, prev.columnId, prev.position);
                 } catch {
@@ -311,6 +333,10 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
       } catch {
         store.setActiveTask(null);
         store.revertMove();
+        if (crossColumn) {
+          store.adjustColumnCount(sourceColumnId, +1);
+          store.adjustColumnCount(targetColumnId, -1);
+        }
         toast.error("Failed to move task");
       }
     },
@@ -324,25 +350,39 @@ export function BoardView({ columns: serverColumns, tasks, projectId, members, i
 
   // Context menu: move task to another column
   async function handleContextMoveTask(taskId: string, columnId: string) {
+    const task = store.tasks.find((t) => t.id === taskId);
+    const fromColumn = task?.column_id;
     store.savePreviousState(taskId);
     store.moveTask(taskId, columnId, 0);
+    if (fromColumn && fromColumn !== columnId) {
+      store.adjustColumnCount(fromColumn, -1);
+      store.adjustColumnCount(columnId, +1);
+    }
     try {
       await moveTaskAction(taskId, columnId);
       const col = columnOrder.find((c) => c.id === columnId);
       toast.success(`Moved to ${col?.name ?? "column"}`);
     } catch {
       store.revertMove();
+      if (fromColumn && fromColumn !== columnId) {
+        store.adjustColumnCount(fromColumn, +1);
+        store.adjustColumnCount(columnId, -1);
+      }
       toast.error("Failed to move task");
     }
   }
 
   // Context menu: delete task
   async function handleContextDeleteTask(taskId: string) {
+    const task = store.tasks.find((t) => t.id === taskId);
+    const fromColumn = task?.column_id;
     store.removeTask(taskId);
+    if (fromColumn) store.adjustColumnCount(fromColumn, -1);
     try {
       await deleteTaskAction(taskId);
       toast.success("Task deleted");
     } catch {
+      if (fromColumn) store.adjustColumnCount(fromColumn, +1);
       toast.error("Failed to delete task");
     }
   }

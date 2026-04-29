@@ -1249,7 +1249,7 @@ export async function updateTask(
 export async function moveTask(
   taskId: string,
   columnId: string,
-  position?: number,
+  position?: number | null,
   actorId?: string | null
 ): Promise<Task | null> {
   const current = await sql`
@@ -1260,8 +1260,8 @@ export async function moveTask(
   if (current.rows.length === 0) return null;
   const old = current.rows[0];
 
-  // If no position specified, append to end
-  let newPosition = position;
+  // If no position specified (or null), append to end
+  let newPosition = position ?? undefined;
   if (newPosition === undefined) {
     const maxPos = await sql`
       SELECT COALESCE(MAX(position), 0) AS max_pos FROM tasks WHERE column_id = ${columnId}

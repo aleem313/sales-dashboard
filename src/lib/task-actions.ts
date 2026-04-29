@@ -83,7 +83,7 @@ export async function updateTaskAction(
 export async function moveTaskAction(
   taskId: string,
   columnId: string,
-  position?: number
+  position?: number | null
 ) {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
