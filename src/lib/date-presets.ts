@@ -1,5 +1,3 @@
-import { subDays, startOfDay, endOfDay, startOfMonth, endOfMonth, subMonths } from "date-fns";
-
 const presets = [
   { label: "Today", value: "today" },
   { label: "Yesterday", value: "yesterday" },
@@ -19,6 +17,43 @@ export const presetList = presets;
 export const presetLabels: Record<string, string> = Object.fromEntries(
   presets.map((p) => [p.value, p.label])
 );
+
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function endOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+function subDays(d: Date, n: number): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() - n);
+  return x;
+}
+
+function startOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
+}
+
+function endOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function subMonths(d: Date, n: number): Date {
+  // Clamp to last day of target month so e.g. Mar 31 - 1 month = Feb 28/29.
+  const x = new Date(d);
+  const targetMonth = x.getMonth() - n;
+  x.setDate(1);
+  x.setMonth(targetMonth);
+  const lastDay = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate();
+  x.setDate(Math.min(d.getDate(), lastDay));
+  return x;
+}
 
 export function getDateRangeFromPreset(preset: PresetValue): { from: Date; to: Date } {
   const now = new Date();
