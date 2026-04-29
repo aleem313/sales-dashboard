@@ -48,13 +48,15 @@ export interface BoardColumn {
   task_count?: number;
 }
 
+export type TaskPriority = "urgent" | "high" | "medium" | "low";
+
 export interface Task {
   id: string;
   project_id: string;
   column_id: string;
   title: string;
   description: string | null;
-  priority: "urgent" | "high" | "medium" | "low" | null;
+  priority: TaskPriority | null;
   due_date: string | null;
   start_date: string | null;
   position: number;

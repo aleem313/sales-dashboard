@@ -1,12 +1,13 @@
 // src/lib/board-filters.ts
 import type { ReadonlyURLSearchParams } from "next/navigation";
+import type { TaskPriority } from "@/lib/task-data";
 
 export const INITIAL_PER_COLUMN = 5;
 export const PAGE_SIZE = 10;
 
 export interface BoardServerFilters {
   search?: string;
-  priority?: "urgent" | "high" | "medium" | "low";
+  priority?: TaskPriority;
   assigneeId?: string;
   tagId?: string;
   /** When set, only this column's bucket is populated (used by single-column queries). */
@@ -18,6 +19,9 @@ type SearchParamsLike =
   | ReadonlyURLSearchParams
   | Record<string, string | string[] | undefined>;
 
+// ReadonlyURLSearchParams is not exposed as a runtime class, so duck-type by .get().
+// Safe within this union: the Record variant carries strings/arrays/undefined values only,
+// never a `get` function.
 function hasGetMethod(sp: SearchParamsLike): sp is URLSearchParams | ReadonlyURLSearchParams {
   return sp instanceof URLSearchParams || typeof (sp as { get?: unknown }).get === "function";
 }
