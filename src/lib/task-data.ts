@@ -1,4 +1,5 @@
 import { sql } from "@/lib/db";
+import type { BoardServerFilters } from "@/lib/board-filters";
 
 // Fix activity_log trigger to allow DELETE (migration 007 may not have been applied)
 async function fixActivityLogTrigger() {
@@ -179,6 +180,16 @@ export interface TaskFilters {
   tag_id?: string;
   sort_by?: string;
   sort_dir?: "asc" | "desc";
+}
+
+interface ColumnBucket {
+  tasks: Task[];
+  totalCount: number;
+  hasMore: boolean;
+}
+
+export interface PaginatedColumnsResult {
+  buckets: Record<string, ColumnBucket>;
 }
 
 // ============================================================
@@ -825,6 +836,234 @@ export async function getProjectTasks(
   }
 
   return tasks;
+}
+
+/**
+ * Returns counts + first N filtered tasks per column for one project, in a single
+ * pass using PARTITION BY. Counts always reflect filters; tasks reflect filters AND
+ * the per-column slice.
+ */
+export async function getProjectColumnsTasksPaged(
+  projectId: string,
+  filters: BoardServerFilters,
+  initialLimit: number,
+  options?: { agentId?: string | null; agentScopeOnCurrentBoard?: boolean }
+): Promise<PaginatedColumnsResult> {
+  const search = filters.search ?? null;
+  const priority = filters.priority ?? null;
+  const assigneeId = filters.assigneeId ?? null;
+  const tagId = filters.tagId ?? null;
+  const columnId = filters.columnId ?? null;
+  const agentScopeId = options?.agentScopeOnCurrentBoard ? options.agentId ?? null : null;
+
+  // Counts query — applies all filters, groups by column.
+  const countsResult = await sql`
+    SELECT t.column_id, COUNT(*)::int AS total_count
+    FROM tasks t
+    WHERE t.project_id = ${projectId}
+      AND (${columnId}::uuid IS NULL OR t.column_id = ${columnId}::uuid)
+      AND (${priority}::text IS NULL OR t.priority = ${priority}::text)
+      AND (${search}::text IS NULL OR t.title ILIKE '%' || ${search}::text || '%')
+      AND (${assigneeId}::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${assigneeId}::uuid
+      ))
+      AND (${tagId}::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM task_tag_map ttm WHERE ttm.task_id = t.id AND ttm.tag_id = ${tagId}::uuid
+      ))
+      AND (
+        ${agentScopeId}::uuid IS NULL
+        OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentScopeId}::uuid)
+        OR NOT EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id)
+      )
+    GROUP BY t.column_id
+  `;
+
+  // Paged tasks query — same filters, ROW_NUMBER PARTITION BY column ordered by the
+  // universal sort, sliced to first N.
+  const pageResult = await sql`
+    WITH filtered AS (
+      SELECT
+        t.*,
+        c.name AS column_name,
+        a.name AS creator_name,
+        last_move.last_status_at,
+        last_move.prev_column_name,
+        COALESCE(cl_stats.total, 0)::int AS checklist_total,
+        COALESCE(cl_stats.done, 0)::int AS checklist_done,
+        COALESCE(cmt_stats.count, 0)::int AS comment_count,
+        COALESCE(att_stats.count, 0)::int AS attachment_count,
+        ROW_NUMBER() OVER (
+          PARTITION BY t.column_id
+          ORDER BY
+            CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END ASC,
+            COALESCE(last_move.last_status_at, t.created_at) DESC,
+            t.created_at DESC
+        ) AS rn
+      FROM tasks t
+      LEFT JOIN columns c ON c.id = t.column_id
+      LEFT JOIN agents a ON a.id = t.creator_id
+      LEFT JOIN LATERAL (
+        SELECT created_at AS last_status_at, old_value AS prev_column_name
+        FROM activity_log
+        WHERE task_id = t.id AND action_type = 'task_moved' AND field = 'column'
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) last_move ON true
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE is_checked)::int AS done
+        FROM checklist_items WHERE task_id = t.id
+      ) cl_stats ON true
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS count FROM comments WHERE task_id = t.id AND deleted_at IS NULL
+      ) cmt_stats ON true
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS count FROM file_attachments WHERE task_id = t.id
+      ) att_stats ON true
+      WHERE t.project_id = ${projectId}
+        AND (${columnId}::uuid IS NULL OR t.column_id = ${columnId}::uuid)
+        AND (${priority}::text IS NULL OR t.priority = ${priority}::text)
+        AND (${search}::text IS NULL OR t.title ILIKE '%' || ${search}::text || '%')
+        AND (${assigneeId}::uuid IS NULL OR EXISTS (
+          SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${assigneeId}::uuid
+        ))
+        AND (${tagId}::uuid IS NULL OR EXISTS (
+          SELECT 1 FROM task_tag_map ttm WHERE ttm.task_id = t.id AND ttm.tag_id = ${tagId}::uuid
+        ))
+        AND (
+          ${agentScopeId}::uuid IS NULL
+          OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentScopeId}::uuid)
+          OR NOT EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id)
+        )
+    )
+    SELECT * FROM filtered WHERE rn <= ${initialLimit}
+  `;
+
+  const tasks = pageResult.rows as Task[];
+
+  // Hydrate assignees + tags per task (mirrors getProjectTasks pattern).
+  for (const task of tasks) {
+    const assignees = await sql`
+      SELECT a.id AS agent_id, a.name, a.email, a.avatar_url
+      FROM task_assignees ta JOIN agents a ON a.id = ta.agent_id
+      WHERE ta.task_id = ${task.id}
+    `;
+    task.assignees = assignees.rows as unknown as TaskAssignee[];
+    const taskTags = await sql`
+      SELECT tt.id, tt.name, tt.color
+      FROM task_tag_map ttm JOIN task_tags tt ON tt.id = ttm.tag_id
+      WHERE ttm.task_id = ${task.id}
+    `;
+    task.tags = taskTags.rows as unknown as TaskTag[];
+  }
+
+  // Build buckets keyed by column_id, defaulting to empty for columns with zero matches.
+  const buckets: Record<string, ColumnBucket> = {};
+  for (const row of countsResult.rows) {
+    const cid = row.column_id as string;
+    const total = row.total_count as number;
+    buckets[cid] = { tasks: [], totalCount: total, hasMore: total > initialLimit };
+  }
+  for (const t of tasks) {
+    const cid = t.column_id;
+    if (!buckets[cid]) buckets[cid] = { tasks: [], totalCount: 0, hasMore: false };
+    buckets[cid].tasks.push(t);
+  }
+
+  return { buckets };
+}
+
+/**
+ * Returns the next page of tasks for a single column, applying the same filters and sort.
+ */
+export async function getColumnTasksPage(
+  projectId: string,
+  columnId: string,
+  filters: BoardServerFilters,
+  offset: number,
+  limit: number,
+  options?: { agentId?: string | null; agentScopeOnCurrentBoard?: boolean }
+): Promise<{ tasks: Task[]; hasMore: boolean }> {
+  const search = filters.search ?? null;
+  const priority = filters.priority ?? null;
+  const assigneeId = filters.assigneeId ?? null;
+  const tagId = filters.tagId ?? null;
+  const agentScopeId = options?.agentScopeOnCurrentBoard ? options.agentId ?? null : null;
+
+  const result = await sql`
+    SELECT
+      t.*,
+      c.name AS column_name,
+      a.name AS creator_name,
+      last_move.last_status_at,
+      last_move.prev_column_name,
+      COALESCE(cl_stats.total, 0)::int AS checklist_total,
+      COALESCE(cl_stats.done, 0)::int AS checklist_done,
+      COALESCE(cmt_stats.count, 0)::int AS comment_count,
+      COALESCE(att_stats.count, 0)::int AS attachment_count
+    FROM tasks t
+    LEFT JOIN columns c ON c.id = t.column_id
+    LEFT JOIN agents a ON a.id = t.creator_id
+    LEFT JOIN LATERAL (
+      SELECT created_at AS last_status_at, old_value AS prev_column_name
+      FROM activity_log
+      WHERE task_id = t.id AND action_type = 'task_moved' AND field = 'column'
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) last_move ON true
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE is_checked)::int AS done
+      FROM checklist_items WHERE task_id = t.id
+    ) cl_stats ON true
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*)::int AS count FROM comments WHERE task_id = t.id AND deleted_at IS NULL
+    ) cmt_stats ON true
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*)::int AS count FROM file_attachments WHERE task_id = t.id
+    ) att_stats ON true
+    WHERE t.project_id = ${projectId}
+      AND t.column_id = ${columnId}
+      AND (${priority}::text IS NULL OR t.priority = ${priority}::text)
+      AND (${search}::text IS NULL OR t.title ILIKE '%' || ${search}::text || '%')
+      AND (${assigneeId}::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${assigneeId}::uuid
+      ))
+      AND (${tagId}::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM task_tag_map ttm WHERE ttm.task_id = t.id AND ttm.tag_id = ${tagId}::uuid
+      ))
+      AND (
+        ${agentScopeId}::uuid IS NULL
+        OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentScopeId}::uuid)
+        OR NOT EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id)
+      )
+    ORDER BY
+      CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END ASC,
+      COALESCE(last_move.last_status_at, t.created_at) DESC,
+      t.created_at DESC
+    LIMIT ${limit + 1} OFFSET ${offset}
+  `;
+
+  const rows = result.rows as Task[];
+  const hasMore = rows.length > limit;
+  const tasks = hasMore ? rows.slice(0, limit) : rows;
+
+  for (const task of tasks) {
+    const assignees = await sql`
+      SELECT a.id AS agent_id, a.name, a.email, a.avatar_url
+      FROM task_assignees ta JOIN agents a ON a.id = ta.agent_id
+      WHERE ta.task_id = ${task.id}
+    `;
+    task.assignees = assignees.rows as unknown as TaskAssignee[];
+    const taskTags = await sql`
+      SELECT tt.id, tt.name, tt.color
+      FROM task_tag_map ttm JOIN task_tags tt ON tt.id = ttm.tag_id
+      WHERE ttm.task_id = ${task.id}
+    `;
+    task.tags = taskTags.rows as unknown as TaskTag[];
+  }
+
+  return { tasks, hasMore };
 }
 
 export async function getTaskProjectId(taskId: string): Promise<string | null> {
