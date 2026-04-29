@@ -37,6 +37,11 @@ export function useColumnLoadMore(columnId: string) {
 
     observer.observe(el);
     return () => observer.disconnect();
+    // `loading` is intentionally excluded from deps: the callback reads fresh
+    // state via useBoardStore.getState() to avoid stale-closure double-fire.
+    // `sp` recycles the observer on every URL navigation (including unrelated
+    // ones like ?task=); cheap at 14 columns, document if it becomes hot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columnId, hasMore, loadMoreForColumn, sp]);
 
   return { ref, hasMore, loading };
