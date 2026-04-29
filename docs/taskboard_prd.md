@@ -221,8 +221,12 @@ If a board column is renamed away from these strings, the pipeline math will not
 
 ### 8.3 Sort order within a column
 
-- **Todo column**: strict `created_at DESC` (newest first). Priority is intentionally ignored so freshly-imported leads always surface at the top.
-- **All other columns**: priority first (urgent → high → medium → low → none), tie-break by `created_at DESC`.
+Universal sort across all columns:
+1. **Priority**: urgent → high → medium → low → none
+2. **Last status update** (`last_status_at`) DESC: timestamp of the most recent `task_moved` activity_log row for the task; falls back to `created_at` when the task has never moved
+3. **Created at** DESC
+
+This rule replaces the prior Todo-special-case (which was strict `created_at DESC`); under the new rule, a freshly-created Todo task has `last_status_at = created_at` so newest-first behavior is preserved for the common case.
 
 ### 8.4 Conditional fields
 
@@ -586,7 +590,7 @@ External API calls to `PATCH /api/tasks/[id]/move` move the task but **do not** 
 
 ### 22.3 Loading skeleton
 
-Skeleton mirrors the real header (icon + selector + avatars) and 4 ghost columns with varied card counts. Used by both Suspense boundaries and `loading.tsx`.
+Skeleton mirrors the real header (icon + selector + avatars) and 4 ghost columns with varied card counts. Used by both Suspense boundaries and `loading.tsx`. After hydration, each column shows up to 5 cards and a sentinel that loads 10 more on scroll.
 
 ---
 
@@ -684,6 +688,7 @@ jobs ── (linked via tasks.custom_fields->>'_job_id' OR jobs.task_id)
 - Drag-drop: visually instant (optimistic). Server round-trip for `moveTaskAction` should complete < 400 ms p95.
 - Polling: 5 s interval is acceptable load on Vercel serverless.
 - Per-task batch loading (`getProjectTasks` does N+1 queries for assignees/tags). Acceptable up to ~10 k tasks per board; future work: virtualization (`@tanstack/react-virtual`) and consolidated queries.
+- Per-column pagination: each column initially renders 5 cards and loads 10 more on scroll via `IntersectionObserver` rooted on the column's own scroll container. Total counts come from a separate filter-aware aggregate query so column badges always reflect the full filtered total independent of the loaded slice. Drag-and-drop adjusts counts optimistically and falls back to server-side position computation (`MAX(position) + 1000`) when dropping past a column's loaded tail. Polling refresh (`BoardAutoRefresh`, 5 s) re-fetches each column's loaded window with `includeCount=1` so counts stay live and scroll-loaded tails are preserved across ticks.
 
 ### 25.2 Reliability
 
