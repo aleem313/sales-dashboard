@@ -849,6 +849,15 @@ export async function getProjectColumnsTasksPaged(
   const assigneeId = filters.assigneeId ?? null;
   const tagId = filters.tagId ?? null;
   const columnId = filters.columnId ?? null;
+  // Date predicates pushed down so per-column ROW_NUMBER pagination operates on the
+  // already-filtered set — otherwise client-side date filtering only sees the top-N
+  // sorted by priority, hiding lower-priority but in-range tasks past the slice.
+  const createdFrom = filters.createdFrom ?? null;
+  const createdTo = filters.createdTo ?? null;
+  const updatedFrom = filters.updatedFrom ?? null;
+  const updatedTo = filters.updatedTo ?? null;
+  const dueFrom = filters.dueFrom ?? null;
+  const dueTo = filters.dueTo ?? null;
   const agentScopeId = options?.agentScopeOnCurrentBoard ? options.agentId ?? null : null;
 
   // Counts query — applies all filters, groups by column.
@@ -859,6 +868,12 @@ export async function getProjectColumnsTasksPaged(
       AND (${columnId}::uuid IS NULL OR t.column_id = ${columnId}::uuid)
       AND (${priority}::text IS NULL OR t.priority = ${priority}::text)
       AND (${search}::text IS NULL OR t.title ILIKE '%' || ${search}::text || '%')
+      AND (${createdFrom}::timestamptz IS NULL OR t.created_at >= ${createdFrom}::timestamptz)
+      AND (${createdTo}::timestamptz IS NULL OR t.created_at <= ${createdTo}::timestamptz)
+      AND (${updatedFrom}::timestamptz IS NULL OR t.updated_at >= ${updatedFrom}::timestamptz)
+      AND (${updatedTo}::timestamptz IS NULL OR t.updated_at <= ${updatedTo}::timestamptz)
+      AND (${dueFrom}::timestamptz IS NULL OR t.due_date >= ${dueFrom}::timestamptz)
+      AND (${dueTo}::timestamptz IS NULL OR t.due_date <= ${dueTo}::timestamptz)
       AND (${assigneeId}::uuid IS NULL OR EXISTS (
         SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${assigneeId}::uuid
       ))
@@ -919,6 +934,12 @@ export async function getProjectColumnsTasksPaged(
         AND (${columnId}::uuid IS NULL OR t.column_id = ${columnId}::uuid)
         AND (${priority}::text IS NULL OR t.priority = ${priority}::text)
         AND (${search}::text IS NULL OR t.title ILIKE '%' || ${search}::text || '%')
+        AND (${createdFrom}::timestamptz IS NULL OR t.created_at >= ${createdFrom}::timestamptz)
+        AND (${createdTo}::timestamptz IS NULL OR t.created_at <= ${createdTo}::timestamptz)
+        AND (${updatedFrom}::timestamptz IS NULL OR t.updated_at >= ${updatedFrom}::timestamptz)
+        AND (${updatedTo}::timestamptz IS NULL OR t.updated_at <= ${updatedTo}::timestamptz)
+        AND (${dueFrom}::timestamptz IS NULL OR t.due_date >= ${dueFrom}::timestamptz)
+        AND (${dueTo}::timestamptz IS NULL OR t.due_date <= ${dueTo}::timestamptz)
         AND (${assigneeId}::uuid IS NULL OR EXISTS (
           SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${assigneeId}::uuid
         ))
@@ -976,6 +997,12 @@ export async function getColumnTasksPage(
   const priority = filters.priority ?? null;
   const assigneeId = filters.assigneeId ?? null;
   const tagId = filters.tagId ?? null;
+  const createdFrom = filters.createdFrom ?? null;
+  const createdTo = filters.createdTo ?? null;
+  const updatedFrom = filters.updatedFrom ?? null;
+  const updatedTo = filters.updatedTo ?? null;
+  const dueFrom = filters.dueFrom ?? null;
+  const dueTo = filters.dueTo ?? null;
   const agentScopeId = options?.agentScopeOnCurrentBoard ? options.agentId ?? null : null;
 
   const result = await sql`
@@ -1014,6 +1041,12 @@ export async function getColumnTasksPage(
       AND t.column_id = ${columnId}
       AND (${priority}::text IS NULL OR t.priority = ${priority}::text)
       AND (${search}::text IS NULL OR t.title ILIKE '%' || ${search}::text || '%')
+      AND (${createdFrom}::timestamptz IS NULL OR t.created_at >= ${createdFrom}::timestamptz)
+      AND (${createdTo}::timestamptz IS NULL OR t.created_at <= ${createdTo}::timestamptz)
+      AND (${updatedFrom}::timestamptz IS NULL OR t.updated_at >= ${updatedFrom}::timestamptz)
+      AND (${updatedTo}::timestamptz IS NULL OR t.updated_at <= ${updatedTo}::timestamptz)
+      AND (${dueFrom}::timestamptz IS NULL OR t.due_date >= ${dueFrom}::timestamptz)
+      AND (${dueTo}::timestamptz IS NULL OR t.due_date <= ${dueTo}::timestamptz)
       AND (${assigneeId}::uuid IS NULL OR EXISTS (
         SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${assigneeId}::uuid
       ))
@@ -1040,11 +1073,6 @@ export async function getColumnTasksPage(
 
   let totalCount: number | undefined;
   if (options?.includeCount) {
-    const search = filters.search ?? null;
-    const priority = filters.priority ?? null;
-    const assigneeId = filters.assigneeId ?? null;
-    const tagId = filters.tagId ?? null;
-    const agentScopeId = options?.agentScopeOnCurrentBoard ? options.agentId ?? null : null;
     const countResult = await sql`
       SELECT COUNT(*)::int AS total_count
       FROM tasks t
@@ -1052,6 +1080,12 @@ export async function getColumnTasksPage(
         AND t.column_id = ${columnId}
         AND (${priority}::text IS NULL OR t.priority = ${priority}::text)
         AND (${search}::text IS NULL OR t.title ILIKE '%' || ${search}::text || '%')
+        AND (${createdFrom}::timestamptz IS NULL OR t.created_at >= ${createdFrom}::timestamptz)
+        AND (${createdTo}::timestamptz IS NULL OR t.created_at <= ${createdTo}::timestamptz)
+        AND (${updatedFrom}::timestamptz IS NULL OR t.updated_at >= ${updatedFrom}::timestamptz)
+        AND (${updatedTo}::timestamptz IS NULL OR t.updated_at <= ${updatedTo}::timestamptz)
+        AND (${dueFrom}::timestamptz IS NULL OR t.due_date >= ${dueFrom}::timestamptz)
+        AND (${dueTo}::timestamptz IS NULL OR t.due_date <= ${dueTo}::timestamptz)
         AND (${assigneeId}::uuid IS NULL OR EXISTS (
           SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${assigneeId}::uuid
         ))

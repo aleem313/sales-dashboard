@@ -28,8 +28,14 @@ export function BoardAutoRefresh({
     const id = setInterval(() => {
       if (cancelled) return;
       if (!runInBackground && document.hidden) return;
-      const filters = parseBoardFiltersFromSearchParams(sp ?? new URLSearchParams());
-      const query = serializeBoardFiltersToQuery(filters);
+      const params = sp ?? new URLSearchParams();
+      const filters = parseBoardFiltersFromSearchParams(params);
+      const query = serializeBoardFiltersToQuery(filters, {
+        cf_created: params.get("cf_created") ?? undefined,
+        cf_updated: params.get("cf_updated") ?? undefined,
+        cf_due_after: params.get("cf_due_after") ?? undefined,
+        cf_due_before: params.get("cf_due_before") ?? undefined,
+      });
       refreshBoard(query);
     }, interval);
     return () => {

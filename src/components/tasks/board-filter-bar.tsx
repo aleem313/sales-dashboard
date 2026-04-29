@@ -148,7 +148,7 @@ export function BoardFilterBar({ columns, members, tags, customFields }: BoardFi
             store.clearFilters();
             store.clearCustomFieldFilters();
             const params = new URLSearchParams(searchParams.toString());
-            ["search", "column", "priority", "assignee", "tag"].forEach((k) => params.delete(k));
+            ["search", "column", "priority", "assignee", "tag", "cf_created", "cf_updated", "cf_due_after", "cf_due_before"].forEach((k) => params.delete(k));
             router.push(`?${params.toString()}`, { scroll: false });
           }}
         >

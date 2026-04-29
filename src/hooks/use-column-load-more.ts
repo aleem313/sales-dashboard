@@ -30,8 +30,14 @@ export function useColumnLoadMore(columnId: string) {
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting && !useBoardStore.getState().columnLoading[columnId]) {
-            const filters = parseBoardFiltersFromSearchParams(sp ?? new URLSearchParams());
-            const query = serializeBoardFiltersToQuery(filters);
+            const params = sp ?? new URLSearchParams();
+            const filters = parseBoardFiltersFromSearchParams(params);
+            const query = serializeBoardFiltersToQuery(filters, {
+              cf_created: params.get("cf_created") ?? undefined,
+              cf_updated: params.get("cf_updated") ?? undefined,
+              cf_due_after: params.get("cf_due_after") ?? undefined,
+              cf_due_before: params.get("cf_due_before") ?? undefined,
+            });
             loadMoreForColumn(columnId, query);
           }
         }

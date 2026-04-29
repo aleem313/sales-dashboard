@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -103,10 +104,72 @@ function needsValueInput(operator: string): boolean {
   return !["is_empty", "is_not_empty", "is_true", "is_false"].includes(operator);
 }
 
+// URL params owned by date custom-field filters. Kept in sync so the server
+// query in `getProjectColumnsTasksPaged` can apply date predicates BEFORE
+// per-column pagination — without this, the in-memory date filter only sees
+// the top-N tasks per column and undercounts.
+const DATE_FILTER_PARAMS = ["cf_created", "cf_updated", "cf_due_after", "cf_due_before"] as const;
+
+function deriveDateParams(
+  filters: { fieldId: string; operator: string; value: unknown }[]
+): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {
+    cf_created: undefined,
+    cf_updated: undefined,
+    cf_due_after: undefined,
+    cf_due_before: undefined,
+  };
+  for (const f of filters) {
+    if (f.fieldId === "_created_at" && f.operator === "in_range" && typeof f.value === "string" && f.value) {
+      out.cf_created = f.value;
+    } else if (f.fieldId === "_updated_at" && f.operator === "in_range" && typeof f.value === "string" && f.value) {
+      out.cf_updated = f.value;
+    } else if (f.fieldId === "_due_date" && typeof f.value === "string" && f.value) {
+      if (f.operator === "after") out.cf_due_after = f.value;
+      else if (f.operator === "before") out.cf_due_before = f.value;
+      else if (f.operator === "is") {
+        // "is" picks a single day — encode as inclusive start/end of day.
+        const d = new Date(f.value);
+        if (!Number.isNaN(d.getTime())) {
+          const start = new Date(d); start.setHours(0, 0, 0, 0);
+          const end = new Date(d); end.setHours(23, 59, 59, 999);
+          out.cf_due_after = start.toISOString();
+          out.cf_due_before = end.toISOString();
+        }
+      }
+    }
+  }
+  return out;
+}
+
 export function MoreFilters({ customFields }: MoreFiltersProps) {
   const store = useBoardStore();
   const filters = store.customFieldFilters;
   const expanded = filters.length > 0;
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Mirror date custom-field filters to URL params. This fires whenever the
+  // filter list mutates (add/edit/remove); the server picks up the params on
+  // the next router.push and applies SQL date predicates pre-pagination.
+  useEffect(() => {
+    const desired = deriveDateParams(filters);
+    const current = new URLSearchParams(searchParams.toString());
+    let changed = false;
+    for (const key of DATE_FILTER_PARAMS) {
+      const want = desired[key];
+      const have = current.get(key) ?? undefined;
+      if (want !== have) {
+        changed = true;
+        if (want) current.set(key, want);
+        else current.delete(key);
+      }
+    }
+    if (changed) {
+      router.push(`?${current.toString()}`, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
 
   // Inject virtual fields for built-in date fields + Reason.
   // Created At / Updated At use the date_preset type so the value picker becomes
