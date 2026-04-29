@@ -26,7 +26,12 @@ function hasGetMethod(sp: SearchParamsLike): sp is URLSearchParams | ReadonlyURL
   return sp instanceof URLSearchParams || typeof (sp as { get?: unknown }).get === "function";
 }
 
-function get(sp: SearchParamsLike, key: string): string | undefined {
+/**
+ * Extract a single string value for `key`, normalizing across the three input
+ * variants (URLSearchParams, ReadonlyURLSearchParams, Record). When the Record
+ * variant carries an array (e.g. `?board=a&board=b`), the first element wins.
+ */
+export function firstSearchParam(sp: SearchParamsLike, key: string): string | undefined {
   if (hasGetMethod(sp)) {
     const v = sp.get(key);
     return v ?? undefined;
@@ -35,6 +40,8 @@ function get(sp: SearchParamsLike, key: string): string | undefined {
   if (Array.isArray(raw)) return raw[0];
   return raw ?? undefined;
 }
+
+const get = firstSearchParam;
 
 export function parseBoardFiltersFromSearchParams(sp: SearchParamsLike): BoardServerFilters {
   const priority = get(sp, "priority");

@@ -18,7 +18,7 @@ import {
   getProjectTags,
   getSavedViews,
 } from "@/lib/task-data";
-import { parseBoardFiltersFromSearchParams, INITIAL_PER_COLUMN } from "@/lib/board-filters";
+import { parseBoardFiltersFromSearchParams, firstSearchParam, INITIAL_PER_COLUMN } from "@/lib/board-filters";
 import { getAgentById } from "@/lib/data";
 import { BoardStoreInitializer } from "@/components/tasks/board-store-initializer";
 import { BoardFilterBar } from "@/components/tasks/board-filter-bar";
@@ -43,7 +43,7 @@ async function AgentBoardContent({ searchParams }: Props) {
 
   // Determine active board from URL param or first assigned
   const params = await searchParams;
-  const boardParam = Array.isArray(params.board) ? params.board[0] : params.board;
+  const boardParam = firstSearchParam(params, "board");
   let project = boardParam ? await getProjectById(boardParam) : null;
   if (!project && projects.length > 0) {
     project = projects[0];

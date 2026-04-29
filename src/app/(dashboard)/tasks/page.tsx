@@ -21,7 +21,7 @@ import {
   getCustomFieldDefinitions,
   getSavedViews,
 } from "@/lib/task-data";
-import { parseBoardFiltersFromSearchParams, INITIAL_PER_COLUMN } from "@/lib/board-filters";
+import { parseBoardFiltersFromSearchParams, firstSearchParam, INITIAL_PER_COLUMN } from "@/lib/board-filters";
 
 interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -41,7 +41,7 @@ async function BoardContent({ searchParams }: Props) {
 
   // Determine active board
   const params = await searchParams;
-  const boardParam = Array.isArray(params.board) ? params.board[0] : params.board;
+  const boardParam = firstSearchParam(params, "board");
   let project = boardParam ? await getProjectById(boardParam) : null;
   if (!project && projects.length > 0) {
     project = projects[0];
