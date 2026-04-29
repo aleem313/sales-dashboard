@@ -970,8 +970,8 @@ export async function getColumnTasksPage(
   filters: BoardServerFilters,
   offset: number,
   limit: number,
-  options?: { agentId?: string | null; agentScopeOnCurrentBoard?: boolean }
-): Promise<{ tasks: Task[]; hasMore: boolean }> {
+  options?: { agentId?: string | null; agentScopeOnCurrentBoard?: boolean; includeCount?: boolean }
+): Promise<{ tasks: Task[]; hasMore: boolean; totalCount?: number }> {
   const search = filters.search ?? null;
   const priority = filters.priority ?? null;
   const assigneeId = filters.assigneeId ?? null;
@@ -1038,7 +1038,36 @@ export async function getColumnTasksPage(
 
   await hydrateAssigneesAndTags(tasks);
 
-  return { tasks, hasMore };
+  let totalCount: number | undefined;
+  if (options?.includeCount) {
+    const search = filters.search ?? null;
+    const priority = filters.priority ?? null;
+    const assigneeId = filters.assigneeId ?? null;
+    const tagId = filters.tagId ?? null;
+    const agentScopeId = options?.agentScopeOnCurrentBoard ? options.agentId ?? null : null;
+    const countResult = await sql`
+      SELECT COUNT(*)::int AS total_count
+      FROM tasks t
+      WHERE t.project_id = ${projectId}
+        AND t.column_id = ${columnId}
+        AND (${priority}::text IS NULL OR t.priority = ${priority}::text)
+        AND (${search}::text IS NULL OR t.title ILIKE '%' || ${search}::text || '%')
+        AND (${assigneeId}::uuid IS NULL OR EXISTS (
+          SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${assigneeId}::uuid
+        ))
+        AND (${tagId}::uuid IS NULL OR EXISTS (
+          SELECT 1 FROM task_tag_map ttm WHERE ttm.task_id = t.id AND ttm.tag_id = ${tagId}::uuid
+        ))
+        AND (
+          ${agentScopeId}::uuid IS NULL
+          OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.agent_id = ${agentScopeId}::uuid)
+          OR NOT EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id)
+        )
+    `;
+    totalCount = (countResult.rows[0]?.total_count as number) ?? 0;
+  }
+
+  return { tasks, hasMore, totalCount };
 }
 
 export async function getTaskProjectId(taskId: string): Promise<string | null> {

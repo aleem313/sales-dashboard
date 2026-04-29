@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { BoardColumn, Task, ProjectMember, CustomFieldDefinition, SavedView } from "@/lib/task-data";
 import { getDateRangeFromPreset, type PresetValue } from "@/components/date-range-picker";
+import { PAGE_SIZE } from "@/lib/board-filters";
 
 const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
@@ -209,15 +210,20 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     try {
       const offset = state.columnLoadedCount[columnId] ?? 0;
-      const url = `/api/projects/${state.projectId}/columns/${columnId}/tasks?offset=${offset}&limit=10${
+      const url = `/api/projects/${state.projectId}/columns/${columnId}/tasks?offset=${offset}&limit=${PAGE_SIZE}${
         query ? `&${query}` : ""
       }`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       const data = (await res.json()) as { tasks: Task[]; hasMore: boolean };
 
-      // Drop the result if filters changed under us.
-      if (get().paginationVersion !== versionAtStart) return;
+      // Drop the result if filters changed under us. Clear loading flag so the
+      // sentinel doesn't get stuck in a spinner state if a future caller bumps
+      // paginationVersion without also wiping columnLoading.
+      if (get().paginationVersion !== versionAtStart) {
+        set((s) => ({ columnLoading: { ...s.columnLoading, [columnId]: false } }));
+        return;
+      }
 
       set((s) => {
         const existingIds = new Set(s.tasks.map((t) => t.id));
@@ -272,13 +278,13 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     await Promise.all(
       columnIds.map(async (cid) => {
         const want = Math.min(50, Math.max(5, state.columnLoadedCount[cid] ?? 0));
-        const url = `/api/projects/${state.projectId}/columns/${cid}/tasks?offset=0&limit=${want}${
+        const url = `/api/projects/${state.projectId}/columns/${cid}/tasks?offset=0&limit=${want}&includeCount=1${
           query ? `&${query}` : ""
         }`;
         try {
           const res = await fetch(url, { credentials: "include" });
           if (!res.ok) return;
-          const data = (await res.json()) as { tasks: Task[]; hasMore: boolean };
+          const data = (await res.json()) as { tasks: Task[]; hasMore: boolean; totalCount?: number };
           if (get().paginationVersion !== versionAtStart) return;
 
           set((s) => {
@@ -288,6 +294,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
               tasks: [...otherTasks, ...data.tasks],
               columnLoadedCount: { ...s.columnLoadedCount, [cid]: data.tasks.length },
               columnHasMore: { ...s.columnHasMore, [cid]: data.hasMore },
+              columnCounts:
+                typeof data.totalCount === "number"
+                  ? { ...s.columnCounts, [cid]: data.totalCount }
+                  : s.columnCounts,
             };
           });
         } catch {

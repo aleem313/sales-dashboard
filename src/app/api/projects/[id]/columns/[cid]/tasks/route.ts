@@ -26,11 +26,13 @@ export async function GET(
   filters.columnId = undefined;
   const offset = Math.max(0, parseInt(sp.get("offset") ?? "0", 10) || 0);
   const limit = Math.min(50, Math.max(1, parseInt(sp.get("limit") ?? String(PAGE_SIZE), 10) || PAGE_SIZE));
+  const includeCount = sp.get("includeCount") === "1";
 
   const isAdmin = session.user.role === "admin";
   const result = await getColumnTasksPage(projectId, columnId, filters, offset, limit, {
     agentId,
     agentScopeOnCurrentBoard: !isAdmin && !!agentId,
+    includeCount,
   });
 
   return NextResponse.json(result);
