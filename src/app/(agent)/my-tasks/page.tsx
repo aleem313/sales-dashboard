@@ -12,18 +12,20 @@ import {
   getProjectColumns,
   getProjectMembers,
   getAgentTasksAcrossBoards,
+  getProjectColumnsTasksPaged,
   getUserProjectsWithMeta,
   getCustomFieldDefinitions,
   getProjectTags,
   getSavedViews,
 } from "@/lib/task-data";
+import { parseBoardFiltersFromSearchParams, INITIAL_PER_COLUMN } from "@/lib/board-filters";
 import { getAgentById } from "@/lib/data";
 import { BoardStoreInitializer } from "@/components/tasks/board-store-initializer";
 import { BoardFilterBar } from "@/components/tasks/board-filter-bar";
 import { AutoRefresh } from "@/components/auto-refresh";
 
 interface Props {
-  searchParams: Promise<{ board?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 async function AgentBoardContent({ searchParams }: Props) {
@@ -41,7 +43,8 @@ async function AgentBoardContent({ searchParams }: Props) {
 
   // Determine active board from URL param or first assigned
   const params = await searchParams;
-  let project = params.board ? await getProjectById(params.board) : null;
+  const boardParam = Array.isArray(params.board) ? params.board[0] : params.board;
+  let project = boardParam ? await getProjectById(boardParam) : null;
   if (!project && projects.length > 0) {
     project = projects[0];
   }
@@ -63,16 +66,23 @@ async function AgentBoardContent({ searchParams }: Props) {
     );
   }
 
-  const [allTasks, columns, members, customFields, agentData, tags, savedViews] = await Promise.all([
-    getAgentTasksAcrossBoards(agentId, project.id),
+  const filters = parseBoardFiltersFromSearchParams(params);
+
+  const [paged, columns, members, customFields, agentData, tags, savedViews, allTasks] = await Promise.all([
+    getProjectColumnsTasksPaged(project.id, filters, INITIAL_PER_COLUMN, {
+      agentId,
+      agentScopeOnCurrentBoard: true,
+    }),
     getProjectColumns(project.id),
     getProjectMembers(project.id),
     getCustomFieldDefinitions(project.id),
     getAgentById(agentId),
     getProjectTags(project.id),
     getSavedViews(project.id),
+    getAgentTasksAcrossBoards(agentId, project.id),
   ]);
-  const boardTasks = allTasks.filter((t) => t.project_id === project!.id);
+
+  const totalOnBoard = Object.values(paged.buckets).reduce((sum, b) => sum + b.totalCount, 0);
   const hasMultipleBoards = projects.length > 1;
 
   // Build agent-scoped data for header (agent sees only themselves + their profiles)
@@ -95,7 +105,7 @@ async function AgentBoardContent({ searchParams }: Props) {
           )}
 
           <Badge variant="secondary" className="text-[11px] font-normal shrink-0">
-            {boardTasks.length} task{boardTasks.length !== 1 ? "s" : ""}
+            {totalOnBoard} task{totalOnBoard !== 1 ? "s" : ""}
           </Badge>
 
           {hasMultipleBoards && (
@@ -108,7 +118,14 @@ async function AgentBoardContent({ searchParams }: Props) {
       </div>
       <BoardStoreInitializer customFields={customFields} savedViews={savedViews} />
       <BoardFilterBar columns={columns} members={members} tags={tags} customFields={customFields} />
-      <BoardView columns={columns} tasks={boardTasks} projectId={project.id} members={members} agentId={agentId} customFields={customFields} />
+      <BoardView
+        columns={columns}
+        buckets={paged.buckets}
+        projectId={project.id}
+        members={members}
+        agentId={agentId}
+        customFields={customFields}
+      />
     </>
   );
 }

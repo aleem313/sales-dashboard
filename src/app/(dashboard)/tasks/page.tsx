@@ -12,7 +12,7 @@ import {
   getDefaultProject,
   getProjectById,
   getProjectColumns,
-  getProjectTasks,
+  getProjectColumnsTasksPaged,
   getAllProjects,
   getUserProjectsWithMeta,
   getProjectMembers,
@@ -21,9 +21,10 @@ import {
   getCustomFieldDefinitions,
   getSavedViews,
 } from "@/lib/task-data";
+import { parseBoardFiltersFromSearchParams, INITIAL_PER_COLUMN } from "@/lib/board-filters";
 
 interface Props {
-  searchParams: Promise<{ board?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 async function BoardContent({ searchParams }: Props) {
@@ -40,7 +41,8 @@ async function BoardContent({ searchParams }: Props) {
 
   // Determine active board
   const params = await searchParams;
-  let project = params.board ? await getProjectById(params.board) : null;
+  const boardParam = Array.isArray(params.board) ? params.board[0] : params.board;
+  let project = boardParam ? await getProjectById(boardParam) : null;
   if (!project && projects.length > 0) {
     project = projects[0];
   }
@@ -73,9 +75,11 @@ async function BoardContent({ searchParams }: Props) {
 
   const finalProjects = projects.length > 0 ? projects : await getAllProjects();
 
-  const [columns, tasks, members, available, tags, customFields, savedViews] = await Promise.all([
+  const filters = parseBoardFiltersFromSearchParams(params);
+
+  const [columns, paged, members, available, tags, customFields, savedViews] = await Promise.all([
     getProjectColumns(project.id),
-    getProjectTasks(project.id),
+    getProjectColumnsTasksPaged(project.id, filters, INITIAL_PER_COLUMN),
     getProjectMembers(project.id),
     isAdmin ? getAvailableAgents(project.id) : Promise.resolve([]),
     getProjectTags(project.id),
@@ -96,7 +100,15 @@ async function BoardContent({ searchParams }: Props) {
         customFields={customFields}
       />
       <BoardFilterBar columns={columns} members={members} tags={tags} customFields={customFields} />
-      <BoardView columns={columns} tasks={tasks} projectId={project.id} members={members} isAdmin={isAdmin} agentId={agentId} customFields={customFields} />
+      <BoardView
+        columns={columns}
+        buckets={paged.buckets}
+        projectId={project.id}
+        members={members}
+        isAdmin={isAdmin}
+        agentId={agentId}
+        customFields={customFields}
+      />
     </>
   );
 }
