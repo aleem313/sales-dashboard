@@ -18,8 +18,8 @@ const TZ_OFFSETS: Record<TZKey, { ms: number; utc: string }> = {
 };
 
 function resolveTZ(tz?: string): TZKey {
-  if (tz === "et") return "et";
-  return "pkt";
+  if (tz === "pkt") return "pkt";
+  return "et";
 }
 
 /** Return a Date representing "now" in the selected timezone as if it were UTC. */
