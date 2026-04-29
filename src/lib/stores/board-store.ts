@@ -47,6 +47,27 @@ interface BoardState {
     tag?: string;
   };
 
+  // Pagination state (per column)
+  columnCounts: Record<string, number>;
+  columnLoadedCount: Record<string, number>;
+  columnHasMore: Record<string, boolean>;
+  columnLoading: Record<string, boolean>;
+  /** Bumped on filter change so in-flight load-more requests can self-cancel. */
+  paginationVersion: number;
+
+  // Paged actions
+  initBoardPaged: (data: {
+    columns: BoardColumn[];
+    buckets: Record<string, { tasks: Task[]; totalCount: number; hasMore: boolean }>;
+    members: ProjectMember[];
+    projectId: string;
+    customFields?: CustomFieldDefinition[];
+  }) => void;
+  loadMoreForColumn: (columnId: string, query: string) => Promise<void>;
+  adjustColumnCount: (columnId: string, delta: number) => void;
+  resetPagination: () => void;
+  refreshBoard: (query: string) => Promise<void>;
+
   // Custom fields
   customFields: CustomFieldDefinition[];
 
@@ -116,6 +137,11 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   activeTaskId: null,
   previousState: null,
   filters: {},
+  columnCounts: {},
+  columnLoadedCount: {},
+  columnHasMore: {},
+  columnLoading: {},
+  paginationVersion: 0,
   customFields: [],
   groupBy: "status",
   customFieldFilters: [],
@@ -134,6 +160,141 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       activeTaskId: null,
       previousState: null,
     });
+  },
+
+  initBoardPaged: (data) => {
+    if (get().isDragging) return;
+    const tasks: Task[] = [];
+    const counts: Record<string, number> = {};
+    const loaded: Record<string, number> = {};
+    const hasMore: Record<string, boolean> = {};
+    for (const [cid, bucket] of Object.entries(data.buckets)) {
+      counts[cid] = bucket.totalCount;
+      loaded[cid] = bucket.tasks.length;
+      hasMore[cid] = bucket.hasMore;
+      tasks.push(...bucket.tasks);
+    }
+    // Columns absent from buckets (no tasks at all under filters) still need zero counts
+    for (const col of data.columns) {
+      if (!(col.id in counts)) {
+        counts[col.id] = 0;
+        loaded[col.id] = 0;
+        hasMore[col.id] = false;
+      }
+    }
+    set((s) => ({
+      columns: data.columns,
+      tasks,
+      members: data.members,
+      projectId: data.projectId,
+      customFields: data.customFields ?? s.customFields,
+      activeTaskId: null,
+      previousState: null,
+      columnCounts: counts,
+      columnLoadedCount: loaded,
+      columnHasMore: hasMore,
+      columnLoading: {},
+      paginationVersion: s.paginationVersion + 1,
+    }));
+  },
+
+  loadMoreForColumn: async (columnId, query) => {
+    const state = get();
+    if (state.columnLoading[columnId]) return;
+    if (!state.columnHasMore[columnId]) return;
+    if (!state.projectId) return;
+
+    const versionAtStart = state.paginationVersion;
+    set((s) => ({ columnLoading: { ...s.columnLoading, [columnId]: true } }));
+
+    try {
+      const offset = state.columnLoadedCount[columnId] ?? 0;
+      const url = `/api/projects/${state.projectId}/columns/${columnId}/tasks?offset=${offset}&limit=10${
+        query ? `&${query}` : ""
+      }`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error(`Failed: ${res.status}`);
+      const data = (await res.json()) as { tasks: Task[]; hasMore: boolean };
+
+      // Drop the result if filters changed under us.
+      if (get().paginationVersion !== versionAtStart) return;
+
+      set((s) => {
+        const existingIds = new Set(s.tasks.map((t) => t.id));
+        const fresh = data.tasks.filter((t) => !existingIds.has(t.id));
+        return {
+          tasks: [...s.tasks, ...fresh],
+          columnLoadedCount: {
+            ...s.columnLoadedCount,
+            [columnId]: (s.columnLoadedCount[columnId] ?? 0) + fresh.length,
+          },
+          columnHasMore: { ...s.columnHasMore, [columnId]: data.hasMore },
+          columnLoading: { ...s.columnLoading, [columnId]: false },
+        };
+      });
+    } catch {
+      set((s) => ({ columnLoading: { ...s.columnLoading, [columnId]: false } }));
+    }
+  },
+
+  adjustColumnCount: (columnId, delta) => {
+    set((s) => ({
+      columnCounts: {
+        ...s.columnCounts,
+        [columnId]: Math.max(0, (s.columnCounts[columnId] ?? 0) + delta),
+      },
+      columnLoadedCount: {
+        ...s.columnLoadedCount,
+        [columnId]: Math.max(0, (s.columnLoadedCount[columnId] ?? 0) + delta),
+      },
+    }));
+  },
+
+  resetPagination: () => {
+    set((s) => ({
+      columnCounts: {},
+      columnLoadedCount: {},
+      columnHasMore: {},
+      columnLoading: {},
+      paginationVersion: s.paginationVersion + 1,
+    }));
+  },
+
+  refreshBoard: async (query) => {
+    const state = get();
+    if (state.isDragging || !state.projectId) return;
+
+    // For each column, refetch [0 .. min(50, max(INITIAL, loaded))] so scroll-loaded
+    // tail is preserved AND we don't exceed the API's 50-row cap.
+    const columnIds = state.columns.map((c) => c.id);
+    const versionAtStart = state.paginationVersion;
+
+    await Promise.all(
+      columnIds.map(async (cid) => {
+        const want = Math.min(50, Math.max(5, state.columnLoadedCount[cid] ?? 0));
+        const url = `/api/projects/${state.projectId}/columns/${cid}/tasks?offset=0&limit=${want}${
+          query ? `&${query}` : ""
+        }`;
+        try {
+          const res = await fetch(url, { credentials: "include" });
+          if (!res.ok) return;
+          const data = (await res.json()) as { tasks: Task[]; hasMore: boolean };
+          if (get().paginationVersion !== versionAtStart) return;
+
+          set((s) => {
+            // Replace tasks for this column with the fresh slice; preserve other columns intact.
+            const otherTasks = s.tasks.filter((t) => t.column_id !== cid);
+            return {
+              tasks: [...otherTasks, ...data.tasks],
+              columnLoadedCount: { ...s.columnLoadedCount, [cid]: data.tasks.length },
+              columnHasMore: { ...s.columnHasMore, [cid]: data.hasMore },
+            };
+          });
+        } catch {
+          /* swallow — next tick will retry */
+        }
+      })
+    );
   },
 
   addTask: (task) => {
