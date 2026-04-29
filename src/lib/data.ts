@@ -103,42 +103,109 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
       JOIN columns c ON c.id = t.column_id
       LEFT JOIN activity_history ah ON ah.task_id = t.id
     )
+    -- Date predicate split per-metric (non-obvious): "Jobs Received" (total_jobs)
+    -- is an INTAKE count gated by tv.created_at — it must match what the user
+    -- sees as "today's new arrivals" on the task board. Every other metric is
+    -- status-based and gated by COALESCE(stage_entered_at, updated_at, created_at).
+    -- Each metric carries its own FILTER so the row-scan WHERE only enforces
+    -- agent/profile scoping and a union date predicate (created_at OR status-time
+    -- in window) to avoid pre-filtering rows out of the union of both predicates.
+    -- Any cached row in stats_cache will naturally expire on its 5-min TTL.
     SELECT
-      COUNT(*) AS total_jobs,
-      COUNT(CASE WHEN tv.visited && ARRAY[
-        'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
-      ]::text[] THEN 1 END) AS proposals_sent,
-      COUNT(CASE WHEN tv.visited && ARRAY[
-        'proposal views', 'proposal viewed', 'viewed',
-        'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
-      ]::text[] THEN 1 END) AS proposals_viewed,
-      COUNT(CASE WHEN tv.visited && ARRAY[
-        'in chat', 'following up',
-        'meeting scheduled', 'meeting done',
-        'negotiation', 'won'
-      ]::text[] THEN 1 END) AS in_chat,
-      COUNT(CASE WHEN tv.visited && ARRAY['meeting scheduled', 'meeting done', 'negotiation', 'won']::text[] THEN 1 END) AS meetings_booked,
-      COUNT(CASE WHEN tv.visited && ARRAY['meeting done', 'negotiation', 'won']::text[] THEN 1 END) AS meetings_done,
-      COUNT(CASE WHEN tv.col_lower = 'won' THEN 1 END) AS won,
-      COUNT(CASE WHEN tv.col_lower = 'lost' THEN 1 END) AS lost,
+      COUNT(*) FILTER (
+        WHERE (${startDate}::timestamptz IS NULL OR tv.created_at >= ${startDate}::timestamptz)
+          AND (${endDate}::timestamptz IS NULL OR tv.created_at <= ${endDate}::timestamptz)
+      ) AS total_jobs,
+      COUNT(*) FILTER (
+        WHERE tv.visited && ARRAY[
+          'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        ]::text[]
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS proposals_sent,
+      COUNT(*) FILTER (
+        WHERE tv.visited && ARRAY[
+          'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        ]::text[]
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS proposals_viewed,
+      COUNT(*) FILTER (
+        WHERE tv.visited && ARRAY[
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        ]::text[]
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS in_chat,
+      COUNT(*) FILTER (
+        WHERE tv.visited && ARRAY['meeting scheduled', 'meeting done', 'negotiation', 'won']::text[]
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS meetings_booked,
+      COUNT(*) FILTER (
+        WHERE tv.visited && ARRAY['meeting done', 'negotiation', 'won']::text[]
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS meetings_done,
+      COUNT(*) FILTER (
+        WHERE tv.col_lower = 'won'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS won,
+      COUNT(*) FILTER (
+        WHERE tv.col_lower = 'lost'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS lost,
       ROUND(
-        COUNT(CASE WHEN tv.col_lower = 'won' THEN 1 END)::DECIMAL /
-        NULLIF(COUNT(CASE WHEN tv.col_lower IN ('won', 'lost') THEN 1 END), 0) * 100, 1
+        COUNT(*) FILTER (
+          WHERE tv.col_lower = 'won'
+          AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+          AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+        )::DECIMAL /
+        NULLIF(COUNT(*) FILTER (
+          WHERE tv.col_lower IN ('won', 'lost')
+          AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+          AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+        ), 0) * 100, 1
       ) AS win_rate,
-      COALESCE(SUM(CASE WHEN tv.col_lower = 'won' THEN j.won_value END), 0) AS total_revenue,
-      COUNT(CASE WHEN tv.col_lower = 'n/a' THEN 1 END) AS bad_leads,
-      COUNT(CASE WHEN tv.col_lower IN ('todo', 'to do', 'new', 'proposal ready') THEN 1 END) AS untouched
+      COALESCE(SUM(j.won_value) FILTER (
+        WHERE tv.col_lower = 'won'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ), 0) AS total_revenue,
+      COUNT(*) FILTER (
+        WHERE tv.col_lower = 'n/a'
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS bad_leads,
+      COUNT(*) FILTER (
+        WHERE tv.col_lower IN ('todo', 'to do', 'new', 'proposal ready')
+        AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+      ) AS untouched
     FROM task_visited tv
     LEFT JOIN jobs j ON j.job_id = (tv.custom_fields->>'_job_id')
-    WHERE (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+    -- Row-scan: keep a row if EITHER its created_at OR its status-time falls in
+    -- the window. Per-metric FILTERs above re-apply the correct predicate.
+    WHERE (
+        (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at) <= ${endDate}::timestamptz)
+        OR (
+          (${startDate}::timestamptz IS NULL OR tv.created_at >= ${startDate}::timestamptz)
+          AND (${endDate}::timestamptz IS NULL OR tv.created_at <= ${endDate}::timestamptz)
+        )
+      )
       AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
         SELECT 1 FROM task_assignees ta WHERE ta.task_id = tv.task_id AND ta.agent_id = ${agentId ?? null}::uuid
       ))
