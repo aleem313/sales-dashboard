@@ -130,7 +130,7 @@ The board is seeded with **13 default columns**. A 14th column, "Proposal Views"
 
 | # | Default column | Color | `is_done` | Pipeline group | Funnel stage | Description / when used |
 |---|----------------|-------|:---:|----------------|--------------|-------------------------|
-| 1 | **Todo** | `#6b7280` (gray) | — | Untouched | — | New incoming task that hasn't been actioned. Manually-created or imported tasks land here unless n8n provides a column. Sort: newest-first (overrides priority sort). |
+| 1 | **Todo** | `#6b7280` (gray) | — | Untouched | — | New incoming task that hasn't been actioned. Manually-created or imported tasks land here unless n8n provides a column. |
 | 2 | **Proposal Submitted** | `#3b82f6` (blue) | — | In Progress | Proposals Sent | Proposal has been sent to the client. n8n auto-creates tasks at this status when proposal generation succeeds. Sets `jobs.proposal_sent_at`. |
 | (2.5) | **Proposal Views** *(optional, not seeded)* | — | — | In Progress | Proposals Viewed | Client has opened/viewed the proposal. Recognized by `proposal_viewed_at` lifecycle code (`['proposal views', 'proposal viewed', 'viewed']`). |
 | 3 | **Prototype Required** | `#eab308` (amber) | — | In Progress | Proposals Sent | Client requested a prototype/sample before continuing. |

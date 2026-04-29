@@ -145,7 +145,7 @@ function AgentBoardSelector({ projects, currentProjectId }: { projects: { id: st
 export default function MyTasksPage({ searchParams }: Props) {
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
-      <BoardAutoRefresh interval={5000} runInBackground />
+      <BoardAutoRefresh interval={5000} />
       <Suspense
         fallback={
           <>

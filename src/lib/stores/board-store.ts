@@ -289,6 +289,13 @@ export const useBoardStore = create<BoardState>((set, get) => ({
           if (get().paginationVersion !== versionAtStart) return;
 
           set((s) => {
+            // Recheck isDragging — the fetch was launched up to ~500ms ago and a drag
+            // may have started in the meantime. Don't clobber optimistic DnD.
+            if (s.isDragging) {
+              return typeof data.totalCount === "number"
+                ? { columnCounts: { ...s.columnCounts, [cid]: data.totalCount } }
+                : s;
+            }
             // Replace tasks for this column with the fresh slice; preserve other columns intact.
             const otherTasks = s.tasks.filter((t) => t.column_id !== cid);
             return {

@@ -247,7 +247,7 @@ export function BoardView({ columns: serverColumns, buckets, projectId, members,
       // ── Task drag ──
       if (activeData?.type !== "task") return;
 
-      const task = store.tasks.find((t) => t.id === active.id);
+      const task = useBoardStore.getState().tasks.find((t) => t.id === active.id);
       if (!task) return;
 
       // Determine final column and position
@@ -270,12 +270,13 @@ export function BoardView({ columns: serverColumns, buckets, projectId, members,
 
       // Optimistic move already happened in handleDragOver
       // Now persist to server
-      const prev = store.previousState;
+      const prev = useBoardStore.getState().previousState;
 
       // Calculate position for server. If we're dropping past the loaded tail of a
       // column that still has unloaded tasks, send `null` so the server appends.
-      const colTasks = store.getTasksByColumn(targetColumnId).filter((t) => t.id !== task.id);
-      const targetHasUnloadedTail = !!store.columnHasMore[targetColumnId];
+      const freshState = useBoardStore.getState();
+      const colTasks = freshState.getTasksByColumn(targetColumnId).filter((t) => t.id !== task.id);
+      const targetHasUnloadedTail = !!freshState.columnHasMore[targetColumnId];
       let newPosition: number | null;
       if (colTasks.length === 0) {
         newPosition = 1000;

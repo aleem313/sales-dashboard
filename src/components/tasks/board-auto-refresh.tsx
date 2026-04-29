@@ -12,7 +12,7 @@ import { parseBoardFiltersFromSearchParams, serializeBoardFiltersToQuery } from 
  */
 export function BoardAutoRefresh({
   interval = 5000,
-  runInBackground = true,
+  runInBackground = false,
 }: {
   interval?: number;
   runInBackground?: boolean;

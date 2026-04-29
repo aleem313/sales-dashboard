@@ -117,7 +117,7 @@ export default function TasksPage({ searchParams }: Props) {
   return (
     <>
       <Header title="Task Board" />
-      <BoardAutoRefresh interval={5000} runInBackground />
+      <BoardAutoRefresh interval={5000} />
       <main className="flex-1 overflow-hidden flex flex-col">
         <Suspense fallback={<BoardSkeleton />}>
           <BoardContent searchParams={searchParams} />

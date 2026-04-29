@@ -93,7 +93,8 @@ export function BoardColumnComponent({
   });
 
   const totalCount = useBoardStore((s) => s.columnCounts[column.id]);
-  const displayCount = totalCount ?? tasks.length;
+  const hasClientCustomFilters = useBoardStore((s) => s.customFieldFilters.length > 0);
+  const displayCount = hasClientCustomFilters ? tasks.length : (totalCount ?? tasks.length);
 
   const isOverWip = column.wip_limit != null && displayCount > column.wip_limit;
   const isAtWip = column.wip_limit != null && displayCount === column.wip_limit;
