@@ -9,6 +9,7 @@ export async function PATCH(
 ) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.user.role !== "admin") return NextResponse.json({ error: "Admin only" }, { status: 403 });
 
   const { id: projectId, tid } = await params;
   const body = await req.json();
@@ -46,6 +47,7 @@ export async function DELETE(
 ) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.user.role !== "admin") return NextResponse.json({ error: "Admin only" }, { status: 403 });
 
   const { tid } = await params;
   await sql`DELETE FROM task_tags WHERE id = ${tid}`;

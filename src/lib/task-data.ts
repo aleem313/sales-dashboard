@@ -91,6 +91,7 @@ export interface TaskTag {
   id: string;
   name: string;
   color: string;
+  card_count?: number;
 }
 
 export interface CustomFieldDefinition {
@@ -1548,6 +1549,18 @@ export async function deleteChecklistItem(itemId: string): Promise<void> {
 export async function getProjectTags(projectId: string): Promise<TaskTag[]> {
   const result = await sql`
     SELECT * FROM task_tags WHERE project_id = ${projectId} ORDER BY name ASC
+  `;
+  return result.rows as TaskTag[];
+}
+
+export async function getProjectTagsWithCounts(projectId: string): Promise<TaskTag[]> {
+  const result = await sql`
+    SELECT t.id, t.name, t.color, COUNT(m.task_id)::int AS card_count
+    FROM task_tags t
+    LEFT JOIN task_tag_map m ON m.tag_id = t.id
+    WHERE t.project_id = ${projectId}
+    GROUP BY t.id, t.name, t.color
+    ORDER BY LOWER(t.name) ASC
   `;
   return result.rows as TaskTag[];
 }

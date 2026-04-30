@@ -330,6 +330,7 @@ export async function createTagAction(projectId: string, name: string, color?: s
 export async function updateTagAction(tagId: string, fields: { name?: string; color?: string }) {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
 
   const { sql } = await import("@/lib/db");
 
@@ -364,6 +365,7 @@ export async function updateTagAction(tagId: string, fields: { name?: string; co
 export async function deleteTagAction(tagId: string) {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
 
   const { sql } = await import("@/lib/db");
   // CASCADE on task_tag_map handles removing from tasks

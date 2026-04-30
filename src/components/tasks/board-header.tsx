@@ -28,10 +28,11 @@ import {
 import { toast } from "sonner";
 import { updateBoardAction, deleteBoardAction } from "@/lib/task-actions";
 import { TaskCreateModal } from "./task-create-modal";
-import type { Project, ProjectMember, TaskAssignee, ProjectWithMeta, CustomFieldDefinition } from "@/lib/task-data";
+import type { Project, ProjectMember, TaskAssignee, ProjectWithMeta, CustomFieldDefinition, TaskTag } from "@/lib/task-data";
 import { BoardSelectorWrapper } from "./board-selector-wrapper";
 import { BoardMembersPanel } from "./board-members-panel";
 import { CustomFieldsPanel } from "./custom-fields-panel";
+import { LabelsPanel } from "./labels-panel";
 import { GroupSelector } from "./group-selector";
 import { ViewsDropdown } from "./views-dropdown";
 import type { BoardColumn } from "@/lib/task-data";
@@ -44,6 +45,7 @@ interface BoardHeaderProps {
   availableAgents: TaskAssignee[];
   isAdmin: boolean;
   customFields?: CustomFieldDefinition[];
+  tags?: TaskTag[];
   onNewTask?: () => void;
 }
 
@@ -70,6 +72,7 @@ export function BoardHeader({
   availableAgents,
   isAdmin,
   customFields,
+  tags,
   onNewTask,
 }: BoardHeaderProps) {
   const router = useRouter();
@@ -172,6 +175,7 @@ export function BoardHeader({
             onFieldsChange={() => router.refresh()}
           />
         )}
+        {isAdmin && tags && <LabelsPanel tags={tags} />}
         <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" />
           New Task

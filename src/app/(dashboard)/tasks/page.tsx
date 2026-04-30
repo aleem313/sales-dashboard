@@ -18,6 +18,7 @@ import {
   getProjectMembers,
   getAvailableAgents,
   getProjectTags,
+  getProjectTagsWithCounts,
   getCustomFieldDefinitions,
   getSavedViews,
 } from "@/lib/task-data";
@@ -82,7 +83,7 @@ async function BoardContent({ searchParams }: Props) {
     getProjectColumnsTasksPaged(project.id, filters, INITIAL_PER_COLUMN),
     getProjectMembers(project.id),
     isAdmin ? getAvailableAgents(project.id) : Promise.resolve([]),
-    getProjectTags(project.id),
+    isAdmin ? getProjectTagsWithCounts(project.id) : getProjectTags(project.id),
     getCustomFieldDefinitions(project.id),
     getSavedViews(project.id),
   ]);
@@ -98,6 +99,7 @@ async function BoardContent({ searchParams }: Props) {
         availableAgents={available}
         isAdmin={isAdmin}
         customFields={customFields}
+        tags={tags}
       />
       <BoardFilterBar columns={columns} members={members} tags={tags} customFields={customFields} />
       <BoardView
