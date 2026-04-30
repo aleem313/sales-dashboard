@@ -31,6 +31,7 @@ import {
   getCustomFieldDefinitions, createCustomFieldDefinition, updateCustomFieldDefinition,
   archiveCustomFieldDefinition, restoreCustomFieldDefinition, reorderCustomFieldDefinitions,
   getSavedViews, createSavedView, deleteSavedView,
+  deleteActivityMoveEntry,
 } from "@/lib/task-data";
 
 function revalidateBoard() {
@@ -119,6 +120,32 @@ export async function deleteTaskAction(taskId: string) {
   const deleted = await deleteTask(taskId, session.user.agentId ?? null);
   if (!deleted) throw new Error("Task not found or already deleted");
   revalidateBoard();
+}
+
+export async function deleteActivityMoveAction(
+  taskId: string,
+  activityId: string
+): Promise<{ ok: true } | { ok: false; reason: "forbidden" | "not_found" | "wrong_type" }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, reason: "forbidden" };
+  if (session.user.role !== "admin") return { ok: false, reason: "forbidden" };
+
+  const result = await deleteActivityMoveEntry(taskId, activityId);
+  if (result !== "deleted") return { ok: false, reason: result };
+
+  // Bust stats cache so dashboard tiles re-compute on next read.
+  const { sql } = await import("@/lib/db");
+  await sql`DELETE FROM stats_cache`;
+
+  // Revalidate task pages + every dashboard surface that derives from activity_log.
+  revalidatePath("/tasks");
+  revalidatePath("/my-tasks");
+  revalidatePath("/dashboard");
+  revalidatePath("/my-dashboard");
+  revalidatePath("/pipeline");
+  revalidatePath("/my-pipeline");
+
+  return { ok: true };
 }
 
 export async function createCommentAction(
