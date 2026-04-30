@@ -360,8 +360,8 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
         await setTaskTagsAction(task.id, [...currentIds, tag.id]);
         const res = await fetch(`/api/tasks/${task.id}`);
         if (res.ok) setTask(await res.json());
-      } catch {
-        toast.error("Failed to create tag");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to create tag");
       }
     });
   }

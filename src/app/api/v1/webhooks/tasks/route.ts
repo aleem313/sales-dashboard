@@ -6,6 +6,7 @@ import {
   createTask,
   getProjectColumns,
   getDefaultProject,
+  findConflictingTag,
 } from "@/lib/task-data";
 
 export async function POST(request: NextRequest) {
@@ -141,18 +142,14 @@ export async function POST(request: NextRequest) {
     tagNames.push("vollna-auto");
 
     for (const tagName of tagNames) {
-      // Find or create tag
-      const existingTag = await sql`
-        SELECT id FROM task_tags
-        WHERE project_id = ${projectId} AND LOWER(name) = LOWER(${tagName})
-        LIMIT 1
-      `;
-      if (existingTag.rows.length > 0) {
-        tagIds.push(existingTag.rows[0].id as string);
+      // Find by first-name match (case-insensitive, prevents duplicates like "Shayan" vs "Shayan Shahid")
+      const conflict = await findConflictingTag(projectId, tagName);
+      if (conflict) {
+        tagIds.push(conflict.id);
       } else {
         const newTag = await sql`
           INSERT INTO task_tags (project_id, name, color)
-          VALUES (${projectId}, ${tagName}, ${tagName === "vollna-auto" ? "#8b5cf6" : "#3b82f6"})
+          VALUES (${projectId}, ${tagName.trim()}, ${tagName === "vollna-auto" ? "#8b5cf6" : "#3b82f6"})
           RETURNING id
         `;
         tagIds.push(newTag.rows[0].id as string);

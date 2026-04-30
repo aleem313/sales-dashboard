@@ -1552,10 +1552,54 @@ export async function getProjectTags(projectId: string): Promise<TaskTag[]> {
   return result.rows as TaskTag[];
 }
 
+export class DuplicateTagError extends Error {
+  conflict: TaskTag;
+  constructor(conflict: TaskTag) {
+    super(
+      `Tag "${conflict.name}" already exists with the same first name. ` +
+        `Reuse the existing tag instead of creating a duplicate.`
+    );
+    this.name = "DuplicateTagError";
+    this.conflict = conflict;
+  }
+}
+
+export function getTagFirstToken(name: string): string {
+  return name.trim().toLowerCase().split(/\s+/)[0] ?? "";
+}
+
+export async function findConflictingTag(
+  projectId: string,
+  name: string,
+  excludeTagId?: string
+): Promise<TaskTag | null> {
+  const firstToken = getTagFirstToken(name);
+  if (!firstToken) return null;
+  const result = excludeTagId
+    ? await sql`
+        SELECT * FROM task_tags
+        WHERE project_id = ${projectId}
+          AND id <> ${excludeTagId}
+          AND LOWER(SPLIT_PART(TRIM(name), ' ', 1)) = ${firstToken}
+        LIMIT 1
+      `
+    : await sql`
+        SELECT * FROM task_tags
+        WHERE project_id = ${projectId}
+          AND LOWER(SPLIT_PART(TRIM(name), ' ', 1)) = ${firstToken}
+        LIMIT 1
+      `;
+  return (result.rows[0] as TaskTag) ?? null;
+}
+
 export async function createTag(projectId: string, name: string, color?: string): Promise<TaskTag> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Tag name is required");
+  const conflict = await findConflictingTag(projectId, trimmed);
+  if (conflict) throw new DuplicateTagError(conflict);
   const result = await sql`
     INSERT INTO task_tags (project_id, name, color)
-    VALUES (${projectId}, ${name}, ${color ?? '#6b7280'})
+    VALUES (${projectId}, ${trimmed}, ${color ?? '#6b7280'})
     RETURNING *
   `;
   return result.rows[0] as TaskTag;

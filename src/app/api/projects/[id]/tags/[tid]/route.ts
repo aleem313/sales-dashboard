@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { sql } from "@/lib/db";
+import { findConflictingTag } from "@/lib/task-data";
 
 export async function PATCH(
   req: NextRequest,
@@ -9,8 +10,21 @@ export async function PATCH(
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { tid } = await params;
+  const { id: projectId, tid } = await params;
   const body = await req.json();
+
+  if (typeof body.name === "string" && body.name.trim()) {
+    const conflict = await findConflictingTag(projectId, body.name.trim(), tid);
+    if (conflict) {
+      return NextResponse.json(
+        {
+          error: `Tag "${conflict.name}" already exists with the same first name. Reuse the existing tag instead of creating a duplicate.`,
+          conflict,
+        },
+        { status: 409 }
+      );
+    }
+  }
 
   const result = await sql`
     UPDATE task_tags SET

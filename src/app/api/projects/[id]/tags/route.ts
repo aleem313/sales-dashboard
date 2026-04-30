@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getProjectTags, createTag, isProjectMember } from "@/lib/task-data";
+import { getProjectTags, createTag, isProjectMember, DuplicateTagError } from "@/lib/task-data";
 
 export async function GET(
   _req: NextRequest,
@@ -35,6 +35,16 @@ export async function POST(
     return NextResponse.json({ error: "Name is required" }, { status: 422 });
   }
 
-  const tag = await createTag(projectId, body.name.trim(), body.color);
-  return NextResponse.json(tag, { status: 201 });
+  try {
+    const tag = await createTag(projectId, body.name.trim(), body.color);
+    return NextResponse.json(tag, { status: 201 });
+  } catch (e) {
+    if (e instanceof DuplicateTagError) {
+      return NextResponse.json(
+        { error: e.message, conflict: e.conflict },
+        { status: 409 }
+      );
+    }
+    throw e;
+  }
 }

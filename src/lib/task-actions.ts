@@ -26,6 +26,7 @@ import {
   deleteColumn,
   reorderColumns,
   createTag,
+  findConflictingTag,
   getProjectTags,
   getCustomFieldDefinitions, createCustomFieldDefinition, updateCustomFieldDefinition,
   archiveCustomFieldDefinition, restoreCustomFieldDefinition, reorderCustomFieldDefinitions,
@@ -331,6 +332,23 @@ export async function updateTagAction(tagId: string, fields: { name?: string; co
   if (!session?.user) throw new Error("Unauthorized");
 
   const { sql } = await import("@/lib/db");
+
+  if (typeof fields.name === "string" && fields.name.trim()) {
+    const existing = await sql`SELECT project_id FROM task_tags WHERE id = ${tagId}`;
+    if (existing.rows.length === 0) throw new Error("Tag not found");
+    const conflict = await findConflictingTag(
+      existing.rows[0].project_id as string,
+      fields.name.trim(),
+      tagId
+    );
+    if (conflict) {
+      throw new Error(
+        `Tag "${conflict.name}" already exists with the same first name. ` +
+          `Reuse the existing tag instead of creating a duplicate.`
+      );
+    }
+  }
+
   const result = await sql`
     UPDATE task_tags SET
       name = COALESCE(${fields.name ?? null}, name),
