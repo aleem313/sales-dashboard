@@ -133,10 +133,10 @@ export default async function MyDashboardPage({
           deltaDown={kpi.deltaWinRate < 0}
         />
         <StatCard
-          label="Avg Time to Apply"
+          label="Median Time to Apply"
           value={formatAvgTime(avgResponseTime)}
           variant={avgResponseTime !== null && avgResponseTime <= 0.25 ? "green" : avgResponseTime !== null && avgResponseTime <= 1 ? "warn" : "danger"}
-          delta="Proposal response time"
+          delta="Typical proposal response time"
         />
         <StatCard
           label="Bad Leads"

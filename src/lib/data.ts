@@ -2679,10 +2679,13 @@ export async function getAvgResponseTime(
 ): Promise<number | null> {
   const { startDate, endDate } = range ?? {};
 
-  // Stays on received_at: the metric measures hours from receipt to proposal sent,
-  // so the date window must be tied to receipt, not status movement.
+  // Median (P50), not mean — stale backfilled rows and bounce-back tasks left
+  // outliers >100h that swung the arithmetic mean by hours. Median ignores them.
+  // Date window stays on received_at to match "received in this period, time to first apply".
   const result = await sql`
-    SELECT AVG(EXTRACT(EPOCH FROM (proposal_sent_at - received_at)) / 3600) AS avg_hours
+    SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (
+      ORDER BY EXTRACT(EPOCH FROM (proposal_sent_at - received_at)) / 3600
+    ) AS median_hours
     FROM jobs
     WHERE proposal_sent_at IS NOT NULL
       AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
@@ -2691,8 +2694,9 @@ export async function getAvgResponseTime(
       AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
   `;
 
-  const val = result.rows[0]?.avg_hours;
-  return val ? parseFloat(parseFloat(val).toFixed(2)) : null;
+  const val = result.rows[0]?.median_hours;
+  if (val === null || val === undefined) return null;
+  return parseFloat(parseFloat(val).toFixed(2));
 }
 
 // Jobs still in pre-sent status where wait time > threshold (15 min default)
