@@ -13,9 +13,10 @@ interface HeaderControlsProps {
   profiles: Profile[];
   hideFilters?: boolean;
   hideAgentFilter?: boolean;
+  hideDatePicker?: boolean;
 }
 
-export function HeaderControls({ agents, profiles, hideFilters, hideAgentFilter }: HeaderControlsProps) {
+export function HeaderControls({ agents, profiles, hideFilters, hideAgentFilter, hideDatePicker }: HeaderControlsProps) {
   const { data: session } = useSession();
   const [agentValue, setAgentValue] = useState("");
   const [profileValue, setProfileValue] = useState("");
@@ -108,14 +109,17 @@ export function HeaderControls({ agents, profiles, hideFilters, hideAgentFilter 
             </span>
           </div>
 
-          <Separator orientation="vertical" className="h-5" />
+          {!hideDatePicker && <Separator orientation="vertical" className="h-5" />}
         </>
       )}
 
       {/* Date range picker */}
-      <DateRangePicker />
-
-      <Separator orientation="vertical" className="h-5" />
+      {!hideDatePicker && (
+        <>
+          <DateRangePicker />
+          <Separator orientation="vertical" className="h-5" />
+        </>
+      )}
 
       {/* Theme toggle */}
       <ThemeToggle />

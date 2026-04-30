@@ -91,7 +91,7 @@ async function AgentBoardContent({ searchParams }: Props) {
 
   return (
     <>
-      <Header title="Task Board" agents={agentForHeader} profiles={profilesForHeader} />
+      <Header title="Task Board" agents={agentForHeader} profiles={profilesForHeader} hideFilters hideDatePicker />
       {/* Board header */}
       <div className="flex items-center justify-between border-b px-4 py-2.5 bg-card/50">
         <div className="flex items-center gap-3">

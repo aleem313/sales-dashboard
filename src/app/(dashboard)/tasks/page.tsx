@@ -118,7 +118,7 @@ async function BoardContent({ searchParams }: Props) {
 export default function TasksPage({ searchParams }: Props) {
   return (
     <>
-      <Header title="Task Board" />
+      <Header title="Task Board" hideFilters hideDatePicker />
       <BoardAutoRefresh interval={5000} />
       <main className="flex-1 overflow-hidden flex flex-col">
         <Suspense fallback={<BoardSkeleton />}>
