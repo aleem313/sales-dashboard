@@ -33,8 +33,7 @@ export default async function MyConnectsPage({
   ]);
   const agentProfiles = allProfiles.filter((p) => p.agent_id === agentId);
 
-  const estimatedUsed = usage.reduce((s, u) => s + u.connects_used, 0);
-  const totalUsed = boosted.totalConnectsUsed > 0 ? boosted.totalConnectsUsed : estimatedUsed;
+  const totalUsed = boosted.totalConnectsUsed;
   const totalWins = roi.reduce((s, r) => s + r.wins, 0);
   const connectsPerWin = totalWins > 0 ? Math.round(totalUsed / totalWins) : 0;
   const wasted = roi.filter((r) => r.wins === 0).reduce((s, r) => s + r.connects_spent, 0);
@@ -46,7 +45,7 @@ export default async function MyConnectsPage({
         <AutoRefresh interval={15000} />
 
       <StatRow className="mb-5">
-        <StatCard label="Total Used" value={totalUsed} variant="accent" delta="Estimated from proposals" />
+        <StatCard label="Total Used" value={totalUsed} variant="accent" delta="This period" />
         <StatCard label="Boosted Connects" value={boosted.totalBoosted} variant="accent" delta="All boosted" />
         <StatCard label="Bid out Boost" value={boosted.bidOutBoost} variant="accent" delta="Boosted + labeled" />
         <StatCard label="Per Win" value={connectsPerWin} delta="Connects per closed deal" />

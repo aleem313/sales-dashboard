@@ -2433,20 +2433,49 @@ export async function getConnectsUsageByProfile(
 ): Promise<ConnectsUsage[]> {
   const { startDate, endDate } = range ?? {};
 
-  // connects_used column may not exist yet; return estimated data based on proposals
+  // Sums real per-task connects from tasks.custom_fields._connects_used.
+  // Tasks are attributed to a profile either through their linked job
+  // (custom_fields._job_id -> jobs.job_id -> jobs.profile_id) OR through a
+  // task tag whose name matches the profile_name (the same dual-resolution
+  // pattern used elsewhere). Manual cards with neither linkage are not
+  // attributable to a profile and are excluded from this per-profile view;
+  // they are still captured by getBoostedConnectsSummary's totals.
   const result = await sql`
     SELECT
       p.profile_name,
       p.stack,
-      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL THEN 1 END) * 6 AS connects_used
+      COALESCE(p.connects_budget, 150) AS connects_budget,
+      COALESCE(SUM(NULLIF(t.custom_fields->>'_connects_used', '')::numeric), 0) AS connects_used
     FROM profiles p
-    LEFT JOIN jobs j ON j.profile_id = p.profile_id
-      AND (${startDate}::timestamptz IS NULL OR j.stage_entered_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR j.stage_entered_at <= ${endDate}::timestamptz)
-      AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
+    LEFT JOIN tasks t ON (
+      EXISTS (
+        SELECT 1 FROM jobs j2
+        WHERE j2.job_id = (t.custom_fields->>'_job_id')
+          AND j2.profile_id = p.profile_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM task_tag_map ttm
+        JOIN task_tags tt ON tt.id = ttm.tag_id
+        WHERE ttm.task_id = t.id
+          AND LOWER(tt.name) = LOWER(p.profile_name)
+      )
+    )
+    LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
     WHERE p.active = true
+      AND NULLIF(t.custom_fields->>'_connects_used', '') IS NOT NULL
+      AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.created_at) >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.created_at) <= ${endDate}::timestamptz)
+      AND (
+        ${agentId ?? null}::uuid IS NULL
+        OR j.agent_id = ${agentId ?? null}::uuid
+        OR EXISTS (
+          SELECT 1 FROM task_assignees ta
+          WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
+        )
+      )
       AND (${profileId ?? null}::text IS NULL OR p.profile_id = ${profileId ?? null}::text)
-    GROUP BY p.profile_name, p.stack
+    GROUP BY p.profile_name, p.stack, p.connects_budget
+    HAVING COALESCE(SUM(NULLIF(t.custom_fields->>'_connects_used', '')::numeric), 0) > 0
     ORDER BY connects_used DESC
   `;
 
@@ -2454,7 +2483,7 @@ export async function getConnectsUsageByProfile(
     profile_name: row.profile_name,
     niche: row.stack,
     connects_used: parseInt(row.connects_used) || 0,
-    connects_budget: 150,
+    connects_budget: parseInt(row.connects_budget) || 150,
   }));
 }
 
@@ -2526,20 +2555,35 @@ export async function getConnectROIByNiche(
 ): Promise<ConnectROI[]> {
   const { startDate, endDate } = range ?? {};
 
-  // Estimate connects from proposal count (avg ~6 connects per proposal)
+  // Real connects from tasks.custom_fields._connects_used grouped by the
+  // niche of the task's linked profile (via custom_fields._job_id). Tasks
+  // whose linked job has no profile, or that have no _job_id at all
+  // (typical manual creation), aggregate under 'Unspecified' so they stay
+  // visible. Wins are read from the task's current column = 'Won', so a
+  // manually-won card without a jobs row still counts toward its niche row.
   const result = await sql`
     SELECT
-      COALESCE(p.stack, 'Unknown') AS niche,
-      COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL THEN 1 END) * 6 AS connects_spent,
-      COUNT(CASE WHEN LOWER(j.status) = 'won' THEN 1 END) AS wins
-    FROM jobs j
-    JOIN profiles p ON p.profile_id = j.profile_id
-    WHERE (${startDate}::timestamptz IS NULL OR j.stage_entered_at >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR j.stage_entered_at <= ${endDate}::timestamptz)
-      AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
+      COALESCE(p.stack, 'Unspecified') AS niche,
+      COALESCE(SUM(NULLIF(t.custom_fields->>'_connects_used', '')::numeric), 0) AS connects_spent,
+      COUNT(*) FILTER (WHERE LOWER(c.name) = 'won') AS wins
+    FROM tasks t
+    JOIN columns c ON c.id = t.column_id
+    LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
+    LEFT JOIN profiles p ON p.profile_id = j.profile_id
+    WHERE NULLIF(t.custom_fields->>'_connects_used', '') IS NOT NULL
+      AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.created_at) >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.created_at) <= ${endDate}::timestamptz)
+      AND (
+        ${agentId ?? null}::uuid IS NULL
+        OR j.agent_id = ${agentId ?? null}::uuid
+        OR EXISTS (
+          SELECT 1 FROM task_assignees ta
+          WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
+        )
+      )
       AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
-    GROUP BY COALESCE(p.stack, 'Unknown')
-    HAVING COUNT(CASE WHEN j.proposal_sent_at IS NOT NULL THEN 1 END) > 0
+    GROUP BY COALESCE(p.stack, 'Unspecified')
+    HAVING COALESCE(SUM(NULLIF(t.custom_fields->>'_connects_used', '')::numeric), 0) > 0
     ORDER BY connects_spent DESC
   `;
 
