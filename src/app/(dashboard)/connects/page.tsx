@@ -3,11 +3,14 @@ import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { ConnectsUsageBars } from "@/components/connects/connects-usage-bars";
 import { ConnectROITable } from "@/components/connects/connect-roi-table";
 import { FilterQualityCard } from "@/components/connects/filter-quality";
+import { ConnectsPurchaseForm } from "@/components/connects/connects-purchase-form";
 import {
   getConnectsUsageByProfile,
   getConnectROIByNiche,
   getFilterQualityAnalysis,
   getBoostedConnectsSummary,
+  getConnectsBudgetSummary,
+  getConnectsPurchasesByProfile,
   getAllAgents,
   getAllProfiles,
 } from "@/lib/data";
@@ -26,11 +29,13 @@ export default async function ConnectsPage({
   const profileId = typeof params.profile === "string" ? params.profile : undefined;
   const range = parseDateRange(params);
 
-  const [usage, roi, filterQuality, boosted, allAgents, allProfiles] = await Promise.all([
+  const [usage, roi, filterQuality, boosted, budget, purchases, allAgents, allProfiles] = await Promise.all([
     getConnectsUsageByProfile(range, agentId, profileId),
     getConnectROIByNiche(range, agentId, profileId),
     getFilterQualityAnalysis(range, agentId, profileId),
     getBoostedConnectsSummary(range, agentId, profileId),
+    getConnectsBudgetSummary(range, agentId, profileId),
+    getConnectsPurchasesByProfile(profileId ? [profileId] : undefined, range, 200),
     getAllAgents(),
     getAllProfiles(),
   ]);
@@ -66,6 +71,8 @@ export default async function ConnectsPage({
       <AutoRefresh interval={15000} />
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
         <StatRow className="mb-5">
+          <StatCard label="Connects Purchased" value={budget.totalConnectsPurchased} variant="accent" delta="Logged this period" />
+          <StatCard label="Spend ($)" value={budget.totalSpentUsd.toFixed(2)} variant="accent" delta="On connects this period" />
           <StatCard label="Total Connects Used" value={totalUsed} variant="warn" delta="This period" />
           <StatCard label="Boosted Connects" value={boosted.totalBoosted} variant="accent" delta="All boosted" />
           <StatCard label="Bid out Boost" value={boosted.bidOutBoost} variant="accent" delta="Boosted + labeled" />
@@ -82,6 +89,10 @@ export default async function ConnectsPage({
             variant="danger"
           />
         </StatRow>
+
+        <div className="mb-5">
+          <ConnectsPurchaseForm profiles={allProfiles} purchases={purchases} isAdmin />
+        </div>
 
         <div className="mb-5">
           <ConnectsUsageBars data={usage} />

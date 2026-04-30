@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "migrate-tasks") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "migrate-tasks") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
   }
 
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const sourceBoard = request.nextUrl.searchParams.get("from") || "e8442ebd-afd3-4217-99c4-e55ee20d4bfa";
     const destBoard = request.nextUrl.searchParams.get("to") || "351494d8-918e-475e-b16c-2eee3232aefe";
     return runMigrateTasks(sourceBoard, destBoard);
+  }
+
+  if (migration === "016") {
+    return run016();
   }
 
   if (migration === "015") {
@@ -428,6 +432,48 @@ async function run011() {
     return NextResponse.json({
       success: false,
       migration: "011_fix_profile_assignments",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run016() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 016: Create connects_purchases ledger...");
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS connects_purchases (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        profile_id      TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+        purchased_on    DATE NOT NULL,
+        connects_count  INTEGER NOT NULL CHECK (connects_count > 0),
+        amount_spent    NUMERIC(10,2) NOT NULL CHECK (amount_spent >= 0),
+        notes           TEXT,
+        created_by      UUID REFERENCES agents(id) ON DELETE SET NULL,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    results.push("✓ connects_purchases table created");
+
+    await sql`CREATE INDEX IF NOT EXISTS idx_connects_purchases_profile ON connects_purchases(profile_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_connects_purchases_purchased_on ON connects_purchases(purchased_on DESC)`;
+    results.push("✓ indexes ensured");
+
+    const cacheWipe = await sql`DELETE FROM stats_cache`;
+    results.push(`✓ Cleared stats_cache: ${cacheWipe.rowCount} rows removed`);
+
+    return NextResponse.json({
+      success: true,
+      migration: "016_connects_purchases",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "016_connects_purchases",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });

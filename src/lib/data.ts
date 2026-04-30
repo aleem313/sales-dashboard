@@ -2440,13 +2440,24 @@ export async function getConnectsUsageByProfile(
   // pattern used elsewhere). Manual cards with neither linkage are not
   // attributable to a profile and are excluded from this per-profile view;
   // they are still captured by getBoostedConnectsSummary's totals.
+  //
+  // connects_budget per profile is now SUM(connects_count) of recorded
+  // purchases (connects_purchases table), date-bounded by the same range.
+  // The legacy profiles.connects_budget column is no longer read.
   const result = await sql`
     SELECT
       p.profile_name,
       p.stack,
-      COALESCE(p.connects_budget, 150) AS connects_budget,
+      COALESCE(cpb.total_purchased, 0) AS connects_budget,
       COALESCE(SUM(NULLIF(t.custom_fields->>'_connects_used', '')::numeric), 0) AS connects_used
     FROM profiles p
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(SUM(cp.connects_count), 0) AS total_purchased
+      FROM connects_purchases cp
+      WHERE cp.profile_id = p.profile_id
+        AND (${startDate}::timestamptz IS NULL OR cp.purchased_on >= (${startDate}::timestamptz)::date)
+        AND (${endDate}::timestamptz   IS NULL OR cp.purchased_on <= (${endDate}::timestamptz)::date)
+    ) cpb ON TRUE
     LEFT JOIN tasks t ON (
       EXISTS (
         SELECT 1 FROM jobs j2
@@ -2462,20 +2473,33 @@ export async function getConnectsUsageByProfile(
     )
     LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
     WHERE p.active = true
-      AND NULLIF(t.custom_fields->>'_connects_used', '') IS NOT NULL
-      AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.created_at) >= ${startDate}::timestamptz)
-      AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.created_at) <= ${endDate}::timestamptz)
       AND (
-        ${agentId ?? null}::uuid IS NULL
-        OR j.agent_id = ${agentId ?? null}::uuid
-        OR EXISTS (
-          SELECT 1 FROM task_assignees ta
-          WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
+        NULLIF(t.custom_fields->>'_connects_used', '') IS NOT NULL
+        OR cpb.total_purchased > 0
+      )
+      AND (
+        t.id IS NULL
+        OR (
+          NULLIF(t.custom_fields->>'_connects_used', '') IS NOT NULL
+          AND (${startDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.created_at) >= ${startDate}::timestamptz)
+          AND (${endDate}::timestamptz IS NULL OR COALESCE(j.stage_entered_at, t.created_at) <= ${endDate}::timestamptz)
+          AND (
+            ${agentId ?? null}::uuid IS NULL
+            OR j.agent_id = ${agentId ?? null}::uuid
+            OR EXISTS (
+              SELECT 1 FROM task_assignees ta
+              WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
+            )
+          )
         )
       )
+      AND (${agentId ?? null}::uuid IS NULL OR p.agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR p.profile_id = ${profileId ?? null}::text)
-    GROUP BY p.profile_name, p.stack, p.connects_budget
-    HAVING COALESCE(SUM(NULLIF(t.custom_fields->>'_connects_used', '')::numeric), 0) > 0
+    GROUP BY p.profile_name, p.stack, cpb.total_purchased
+    HAVING (
+      COALESCE(SUM(NULLIF(t.custom_fields->>'_connects_used', '')::numeric), 0) > 0
+      OR COALESCE(cpb.total_purchased, 0) > 0
+    )
     ORDER BY connects_used DESC
   `;
 
@@ -2483,8 +2507,120 @@ export async function getConnectsUsageByProfile(
     profile_name: row.profile_name,
     niche: row.stack,
     connects_used: parseInt(row.connects_used) || 0,
-    connects_budget: parseInt(row.connects_budget) || 150,
+    connects_budget: parseInt(row.connects_budget) || 0,
   }));
+}
+
+// ============================================================
+// CONNECTS PURCHASE LEDGER
+// ============================================================
+
+export async function createConnectsPurchase(input: {
+  profileId: string;
+  purchasedOn: string; // YYYY-MM-DD
+  connectsCount: number;
+  amountSpent: number;
+  notes?: string | null;
+  createdBy: string | null; // agent UUID, NULL for admin
+}): Promise<{ id: string }> {
+  const result = await sql`
+    INSERT INTO connects_purchases
+      (profile_id, purchased_on, connects_count, amount_spent, notes, created_by)
+    VALUES
+      (${input.profileId}, ${input.purchasedOn}::date, ${input.connectsCount}, ${input.amountSpent}, ${input.notes ?? null}, ${input.createdBy})
+    RETURNING id
+  `;
+  return { id: result.rows[0].id as string };
+}
+
+export async function deleteConnectsPurchase(purchaseId: string): Promise<boolean> {
+  const result = await sql`DELETE FROM connects_purchases WHERE id = ${purchaseId}::uuid`;
+  return (result.rowCount ?? 0) > 0;
+}
+
+export async function getProfileAgentId(profileId: string): Promise<string | null> {
+  const result = await sql`
+    SELECT agent_id FROM profiles WHERE profile_id = ${profileId} LIMIT 1
+  `;
+  if (result.rows.length === 0) return null;
+  return (result.rows[0].agent_id as string | null) ?? null;
+}
+
+export async function getConnectsPurchasesByProfile(
+  profileIds?: string[],
+  range?: DateRange,
+  limit = 200
+): Promise<import("./types").ConnectsPurchase[]> {
+  const { startDate, endDate } = range ?? {};
+  const profileFilter = profileIds && profileIds.length > 0 ? profileIds : null;
+
+  const result = await sql`
+    SELECT
+      cp.id,
+      cp.profile_id,
+      p.profile_name,
+      p.agent_id,
+      pa.name AS agent_name,
+      cp.purchased_on,
+      cp.connects_count,
+      cp.amount_spent,
+      cp.notes,
+      cp.created_by,
+      ca.name AS created_by_name,
+      cp.created_at
+    FROM connects_purchases cp
+    JOIN profiles p ON p.profile_id = cp.profile_id
+    LEFT JOIN agents pa ON pa.id = p.agent_id
+    LEFT JOIN agents ca ON ca.id = cp.created_by
+    WHERE (${profileFilter}::text[] IS NULL OR cp.profile_id = ANY(${profileFilter}::text[]))
+      AND (${startDate}::timestamptz IS NULL OR cp.purchased_on >= (${startDate}::timestamptz)::date)
+      AND (${endDate}::timestamptz   IS NULL OR cp.purchased_on <= (${endDate}::timestamptz)::date)
+    ORDER BY cp.purchased_on DESC, cp.created_at DESC
+    LIMIT ${limit}
+  `;
+
+  return result.rows.map((row) => ({
+    id: row.id as string,
+    profile_id: row.profile_id as string,
+    profile_name: row.profile_name as string,
+    agent_id: (row.agent_id as string | null) ?? null,
+    agent_name: (row.agent_name as string | null) ?? null,
+    purchased_on: typeof row.purchased_on === "string" ? row.purchased_on : new Date(row.purchased_on as Date).toISOString().slice(0, 10),
+    connects_count: parseInt(row.connects_count as string) || 0,
+    amount_spent: parseFloat(row.amount_spent as string) || 0,
+    notes: (row.notes as string | null) ?? null,
+    created_by: (row.created_by as string | null) ?? null,
+    created_by_name: (row.created_by_name as string | null) ?? null,
+    created_at: row.created_at as string,
+  }));
+}
+
+export async function getConnectsBudgetSummary(
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string
+): Promise<import("./types").ConnectsBudgetSummary> {
+  const { startDate, endDate } = range ?? {};
+
+  const result = await sql`
+    SELECT
+      COALESCE(SUM(cp.connects_count), 0) AS total_connects_purchased,
+      COALESCE(SUM(cp.amount_spent),   0) AS total_spent_usd,
+      COUNT(*)                            AS purchase_count
+    FROM connects_purchases cp
+    JOIN profiles p ON p.profile_id = cp.profile_id
+    WHERE (${startDate}::timestamptz IS NULL OR cp.purchased_on >= (${startDate}::timestamptz)::date)
+      AND (${endDate}::timestamptz   IS NULL OR cp.purchased_on <= (${endDate}::timestamptz)::date)
+      AND (${agentId ?? null}::uuid IS NULL OR p.agent_id = ${agentId ?? null}::uuid)
+      AND (${profileId ?? null}::text IS NULL OR cp.profile_id = ${profileId ?? null}::text)
+  `;
+
+  const row = result.rows[0];
+  return {
+    totalConnectsPurchased: parseInt(row.total_connects_purchased as string) || 0,
+    totalSpentUsd: parseFloat(row.total_spent_usd as string) || 0,
+    purchaseCount: parseInt(row.purchase_count as string) || 0,
+  };
 }
 
 export async function getBoostedConnectsSummary(

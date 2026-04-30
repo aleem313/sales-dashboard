@@ -159,6 +159,7 @@ Agents have full dashboard access scoped to their own data. All agent pages forc
 | 013 | `013_lifecycle_milestones.sql` | — | Add `meeting_booked_at` milestone column, backfill from activity_log, partial indexes |
 | 014 | (in migrate route) | — | Lifecycle milestone columns extended: `proposal_viewed_at`, `in_chat_at`, `meeting_done_at`; backfill from activity_log + partial indexes |
 | 015 | `015_stage_entered_at_filter.sql` | — | Backfill `jobs.stage_entered_at` from `received_at`, set DEFAULT NOW(), add `idx_jobs_stage_entered_at`, wipe `stats_cache`. Enables status-update-date filtering on dashboards/pipeline. |
+| 016 | `016_connects_purchases.sql` | — | New `connects_purchases` ledger table (profile_id, purchased_on, connects_count, amount_spent, notes, created_by) + 2 indexes. Replaces hardcoded 150 budget fallback with real per-profile purchase totals. |
 
 ## Migration Execution
 
@@ -170,14 +171,10 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v={VERSION}&secret=YOU
 
 **Latest migration:**
 ```
-https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=015&secret=YOUR_CRON_SECRET
+http://157.173.110.62/api/migrate?v=016&secret=YOUR_CRON_SECRET
 ```
 
-**Run on BOTH targets** (Vercel + Contabo) — each has its own Postgres:
-```
-https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v=015&secret=YOUR_CRON_SECRET
-http://157.173.110.62/api/migrate?v=015&secret=YOUR_CRON_SECRET
-```
+Vercel is decommissioned (2026-04-29) — Contabo is the only target. Earlier migrations were dual-target.
 
 Replace `YOUR_CRON_SECRET` with the actual value from Vercel Environment Variables. All migrations are idempotent — safe to re-run.
 
@@ -296,6 +293,7 @@ When creating a new agent profile webhook in n8n workflow `EWnZg3svZWwcIRs4`, us
 - **`jobs.status`**: Renamed from `clickup_status` (migration 012). Same values, same queries. Historical data preserved.
 - **Legacy ClickUp columns**: `clickup_task_id`, `clickup_task_url` still exist as nullable columns for historical data. Never write to them for new jobs.
 - **Connects canonical storage**: `tasks.custom_fields._connects_used` (base spend) and `tasks.custom_fields._boosted_connects` (separate boost amount). Set on every card type — n8n and manual — by the same UI inputs in `task-create-full.tsx`, `task-full-view.tsx`, and `task-detail-drawer.tsx`. `jobs.connects_used` from migration 004 is unused — never read or write. All three connects queries in `data.ts` (`getConnectsUsageByProfile`, `getBoostedConnectsSummary`, `getConnectROIByNiche`) are task-driven, LEFT JOIN to jobs, and date-gated by `COALESCE(j.stage_entered_at, t.created_at)`. `_boosted_connects` is **not** added into the base "Total Used" total — it's surfaced as its own KPI tile from `getBoostedConnectsSummary.totalBoosted`. Manual cards with no `_job_id` and no profile-name task tag aren't attributable to a profile/niche, so they're excluded from `getConnectsUsageByProfile` and aggregated under `'Unspecified'` in `getConnectROIByNiche`; their connects still contribute to `getBoostedConnectsSummary.totalConnectsUsed`.
+- **Connects purchase ledger** (migration 016): per-profile budget on the `/connects` and `/my-connects` bars now comes from `SUM(connects_purchases.connects_count)` for that profile, date-bounded by the same range as usage. Entered via `<ConnectsPurchaseForm>` (`src/components/connects/connects-purchase-form.tsx`) on both pages. Auth: agents can ADD only to their own profiles (server-side check in `addConnectsPurchaseAction` against `profiles.agent_id = session.user.agentId`); **only admins can DELETE** any row (`deleteConnectsPurchaseAction` rejects non-admin). Agents have no delete UI. `profiles.connects_budget` is **legacy/unused** post-migration 016 — never read, never written; keep it on the table only so rollback is possible. The hardcoded `150` fallback in `getConnectsUsageByProfile` is gone — a profile with usage but no logged purchases now shows `X used / 0 total` (visible flag that someone forgot to log a purchase). The "Connects Purchased" and "Spend ($)" StatCards on both pages read from `getConnectsBudgetSummary`.
 
 ### ClickUp Removal (IMPORTANT — for AI/dev agents)
 

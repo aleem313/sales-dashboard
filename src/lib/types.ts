@@ -33,7 +33,29 @@ export interface Profile {
   agent_id: string | null;
   clickup_list_id?: string | null;
   active: boolean;
+  connects_budget?: number | null;
   created_at: string;
+}
+
+export interface ConnectsPurchase {
+  id: string;
+  profile_id: string;
+  profile_name: string;
+  agent_id: string | null;
+  agent_name: string | null;
+  purchased_on: string;
+  connects_count: number;
+  amount_spent: number;
+  notes: string | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface ConnectsBudgetSummary {
+  totalConnectsPurchased: number;
+  totalSpentUsd: number;
+  purchaseCount: number;
 }
 
 export interface Job {

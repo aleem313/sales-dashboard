@@ -11,7 +11,11 @@ import {
   dismissAlert,
   markJobAsSent,
   getAllProfiles,
+  createConnectsPurchase,
+  deleteConnectsPurchase,
+  getProfileAgentId,
 } from "./data";
+import { auth } from "./auth";
 
 // Generate a PBKDF2-SHA256 hash with 16-byte salt, 64-byte key (128 hex chars)
 async function hashPassword(password: string): Promise<string> {
@@ -235,3 +239,69 @@ export async function triggerSheetsSync() {
   revalidatePath("/settings");
   return result;
 }
+
+function revalidateConnectsPaths() {
+  revalidatePath("/connects");
+  revalidatePath("/my-connects");
+}
+
+export async function addConnectsPurchaseAction(input: {
+  profileId: string;
+  purchasedOn: string; // YYYY-MM-DD
+  connectsCount: number;
+  amountSpent: number;
+  notes?: string;
+}): Promise<{ id: string }> {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+
+  if (!input.profileId) throw new Error("profileId is required");
+  if (!input.purchasedOn || !/^\d{4}-\d{2}-\d{2}$/.test(input.purchasedOn)) {
+    throw new Error("purchasedOn must be a YYYY-MM-DD date");
+  }
+  if (!Number.isFinite(input.connectsCount) || input.connectsCount <= 0) {
+    throw new Error("connectsCount must be a positive number");
+  }
+  if (!Number.isFinite(input.amountSpent) || input.amountSpent < 0) {
+    throw new Error("amountSpent must be a non-negative number");
+  }
+
+  if (session.user.role !== "admin") {
+    const profileAgentId = await getProfileAgentId(input.profileId);
+    if (!profileAgentId || profileAgentId !== session.user.agentId) {
+      throw new Error("Not authorized for this profile");
+    }
+  }
+
+  const created = await createConnectsPurchase({
+    profileId: input.profileId,
+    purchasedOn: input.purchasedOn,
+    connectsCount: Math.floor(input.connectsCount),
+    amountSpent: input.amountSpent,
+    notes: input.notes?.trim() || null,
+    createdBy: session.user.agentId ?? null,
+  });
+
+  // Bust stats cache so connects bars / tiles recompute on next read.
+  const { sql } = await import("./db");
+  await sql`DELETE FROM stats_cache`;
+
+  revalidateConnectsPaths();
+  return created;
+}
+
+export async function deleteConnectsPurchaseAction(purchaseId: string): Promise<{ ok: true } | { ok: false; reason: "forbidden" | "not_found" }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, reason: "forbidden" };
+  if (session.user.role !== "admin") return { ok: false, reason: "forbidden" };
+
+  const deleted = await deleteConnectsPurchase(purchaseId);
+  if (!deleted) return { ok: false, reason: "not_found" };
+
+  const { sql } = await import("./db");
+  await sql`DELETE FROM stats_cache`;
+
+  revalidateConnectsPaths();
+  return { ok: true };
+}
+
