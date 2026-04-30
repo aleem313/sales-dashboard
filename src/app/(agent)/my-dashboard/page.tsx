@@ -149,7 +149,7 @@ export default async function MyDashboardPage({
       </StatRow>
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <ConversionFunnel steps={funnel} />
+        <ConversionFunnel steps={funnel.filter((s) => s.label !== "Passed Filter")} />
         <PipelineNow stages={pipeline} />
       </div>
 
