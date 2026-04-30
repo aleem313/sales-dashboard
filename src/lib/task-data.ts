@@ -1414,6 +1414,50 @@ export async function logActivity(
   `;
 }
 
+/**
+ * Admin-only: delete a single `task_moved` activity-log entry.
+ *
+ * Returns:
+ *   "deleted"     — row removed
+ *   "not_found"   — no row matched (taskId, activityId)
+ *   "wrong_type"  — row exists but action_type !== 'task_moved'
+ *
+ * Falls back to `fixActivityLogTrigger()` + retry if migration 007 was not
+ * applied on this database (same pattern as deleteTask / deleteProject).
+ */
+export async function deleteActivityMoveEntry(
+  taskId: string,
+  activityId: string
+): Promise<"deleted" | "not_found" | "wrong_type"> {
+  const existing = await sql`
+    SELECT action_type
+    FROM activity_log
+    WHERE id = ${activityId} AND task_id = ${taskId}
+    LIMIT 1
+  `;
+  if (existing.rows.length === 0) return "not_found";
+  if (existing.rows[0].action_type !== "task_moved") return "wrong_type";
+
+  try {
+    await sql`
+      DELETE FROM activity_log
+      WHERE id = ${activityId}
+        AND task_id = ${taskId}
+        AND action_type = 'task_moved'
+    `;
+  } catch {
+    await fixActivityLogTrigger();
+    await sql`
+      DELETE FROM activity_log
+      WHERE id = ${activityId}
+        AND task_id = ${taskId}
+        AND action_type = 'task_moved'
+    `;
+  }
+
+  return "deleted";
+}
+
 export async function getTaskActivity(
   taskId: string,
   commentsOnly: boolean = false
