@@ -125,6 +125,7 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
   const [task, setTask] = useState<Task | null>(null);
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [activity, setActivity] = useState<ActivityLogEntry[]>([]);
+  const [deletingActivityIds, setDeletingActivityIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [activityTab, setActivityTab] = useState<"all" | "comments">("all");
   const [attachments, setAttachments] = useState<{ id: string; filename: string; url: string; size_bytes: number; mime_type: string; uploader_id: string; uploader_name: string; created_at: string }[]>([]);
@@ -218,6 +219,40 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
       setJobLoading(false);
     }
   }, []);
+
+  const handleDeleteActivity = useCallback(async (entry: ActivityLogEntry) => {
+    if (entry.action_type !== "task_moved") return;
+    const confirmMsg = `Delete this status move? This will remove "${entry.old_value ?? "—"} → ${entry.new_value ?? "—"}" from the activity log and update dashboard counts. This cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setDeletingActivityIds((prev) => {
+      const next = new Set(prev);
+      next.add(entry.id);
+      return next;
+    });
+
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/activity/${entry.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast.error(body.error ?? "Failed to delete activity entry");
+        return;
+      }
+      setActivity((prev) => prev.filter((a) => a.id !== entry.id));
+      toast.success("Activity entry deleted");
+      router.refresh();
+    } catch {
+      toast.error("Network error while deleting activity entry");
+    } finally {
+      setDeletingActivityIds((prev) => {
+        const next = new Set(prev);
+        next.delete(entry.id);
+        return next;
+      });
+    }
+  }, [taskId, router]);
 
   useEffect(() => {
     if (!task) return;
@@ -1101,26 +1136,42 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
                   activity.length === 0 ? (
                     <p className="text-xs text-muted-foreground text-center py-4">No activity yet</p>
                   ) : (
-                    activity.map((entry) => (
-                      <div key={entry.id} className="text-xs border-l-2 border-muted pl-3 py-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-medium">{entry.actor_name ?? entry.actor_label}</span>
-                          <span className="text-muted-foreground">
-                            {entry.action_type === "comment_added" ? "commented"
-                              : entry.action_type === "task_created" ? "created this task"
-                              : entry.action_type === "task_moved" ? `moved to ${entry.new_value}`
-                              : `changed ${entry.field}`}
-                          </span>
+                    activity.map((entry) => {
+                      const canDelete = isAdmin && entry.action_type === "task_moved";
+                      const isDeleting = deletingActivityIds.has(entry.id);
+                      return (
+                        <div key={entry.id} className="group relative text-xs border-l-2 border-muted pl-3 py-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium">{entry.actor_name ?? entry.actor_label}</span>
+                            <span className="text-muted-foreground">
+                              {entry.action_type === "comment_added" ? "commented"
+                                : entry.action_type === "task_created" ? "created this task"
+                                : entry.action_type === "task_moved" ? `moved to ${entry.new_value}`
+                                : `changed ${entry.field}`}
+                            </span>
+                          </div>
+                          {entry.action_type === "comment_added" && entry.new_value && (
+                            <div className="mt-1 text-foreground bg-muted/50 rounded px-2 py-1">{entry.new_value}</div>
+                          )}
+                          {entry.action_type === "field_changed" && entry.old_value && (
+                            <div className="text-muted-foreground mt-0.5">{entry.old_value} &rarr; {entry.new_value}</div>
+                          )}
+                          <div className="text-muted-foreground/60 mt-0.5" title={entry.created_at}>{formatDistanceToNow(new Date(entry.created_at), { addSuffix: true })}</div>
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteActivity(entry)}
+                              disabled={isDeleting}
+                              aria-label="Delete this status move"
+                              title="Delete this status move (admin)"
+                              className="absolute top-1 right-1 hidden group-hover:flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                            >
+                              {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                            </button>
+                          )}
                         </div>
-                        {entry.action_type === "comment_added" && entry.new_value && (
-                          <div className="mt-1 text-foreground bg-muted/50 rounded px-2 py-1">{entry.new_value}</div>
-                        )}
-                        {entry.action_type === "field_changed" && entry.old_value && (
-                          <div className="text-muted-foreground mt-0.5">{entry.old_value} &rarr; {entry.new_value}</div>
-                        )}
-                        <div className="text-muted-foreground/60 mt-0.5" title={entry.created_at}>{formatDistanceToNow(new Date(entry.created_at), { addSuffix: true })}</div>
-                      </div>
-                    ))
+                      );
+                    })
                   )
                 )}
               </div>
