@@ -88,27 +88,33 @@ export default async function DashboardPage({
       <AutoRefresh interval={15000} />
       <main className="flex-1 overflow-y-auto bg-background p-6 md:p-7">
         <StatRow className="mb-5 lg:!grid-cols-8">
-          <StatCard
+          <KPIMetricDrillDown
+            metric="total_jobs"
             label="Jobs Received"
             value={kpi.totalJobs}
             variant="accent"
             delta={`${fmt(kpi.deltaJobs)} ${vsLabel}`}
             deltaDown={kpi.deltaJobs < 0}
+            searchParams={params}
           />
-          <StatCard
+          <KPIMetricDrillDown
+            metric="proposals_sent"
             label="Proposals Sent"
             value={kpi.proposalsSent}
             subtitle={kpi.totalJobs > 0 ? `${Math.round((kpi.proposalsSent / kpi.totalJobs) * 100)}%` : undefined}
             delta={`${fmt(kpi.deltaProposals)} ${vsLabel}`}
             deltaDown={kpi.deltaProposals < 0}
+            searchParams={params}
           />
-          <StatCard
+          <KPIMetricDrillDown
+            metric="untouched"
             label="Un Touched"
             value={kpi.untouched}
             subtitle={kpi.totalJobs > 0 ? `${Math.round((kpi.untouched / kpi.totalJobs) * 100)}%` : undefined}
             variant="warn"
             delta={`${fmt(kpi.deltaUntouched)} ${vsLabel}`}
             deltaDown={kpi.deltaUntouched < 0}
+            searchParams={params}
           />
           <KPIMetricDrillDown
             metric="meetings_booked"
@@ -119,12 +125,14 @@ export default async function DashboardPage({
             deltaDown={kpi.deltaMeetings < 0}
             searchParams={params}
           />
-          <StatCard
+          <KPIMetricDrillDown
+            metric="won"
             label="Jobs Won"
             value={kpi.won}
             variant="green"
             delta={`${fmt(kpi.deltaWon)} ${vsLabel}`}
             deltaDown={kpi.deltaWon < 0}
+            searchParams={params}
           />
           <StatCard
             label="Win Rate"
@@ -139,13 +147,15 @@ export default async function DashboardPage({
             variant={avgResponseTime !== null && avgResponseTime <= 0.25 ? "green" : avgResponseTime !== null && avgResponseTime <= 1 ? "warn" : "danger"}
             delta="Typical proposal response time"
           />
-          <StatCard
+          <KPIMetricDrillDown
+            metric="bad_leads"
             label="Bad Leads"
             value={kpi.badLeads}
             subtitle={kpi.totalJobs > 0 ? `${Math.round((kpi.badLeads / kpi.totalJobs) * 100)}%` : undefined}
             variant="danger"
             delta={`${fmt(kpi.deltaBadLeads)} ${vsLabel}`}
             deltaDown={kpi.deltaBadLeads < 0}
+            searchParams={params}
           />
         </StatRow>
 
