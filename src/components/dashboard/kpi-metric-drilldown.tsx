@@ -54,9 +54,9 @@ export function KPIMetricDrillDown({
         onClick={() => clickable && setOpen(true)}
         disabled={!clickable}
         aria-label={clickable ? `Show tasks for ${label}` : `${label}: ${value}`}
-        className="text-left w-full rounded-xl transition disabled:cursor-default enabled:cursor-pointer enabled:hover:ring-2 enabled:hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+        className="block text-left w-full h-full rounded-xl transition disabled:cursor-default enabled:cursor-pointer enabled:hover:ring-2 enabled:hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
       >
-        <StatCard label={label} value={value} {...statCardProps} />
+        <StatCard label={label} value={value} className="h-full" {...statCardProps} />
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
