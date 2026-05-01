@@ -187,6 +187,10 @@ function DrillDownList({ metric, searchParams, taskRoute, emptyMessage }: DrillD
               </div>
               <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                 <span>{t.columnName}</span>
+                <span>·</span>
+                <span className="truncate">
+                  {t.assignees ?? <span className="italic">Unassigned</span>}
+                </span>
                 {t.firstAt && (
                   <>
                     <span>·</span>
@@ -194,6 +198,23 @@ function DrillDownList({ metric, searchParams, taskRoute, emptyMessage }: DrillD
                   </>
                 )}
               </div>
+              {t.tags.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {t.tags.map((tag) => (
+                    <span
+                      key={tag.name}
+                      className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium leading-none"
+                      style={{
+                        backgroundColor: `${tag.color ?? "#6b7280"}22`,
+                        color: tag.color ?? "#6b7280",
+                        border: `1px solid ${tag.color ?? "#6b7280"}55`,
+                      }}
+                    >
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </a>
           </li>
         ))}

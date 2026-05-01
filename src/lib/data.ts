@@ -336,6 +336,8 @@ export interface KPIMetricTaskRow {
   columnName: string;
   firstAt: string | null;
   jobUrl: string | null;
+  assignees: string | null;
+  tags: { name: string; color: string | null }[];
 }
 
 // Reuses the SAME CTE chain as getKPIMetrics (lines ~64-212) so the modal list
@@ -550,7 +552,15 @@ export async function getKPIMetricTasks(
       title,
       col_name AS column_name,
       metric_at AS first_at,
-      custom_fields->>'_job_url' AS job_url
+      custom_fields->>'_job_url' AS job_url,
+      (SELECT string_agg(a.name, ', ' ORDER BY a.name)
+         FROM task_assignees ta
+         JOIN agents a ON a.id = ta.agent_id
+        WHERE ta.task_id = target.task_id) AS assignees,
+      (SELECT COALESCE(json_agg(json_build_object('name', tt.name, 'color', tt.color) ORDER BY tt.name), '[]'::json)
+         FROM task_tag_map ttm
+         JOIN task_tags tt ON tt.id = ttm.tag_id
+        WHERE ttm.task_id = target.task_id) AS tags
     FROM target
     WHERE in_metric
       AND (${startDate}::timestamptz IS NULL OR metric_at >= ${startDate}::timestamptz)
@@ -565,6 +575,8 @@ export async function getKPIMetricTasks(
     columnName: row.column_name,
     firstAt: row.first_at ? new Date(row.first_at).toISOString() : null,
     jobUrl: row.job_url ?? null,
+    assignees: row.assignees ?? null,
+    tags: Array.isArray(row.tags) ? row.tags : [],
   }));
 }
 
