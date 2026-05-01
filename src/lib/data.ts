@@ -315,6 +315,260 @@ export async function getKPIMetrics(range?: DateRange, agentId?: string, profile
 }
 
 // ============================================================
+// KPI DRILL-DOWN — list of tasks behind a single KPI tile
+// ============================================================
+
+export type KPIMetricKey =
+  | "total_jobs"
+  | "proposals_sent"
+  | "proposals_viewed"
+  | "in_chat"
+  | "meetings_booked"
+  | "meetings_done"
+  | "won"
+  | "lost"
+  | "bad_leads"
+  | "untouched";
+
+export interface KPIMetricTaskRow {
+  id: string;
+  title: string;
+  columnName: string;
+  firstAt: string | null;
+  jobUrl: string | null;
+}
+
+// Reuses the SAME CTE chain as getKPIMetrics (lines ~64-212) so the modal list
+// length always matches the card count. The CASE expressions in `target` map
+// each metric to (a) its anchor date and (b) its inclusion predicate — both
+// must stay in lockstep with the corresponding `COUNT(*) FILTER` in
+// getKPIMetrics. If you change the funnel-stage set or current-state predicate
+// in getKPIMetrics, mirror it here.
+export async function getKPIMetricTasks(
+  metric: KPIMetricKey,
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string,
+): Promise<KPIMetricTaskRow[]> {
+  const { startDate, endDate } = range ?? {};
+
+  const result = await sql`
+    WITH earliest_move AS (
+      SELECT DISTINCT ON (task_id)
+        task_id,
+        LOWER(old_value) AS old_lower
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+      ORDER BY task_id, created_at
+    ),
+    move_in_proposals_sent AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+      GROUP BY task_id
+    ),
+    move_in_proposals_viewed AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'proposal views', 'proposal viewed', 'viewed',
+          'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+      GROUP BY task_id
+    ),
+    move_in_in_chat AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN (
+          'in chat', 'following up',
+          'meeting scheduled', 'meeting done',
+          'negotiation', 'won'
+        )
+      GROUP BY task_id
+    ),
+    move_in_meetings_booked AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won')
+      GROUP BY task_id
+    ),
+    move_in_meetings_done AS (
+      SELECT task_id, MIN(created_at) AS first_in
+      FROM activity_log
+      WHERE action_type = 'task_moved' AND field = 'column'
+        AND LOWER(new_value) IN ('meeting done', 'negotiation', 'won')
+      GROUP BY task_id
+    ),
+    task_visited AS (
+      SELECT
+        t.id AS task_id,
+        t.title,
+        t.column_id,
+        t.custom_fields,
+        t.updated_at,
+        t.created_at,
+        c.name AS col_name,
+        LOWER(c.name) AS col_lower,
+        LEAST(
+          mips.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'proposal submitted', 'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_proposals_sent_at,
+        LEAST(
+          mipv.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'proposal views', 'proposal viewed', 'viewed',
+              'prototype required', 'prototype done', 'prototype submitted', 'prototype sent',
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_proposals_viewed_at,
+        LEAST(
+          mic.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN (
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN (
+              'in chat', 'following up',
+              'meeting scheduled', 'meeting done',
+              'negotiation', 'won'
+            ) THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_in_chat_at,
+        LEAST(
+          mimb.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN ('meeting scheduled', 'meeting done', 'negotiation', 'won') THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_meetings_booked_at,
+        LEAST(
+          mimd.first_in,
+          CASE
+            WHEN em.task_id IS NULL AND LOWER(c.name) IN ('meeting done', 'negotiation', 'won') THEN t.created_at
+            WHEN em.task_id IS NOT NULL AND em.old_lower IN ('meeting done', 'negotiation', 'won') THEN t.created_at
+            ELSE NULL
+          END
+        ) AS first_meetings_done_at
+      FROM tasks t
+      JOIN columns c ON c.id = t.column_id
+      LEFT JOIN earliest_move em ON em.task_id = t.id
+      LEFT JOIN move_in_proposals_sent mips ON mips.task_id = t.id
+      LEFT JOIN move_in_proposals_viewed mipv ON mipv.task_id = t.id
+      LEFT JOIN move_in_in_chat mic ON mic.task_id = t.id
+      LEFT JOIN move_in_meetings_booked mimb ON mimb.task_id = t.id
+      LEFT JOIN move_in_meetings_done mimd ON mimd.task_id = t.id
+    ),
+    target AS (
+      SELECT
+        tv.task_id,
+        tv.title,
+        tv.custom_fields,
+        tv.col_name,
+        CASE ${metric}::text
+          WHEN 'total_jobs' THEN tv.created_at
+          WHEN 'proposals_sent' THEN tv.first_proposals_sent_at
+          WHEN 'proposals_viewed' THEN tv.first_proposals_viewed_at
+          WHEN 'in_chat' THEN tv.first_in_chat_at
+          WHEN 'meetings_booked' THEN tv.first_meetings_booked_at
+          WHEN 'meetings_done' THEN tv.first_meetings_done_at
+          ELSE COALESCE(j.stage_entered_at, tv.updated_at, tv.created_at)
+        END AS metric_at,
+        CASE ${metric}::text
+          WHEN 'total_jobs' THEN TRUE
+          WHEN 'proposals_sent' THEN tv.first_proposals_sent_at IS NOT NULL
+          WHEN 'proposals_viewed' THEN tv.first_proposals_viewed_at IS NOT NULL
+          WHEN 'in_chat' THEN tv.first_in_chat_at IS NOT NULL
+          WHEN 'meetings_booked' THEN tv.first_meetings_booked_at IS NOT NULL
+          WHEN 'meetings_done' THEN tv.first_meetings_done_at IS NOT NULL
+          WHEN 'won' THEN tv.col_lower = 'won'
+          WHEN 'lost' THEN tv.col_lower = 'lost'
+          WHEN 'bad_leads' THEN tv.col_lower = 'n/a'
+          WHEN 'untouched' THEN tv.col_lower IN ('todo', 'to do', 'new', 'proposal ready')
+          ELSE FALSE
+        END AS in_metric
+      FROM task_visited tv
+      LEFT JOIN jobs j ON j.job_id = (tv.custom_fields->>'_job_id')
+      WHERE (${agentId ?? null}::uuid IS NULL OR EXISTS (
+          SELECT 1 FROM task_assignees ta WHERE ta.task_id = tv.task_id AND ta.agent_id = ${agentId ?? null}::uuid
+        ))
+        AND (${profileId ?? null}::text IS NULL
+          OR j.profile_id = ${profileId ?? null}::text
+          OR EXISTS (
+            SELECT 1 FROM task_tag_map ttm
+            JOIN task_tags tt ON tt.id = ttm.tag_id
+            WHERE ttm.task_id = tv.task_id
+              AND LOWER(tt.name) = (SELECT LOWER(profile_name) FROM profiles WHERE profile_id = ${profileId ?? null}::text LIMIT 1)
+          ))
+    )
+    SELECT
+      task_id AS id,
+      title,
+      col_name AS column_name,
+      metric_at AS first_at,
+      custom_fields->>'_job_url' AS job_url
+    FROM target
+    WHERE in_metric
+      AND (${startDate}::timestamptz IS NULL OR metric_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR metric_at <= ${endDate}::timestamptz)
+    ORDER BY metric_at DESC NULLS LAST
+    LIMIT 500
+  `;
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    columnName: row.column_name,
+    firstAt: row.first_at ? new Date(row.first_at).toISOString() : null,
+    jobUrl: row.job_url ?? null,
+  }));
+}
+
+// ============================================================
 // CHARTS DATA
 // ============================================================
 

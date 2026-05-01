@@ -22,6 +22,7 @@ import {
 
 import { parseDateRange } from "@/lib/date-utils";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { KPIMetricDrillDown } from "@/components/dashboard/kpi-metric-drilldown";
 
 export const revalidate = 300;
 
@@ -109,12 +110,14 @@ export default async function DashboardPage({
             delta={`${fmt(kpi.deltaUntouched)} ${vsLabel}`}
             deltaDown={kpi.deltaUntouched < 0}
           />
-          <StatCard
+          <KPIMetricDrillDown
+            metric="meetings_booked"
             label="Meetings Booked"
             value={kpi.meetingsBooked}
             variant="warn"
             delta={`${fmt(kpi.deltaMeetings)} ${vsLabel}`}
             deltaDown={kpi.deltaMeetings < 0}
+            searchParams={params}
           />
           <StatCard
             label="Jobs Won"

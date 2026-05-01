@@ -19,6 +19,7 @@ import {
 } from "@/lib/data";
 import { parseDateRange } from "@/lib/date-utils";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { KPIMetricDrillDown } from "@/components/dashboard/kpi-metric-drilldown";
 import {
   Table,
   TableBody,
@@ -111,12 +112,15 @@ export default async function MyDashboardPage({
           delta={`${fmt(kpi.deltaUntouched)} ${vsLabel}`}
           deltaDown={kpi.deltaUntouched < 0}
         />
-        <StatCard
+        <KPIMetricDrillDown
+          metric="meetings_booked"
           label="Meetings Booked"
           value={kpi.meetingsBooked}
           variant="warn"
           delta={`${fmt(kpi.deltaMeetings)} ${vsLabel}`}
           deltaDown={kpi.deltaMeetings < 0}
+          searchParams={params}
+          taskRoute="/my-tasks"
         />
         <StatCard
           label="Jobs Won"
