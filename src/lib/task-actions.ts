@@ -13,7 +13,6 @@ import {
   deleteChecklistItem,
   setTaskAssignees,
   setTaskTags,
-  syncJobStatusFromTask,
   syncAllJobsInColumn,
   createProject,
   updateProject,
@@ -90,23 +89,7 @@ export async function moveTaskAction(
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
 
-  // Get old column name before move (for reversal detection)
-  const { sql } = await import("@/lib/db");
-  const oldCol = await sql`
-    SELECT c.name FROM tasks t JOIN columns c ON c.id = t.column_id WHERE t.id = ${taskId}
-  `;
-  const oldColumnName = oldCol.rows[0]?.name as string | undefined;
-
   const task = await moveTask(taskId, columnId, position, session.user.agentId ?? null);
-
-  // Sync linked job status when column changes
-  if (task && oldColumnName) {
-    const newCol = await sql`SELECT name FROM columns WHERE id = ${columnId}`;
-    const newColumnName = newCol.rows[0]?.name as string;
-    if (oldColumnName !== newColumnName) {
-      await syncJobStatusFromTask(taskId, newColumnName, oldColumnName);
-    }
-  }
 
   revalidateBoard();
   return task;

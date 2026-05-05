@@ -1319,6 +1319,7 @@ export async function moveTask(
       taskId, actorId ?? null, "task_moved", "column",
       old.column_name as string, newColName as string
     );
+    await syncJobStatusFromTask(taskId, newColName as string, old.column_name as string);
   }
 
   return result.rows[0] as Task;
