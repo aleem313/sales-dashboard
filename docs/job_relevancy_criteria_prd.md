@@ -188,6 +188,151 @@ Of 54 N/A tasks rejected with "Location loc":
 - Common rejected hourly ranges: `$10–20`, `$15–20`, `$15–25`, `$15–30`
 - Common rejected fixed budgets: `$1,500`, `$2,000`, `$2,500`, `$5,000`
 
+### 6.7 Concrete reject examples by reason
+
+These are real n8n-sourced jobs from the production board (Contabo snapshot, 2026-05-05). Each row shows **the actual data the AI sees at intake** alongside the reason an agent gave for moving the card to N/A. Use these as labeled training data for the upcoming n8n classifier (full structured payload in Appendix C).
+
+Notation: `client_spent` = lifetime USD; `hires` = total Upwork hires by client; `rating` = 0–5 client rating; `—` = field absent.
+
+#### 6.7.1 "Out of stack" (n=154 — 5 representative)
+
+| Profile | Title | Skills (excerpt) | Budget | client_spent / hires / rating |
+|---|---|---|---|---|
+| Craig | Web Developer | "Web Development" *(only tag)* | Not specified | — / — / — |
+| Shayan | Need Wordpress developer with Polylang expertise | Polylang, WordPress, PHP, CSS | 20–40 USD | $29,661 / 19 / 4.99 |
+| Shayan | Programmatic SEO Strategist for Golf Travel Startup — Next.js SEO Page Launch | SEO, SEO Keyword Research, GA, On-Page SEO | 10–20 USD | $1,000 / 3 / 5.00 |
+| Shayan | I need a frontend developer to recreate a Figma design (Laravel/Blade/Livewire) | Front-End, Laravel, Blade, Livewire, Tailwind | 18–40 USD | $2,861 / 29 / 4.98 |
+| Craig | Wordpress Website transfer | Web Dev, Node.js, Next.js, React, Go, Nest, Express | Not specified | — / — / — |
+
+**Failure modes.** (a) Skills tag too generic ("Web Development" only) — no machine-detectable stack match. (b) Job tagged with our keywords but actual work *outside* our buckets (Polylang i18n, programmatic SEO with a Next.js red herring, Laravel/Blade for a Next-leaning profile). (c) No-code platforms (Wix, Webflow, Bubble, Squarespace) leak through Vollna's keyword filter — see Appendix C.
+
+#### 6.7.2 "Old job" (n=134 — 5 representative)
+
+| Profile | Title | Skills (excerpt) | Budget | client_spent / hires / rating |
+|---|---|---|---|---|
+| Sana | Senior Node.js Engineer — On-Call Maintenance for AI Document Pipeline | API Integration, Node.js, JS, Claude API | 20–40 USD | $189,897 / 58 / 4.99 |
+| Sana | Divi/WordPress Designer Needed — 10-Page Site Refresh | Divi, WordPress, Web Design, Landing Page | 18–40 USD | $4,929 / 9 / 4.99 |
+| Sana | MERN Stack Developer Needed for Project Optimization | JS, React, Node.js, MongoDB, CSS | 15–35 USD | — / — / — |
+| Rebekah | Advanced All-in-One Travel Booking Platform | Full-Stack, Next.js, React, TS, n8n | Not specified | — / — / — |
+| Saim | Operations Specialist wanted for busy Founder | Email, Word, Excel, Admin Support | $25/hr | $29,187 / 21 / 4.72 |
+
+**Failure mode.** Listing was already 24h+ old when the agent triaged. **Saim & Rebekah profiles are dominated by this reason (90%+ of their rejects)** — root cause is likely slow Vollna feed cadence, not job quality (clients here are healthy: $189k spend, 58 hires).
+
+#### 6.7.3 "Too many invites" (n=106 — 5 representative)
+
+| Profile | Title | Skills (excerpt) | Budget | client_spent / hires / rating |
+|---|---|---|---|---|
+| Craig | FlutterFlow + Firebase Developer Needed — Paid Messaging Feature | FlutterFlow, Flutter, Supabase, GCP | Not specified | $170 / 1 / — |
+| Shayan | Website Redesign for Dog Daycare | Web Design, WordPress, Web Dev | Not specified | $954 / 4 / 5.00 |
+| Craig | PowerApp Developer & Consultant Needed | MS PowerApps, SharePoint, Windows | Not specified | $430 / 2 / — |
+| Shayan | OnBoardNoe: Guided Onboarding Platform | Web Dev, WordPress, Web Design, JS | Not specified | $85,114 / 38 / 4.57 |
+| Shayan | Independent consulting website | Web Design, WordPress, Wix, Wireframing | 20–50 USD | — / — / — |
+
+**Failure mode.** 30+ proposals already submitted (Upwork "30+ proposals" indicator) — saturation makes marginal connect ROI negative regardless of client quality.
+
+#### 6.7.4 "Low Higher rate" *(typo — should read "Low Hourly Rate")* (n=82 — 5 representative)
+
+| Profile | Title | Skills (excerpt) | Budget | client_spent / hires / rating |
+|---|---|---|---|---|
+| Shayan | SeedProd Landing Page Creation | Web Design, HTML5, Landing Page, Graphic Design | 15–30 USD | — / 1 / — |
+| Shayan | Senior Full-Stack Developer for Talent Marketplace MVP | Next.js, PostgreSQL, React, Node.js, Stripe | $5,000 fixed *(scope/effort mismatch)* | — / — / — |
+| Shayan | Capalot Gaming Web Design | WordPress, WooCommerce, Elementor, SEO | 15–30 USD | — / — / — |
+| Shayan | Family Law Firm Website Redesign | Web Design, Web Dev, Graphic Design, Logo | 15–30 USD | — / — / — |
+| Shayan | Website recovery | WordPress (multi-flavor), WooCommerce, Shopify | Not specified | — / — / — |
+
+**Failure mode.** Hourly bottom-of-range below $25/hr OR a fixed-price job whose implied hourly (estimated effort vs. budget) falls below the floor.
+
+#### 6.7.5 "Location loc" (n=54 — 5 representative)
+
+Per §6.5: this means the **job posting requires a US-resident freelancer** (not the client country).
+
+| Profile | Title | Skills (excerpt) | Budget | client (spend / country) |
+|---|---|---|---|---|
+| Shayan | Web Manager for Ongoing Maintenance and Updates | WordPress, Web Dev, HTML, PHP | Not specified | — / United States |
+| Shayan | American based app developer | JavaScript, API | Not specified | $825 / United States |
+| Shayan | Custom ecommerce site migration to WooCommerce | WooCommerce, Web Design, Web Dev | $3,000 fixed | $1,550 / United States |
+| Shayan | Guitar Training Tool Development | JS, WordPress, HTML, PHP, Web Dev | Not specified | — / United States |
+| Shayan | Strategic Web Designer Needed for Website Build/Rebuild | Web Design, Web Dev | — | — / United States |
+
+**Failure mode.** Posting text contains "U.S. residents only" / "must be located in the United States" / "American-based" — disqualifying for our non-US team. 69% of these come from US clients (expected); the rest are UK/CA/CH clients posting same residency lock-ins.
+
+#### 6.7.6 "Client Low spending" (n=35 — 5 representative)
+
+| Profile | Title | Skills (excerpt) | Budget | client_spent / hires / rating |
+|---|---|---|---|---|
+| Shayan | Website Updates Needed – FAQ + Team Page + Resource Page | WordPress | Not specified | $231 / 4 / 1.91 |
+| Shayan | Consulting Firm Website Redesign | Web Design, Web Dev, WordPress, Graphic Design | 15–30 USD | $262 / 1 / — |
+| Shayan | IT Expert Needed for Migration Project | WordPress, PHP, Web Dev, Data Entry, JS | 10–20 USD | $211 / 6 / 5.00 |
+| Shayan | Framer developer | Web Dev, Framer, webdesign, ui ux | 15–30 USD | $300 / 9 / 5.00 |
+| Khansa | Programmer for Case Management System | PHP, MySQL | Not specified | $204,510 / 219 / 4.92 *(co-flagged for low budget signal)* |
+
+**Failure mode.** Client lifetime spend < $1,000 → low conviction the client will actually pay. Median in this rejection group is $228 — well below the $1,000 threshold.
+
+#### 6.7.7 Less common rejection reasons
+
+| Reason | n | Representative example | Key signal |
+|---|---|---|---|
+| Bad rating client | 6 | [Shayan] WordPress Bug Fixing Expert — $4,064 / 9 / **2.07** | Client rating < 4.0 |
+| Bad rating client | 6 | [Khansa] Showit + Systeme.io Funnel Assistant — $1,039 / 4 / **1.52** | Client rating < 4.0 |
+| Already hired | 8 | [Sana] Upgrade Laravel Website to Latest — $192,993 / 28 / 5.00 | Posting closed before bid |
+| Already hired | 8 | [Khansa] Next.js + Supabase Marketplace, $5,000 fixed | Posting closed before bid |
+| Job unavailable | 18 | [Sana] SEO Specialist – Local SEO — $1,866 / 12 / 5.00 | Posting taken down |
+| Job unavailable | 18 | [Khansa] ZENTIQ AI – GLOBAL SaaS PLATFORM, $5,000 fixed | Posting taken down |
+| Video Proposal | 4 | [Sana] Product Engineer (Next.js / Node) — **$1,226,133** / 92 / 4.97 | Job requires video pitch (large client, format mismatch) |
+| Video Proposal | 4 | [Khansa] Frontend QA + UX Polish (Lovable / React) — $59,149 / 43 / 4.82 | Job requires video pitch |
+| Language barrier | 6 | [Sana] WordPress + HubSpot Maintenance — Oman / $14,522 / 21 / 5.00 | Communication non-English |
+| Language barrier | 6 | [Laiba] Go High Level setup in Spanish — Uruguay / $40,041 / 112 / 4.80 | Spanish-required role |
+| Portfolio unavailable | 2 | [Khansa] AI-Augmented SE (Claude Code) — Canada / $10,412 / 1 / — | Profile lacks comparable case study |
+| Portfolio unavailable | 2 | [Laiba] Python Dev for Windows-based HMI — $3,009 / 1 / 5.00 | Profile lacks Python/HMI portfolio |
+| Duplicate | 2 | [Shayan] HubSpot HTML/CSS Developer — $7,672 / 26 / 4.72 | Same `_job_id` already on board |
+
+**Reading.** Rare reasons cluster on **format mismatch** (video proposal, language) or **system state** (already hired, taken down, duplicate). They are mostly orthogonal to client quality — the Video Proposal cluster averages **$326k client spend**, our highest of any reject category.
+
+---
+
+### 6.8 Concrete proceed examples
+
+Jobs that bypassed every hard gate and reached Proposal Submitted or further (n8n-sourced only — the 124 with full metadata + downstream stages). These define **what good looks like** for the LLM classifier.
+
+#### 6.8.1 Won + In Chat + Proposal Views (highest-conviction signal)
+
+| Stage | Profile | Title | Skills (excerpt) | Budget | client (spend / hires / rating) |
+|---|---|---|---|---|---|
+| **Won** | Laiba | AI + Frontend Integration (Voiceflow + UI State + Kajabi) | API Integration, Next.js, Python, RAG, LangChain | Not specified | $200 / 1 / — |
+| In Chat | Khansa | Full Stack + AI Systems Engineer (AI OS for Businesses) | AI Agent Dev, Python, ML, API | 15–35 USD | $10,051 / 32 / 4.94 |
+| In Chat | Shayan | JavaScript App Code Verification & Server Configuration | JavaScript, Node.js, API | $2,400 fixed | — / — / — |
+| Proposal Views | Khansa | AI-Powered Email Filtering SaaS Platform | Python, API, JS, Node.js | 30–50 USD | $9,801 / 38 / 4.98 |
+| Proposal Views | Khansa | Full-Stack Developer for Claude-Powered SaaS MVP | AI App Dev, Web App, Claude, React | 25–47 USD | $111 / 5 / 5.00 |
+| Proposal Views | Khansa | Developer needed for mobile site with AI integration | AI TTS, MySQL, Web Dev, JS, PHP | 25–55 USD | $19,345 / 38 / 4.98 |
+| Proposal Views | Laiba | Senior Fraud Detection System Architect | Fraud Detection, ML, Risk Assessment, FinTech | Not specified | — / — / — |
+| Proposal Views | Laiba | RAG + Knowledge Graph System | Python, RAG, Knowledge Graph, Neo4j, Vector DB | Not specified | $15,455 / 71 / 4.97 |
+| Proposal Views | Sana | Local SEO Specialist for U.S. Accounting Firm | SEO, Keyword Research, Backlinking, Audit | Not specified | $4,808 / 19 / 5.00 |
+| Proposal Views | Shayan | Website Development for Customized Rubber Stamps | Graphic Design, Web Dev, Web Design, Magento 2 | Not specified | **$608,192** / 91 / 4.97 |
+
+**Pattern.** Strong client spend ($4k–$608k) with hire history (5–91) and rating ≥ 4.94 when present, OR weak client signal but stack-perfect AI/fintech work on a profile geared for it (Khansa AI cluster, Laiba RAG/fraud).
+
+#### 6.8.2 Proposal Submitted (15 representative across profiles)
+
+| Profile | Title | Skills (excerpt) | Budget | client (spend / hires / rating) |
+|---|---|---|---|---|
+| Sana | Woocommerce expert assistance | WooCommerce, WordPress, Meta Pixel, GA4 | 30–60 USD | $21,167 / 10 / 5.00 |
+| Sana | Software Engineer for Boutique M&A Advisory | Python, JS, AI Dev, AWS Lambda, SQL, Zapier | 15–35 USD | $92,602 / 43 / 5.00 |
+| Sana | Senior Full Stack Architect / Technical Lead | NestJS, Python, React, Node.js | 25–35 USD | $8,410 / 103 / 4.96 |
+| Khansa | Sr. Fullstack Software Engineer | (no skills tag) | Not specified | — / 603 / 4.90 |
+| Khansa | Principal Engineer for AI-Built Next.js / Vercel / Prisma archive | React, TS, Next.js, PostgreSQL, Vercel, Prisma | 40–75 USD | $3,636 / 18 / 5.00 |
+| Khansa | Restaurant & Influencer Marketplace w/ Escrow & FAVR Pay | Web App, API, PHP, JS, Marketing | $2,500 fixed | $6,918 / 14 / 4.30 |
+| Laiba | AI Automation Workflow Setup n8n + Custom AI Agent | Node.js, n8n, Workflow Automation, Python, REST | 15–20 USD | $5,867 / 146 / 5.00 |
+| Laiba | AI Automation Specialist | Automated Workflow, OpenAI API, M365 Copilot, n8n | Not specified | $2,888 / 1 / — |
+| Laiba | Senior backend AI engineer with production LLM experience | Python, AWS, React, LLM Prompt Eng, API | 10–50 USD | $75 / 4 / 5.00 |
+| Shayan | WordPress/WooCommerce Developer Needed | WordPress, WooCommerce, PHP | 12–27 USD | — / — / — |
+| Shayan | PDR API Integration Development (Fannie Mae) | API, PHP, JS, API Integration, WordPress | $6,000 fixed | — / — / — |
+| Shayan | Mobile and Web Developer for Digital Compliance Website | WordPress, Web Dev, JS, Web Design, PHP | 15–35 USD | $23,526 / 6 / 5.00 |
+| Craig | Software engineer and mobile development lead | JS, TS, React, Material UI, Node.js, Next.js, RN | Not specified | — / — / — |
+| Craig | App development for all mobile app stores | Flutter, Mobile App Dev, Android, iOS | Not specified | — / — / — |
+| Craig | IPTV Streaming App Developer | Android, Mobile App Dev, iOS, PHP | Not specified | — / — / — |
+
+**Pattern.** Stack alignment dominates. Every accepted job has at least one core stack keyword from the assigned profile's bucket. Sparse client metadata (especially on hourly Upwork jobs) is **tolerated** when the work is unambiguously on-stack. Notably, rejected jobs in §6.7 frequently have *better* client metadata than accepted ones — confirming **stack match outweighs client signal in current acceptance behaviour**. Threshold calibration in §11 should weigh this carefully.
+
 ---
 
 ## 7. Job Relevancy Criteria — Hard gates
@@ -433,12 +578,550 @@ GROUP BY 1 ORDER BY n DESC;
 
 ---
 
-## 16. Changelog
+## 16. Appendix C — LLM-ready example library (JSON)
+
+This appendix is **the structured form of §6.7 and §6.8**, designed for direct embedding into the upcoming n8n classifier node's system prompt. Each example carries a `gates_failed` (rejects) or `gates_passed` (proceeds) array using the gate IDs defined in §7, plus a one-line `explanation` linking evidence to the gate.
+
+**Gate ID reference** (matches §7 row order):
+
+| ID | Gate | Reason label on fail |
+|---|---|---|
+| `1_stack_match` | Stack match | "Out of stack" |
+| `2_freshness` | Job freshness (≤ 24h) | "Old job" |
+| `3_proposal_saturation` | < 30 proposals | "Too many invites" |
+| `4_hourly_floor` | Hourly bottom ≥ $25/hr | "Low Higher rate" |
+| `5_client_spend_floor` | client_spent ≥ $1,000 | "Client Low spending" |
+| `6_client_rating_floor` | client_rating ≥ 4.0 | "Bad rating client" |
+| `7_job_availability` | Posting open | "Job unavailable" / "Already hired" |
+| `8_no_location_lockin` | No country residency requirement | "Location loc" |
+| `9_no_video_proposal` | No video pitch required | "Video Proposal" |
+| `10_portfolio_match` | Profile has matching portfolio | "Portfolio unavailable" |
+| `11_no_duplicate` | Job not already on board | "Duplicate" |
+
+The "Language barrier" reason maps to §8 soft signals, not a hard gate — represented in the JSON below as `gates_failed: []` with the reason captured separately.
+
+```json
+{
+  "version": "0.2",
+  "generated_at": "2026-05-05",
+  "source": "Contabo sales_dashboard, n8n-sourced tasks (_source = 'n8n')",
+  "reject_examples": [
+    {
+      "title": "Web Developer",
+      "profile": "Craig",
+      "skills": ["Web Development"],
+      "budget": "Not specified",
+      "client": {"spent": null, "hires": null, "rating": null, "country": "United States"},
+      "reasons": ["Out of stack"],
+      "gates_failed": ["1_stack_match"],
+      "explanation": "Single generic skill tag with no concrete stack signal — cannot be mapped to any profile bucket."
+    },
+    {
+      "title": "Need Wordpress developer with Polylang expertise",
+      "profile": "Shayan",
+      "skills": ["Polylang", "WordPress", "PHP", "CSS"],
+      "budget": "20 - 40 USD",
+      "client": {"spent": 29660.90, "hires": 19, "rating": 4.99, "country": "United States"},
+      "reasons": ["Out of stack"],
+      "gates_failed": ["1_stack_match"],
+      "explanation": "Polylang is a niche WordPress i18n plugin; not in Shayan's bucket despite WordPress overlap."
+    },
+    {
+      "title": "Programmatic SEO Strategist for Golf Travel Startup — Next.js SEO Page Launch",
+      "profile": "Shayan",
+      "skills": ["Search Engine Optimization", "SEO Keyword Research", "Organic Traffic Growth", "Google Analytics", "On-Page SEO"],
+      "budget": "10 - 20 USD",
+      "client": {"spent": 1000, "hires": 3, "rating": 5.00, "country": "United States"},
+      "reasons": ["Out of stack"],
+      "gates_failed": ["1_stack_match", "4_hourly_floor"],
+      "explanation": "SEO strategy role with a Next.js red herring in the title; hourly bottom $10 is below floor."
+    },
+    {
+      "title": "I need a frontend developer to recreate a Figma design (Laravel/Blade/Livewire)",
+      "profile": "Shayan",
+      "skills": ["Front-End Development", "Laravel", "Blade Server", "tailwindcss", "livewire"],
+      "budget": "18 - 40 USD",
+      "client": {"spent": 2861.40, "hires": 29, "rating": 4.98, "country": "United Kingdom"},
+      "reasons": ["Out of stack"],
+      "gates_failed": ["1_stack_match"],
+      "explanation": "Laravel/Blade/Livewire stack — Shayan is React/Next.js-leaning; mismatched bucket."
+    },
+    {
+      "title": "Wix Website Designer Needed for Section Redesign",
+      "profile": "Shayan",
+      "skills": ["Wix", "Web Design", "Graphic Design", "Mockup", "Web Development"],
+      "budget": "15 - 30 USD",
+      "client": {"spent": 672.89, "hires": 63, "rating": 5.00, "country": "Nigeria"},
+      "reasons": ["Old job", "Out of stack"],
+      "gates_failed": ["1_stack_match", "2_freshness"],
+      "explanation": "No-code platform (Wix); we don't field Wix work on any profile."
+    },
+
+    {
+      "title": "Senior Node.js Engineer — On-Call Maintenance for AI Document Pipeline",
+      "profile": "Sana",
+      "skills": ["API Integration", "Node.js", "JavaScript", "API", "PDF Conversion", "Claude API", "Open AI API", "Automation Workflow"],
+      "budget": "20 - 40 USD",
+      "client": {"spent": 189896.64, "hires": 58, "rating": 4.99, "country": "United States"},
+      "reasons": ["Old job"],
+      "gates_failed": ["2_freshness"],
+      "explanation": "On-stack and high-conviction client signal, but listing was already 24h+ old when triaged."
+    },
+    {
+      "title": "Divi/WordPress Designer Needed — 10-Page Site Refresh (3-4 Week Sprint)",
+      "profile": "Sana",
+      "skills": ["Divi", "Responsive Design", "Landing Page", "WordPress", "Web Design", "Visual Design"],
+      "budget": "18 - 40 USD",
+      "client": {"spent": 4928.68, "hires": 9, "rating": 4.99, "country": "United States"},
+      "reasons": ["Old job"],
+      "gates_failed": ["2_freshness"],
+      "explanation": "Stack-aligned WordPress + healthy client, but listing aged past freshness window."
+    },
+    {
+      "title": "Advanced All-in-One Travel Booking Platform (Flights, Hotels, & Cars)",
+      "profile": "Rebekah",
+      "skills": ["Full-Stack Development", "Next.js", "React", "JavaScript", "TypeScript", "API Integration", "AI Agent Development", "n8n", "React Native", "Supabase"],
+      "budget": "Not specified",
+      "client": {"spent": null, "hires": null, "rating": null, "country": "Canada"},
+      "reasons": ["Old job"],
+      "gates_failed": ["2_freshness"],
+      "explanation": "On-stack for Rebekah but listing aged out — Rebekah's feed cadence is a recurring root cause (90% Old job)."
+    },
+    {
+      "title": "Operations Specialist wanted for busy Founder",
+      "profile": "Saim",
+      "skills": ["Email Communication", "Microsoft Word", "Microsoft Excel", "Administrative Support"],
+      "budget": "25 USD",
+      "client": {"spent": 29186.95, "hires": 21, "rating": 4.72, "country": "United States"},
+      "reasons": ["Old job"],
+      "gates_failed": ["1_stack_match", "2_freshness"],
+      "explanation": "Admin/ops role — out of dev stack entirely; would also fail freshness."
+    },
+
+    {
+      "title": "FlutterFlow + Firebase Developer Needed — Paid Messaging / Transactional Chat Feature",
+      "profile": "Craig",
+      "skills": ["FlutterFlow", "Flutter", "API Integration", "Supabase", "Google Cloud Platform", "Mobile App Development", "Firebase"],
+      "budget": "Not specified",
+      "client": {"spent": 170, "hires": 1, "rating": null, "country": "Australia"},
+      "reasons": ["Too many invites"],
+      "gates_failed": ["3_proposal_saturation", "5_client_spend_floor"],
+      "explanation": "Saturated job board for this listing; client spend $170 also below floor."
+    },
+    {
+      "title": "Website Redesign for Dog Daycare",
+      "profile": "Shayan",
+      "skills": ["Web Design", "WordPress", "Web Development", "Website Redesign", "Graphic Design", "Marketing"],
+      "budget": "Not specified",
+      "client": {"spent": 953.50, "hires": 4, "rating": 5.00, "country": "United States"},
+      "reasons": ["Too many invites"],
+      "gates_failed": ["3_proposal_saturation"],
+      "explanation": "On-stack and decent client, but 30+ proposals already in — connect ROI negative."
+    },
+    {
+      "title": "PowerApp Developer & Consultant Needed",
+      "profile": "Craig",
+      "skills": ["Microsoft PowerApps", "Microsoft SharePoint Development", "Microsoft Windows", "Microsoft SharePoint", "iOS"],
+      "budget": "Not specified",
+      "client": {"spent": 430, "hires": 2, "rating": null, "country": "United States"},
+      "reasons": ["Too many invites"],
+      "gates_failed": ["1_stack_match", "3_proposal_saturation"],
+      "explanation": "PowerApps not in any profile bucket; saturated regardless."
+    },
+    {
+      "title": "Website Development for OnBoardNoe: Guided Onboarding Platform",
+      "profile": "Shayan",
+      "skills": ["Web Development", "WordPress", "Web Design", "JavaScript", "HTML"],
+      "budget": "Not specified",
+      "client": {"spent": 85114.41, "hires": 38, "rating": 4.57, "country": "United Kingdom"},
+      "reasons": ["Too many invites"],
+      "gates_failed": ["3_proposal_saturation"],
+      "explanation": "Strong client signal ($85k / 38 hires) but saturation killed marginal ROI."
+    },
+
+    {
+      "title": "SeedProd Landing Page Creation",
+      "profile": "Shayan",
+      "skills": ["Web Design", "HTML5", "Landing Page", "Graphic Design"],
+      "budget": "15 - 30 USD",
+      "client": {"spent": null, "hires": 1, "rating": null, "country": "Canada"},
+      "reasons": ["Low Higher rate"],
+      "gates_failed": ["4_hourly_floor"],
+      "explanation": "Hourly bottom $15 is below the $25 floor; client signal also weak."
+    },
+    {
+      "title": "Senior Full-Stack Developer needed for Talent Marketplace Platform MVP (Next.js + Stripe)",
+      "profile": "Shayan",
+      "skills": ["Next.js", "PostgreSQL", "React", "Node.js", "Stripe"],
+      "budget": "5,000 USD",
+      "client": {"spent": null, "hires": null, "rating": null, "country": "Mexico"},
+      "reasons": ["Low Higher rate"],
+      "gates_failed": ["4_hourly_floor"],
+      "explanation": "Fixed-price $5k for an MVP-scope Next.js platform; implied effort produces sub-floor hourly rate."
+    },
+    {
+      "title": "Capalot Gaming Web Design",
+      "profile": "Shayan",
+      "skills": ["WordPress", "WooCommerce", "Elementor", "Page Speed Optimization", "Landing Page Design", "SEO Audit", "Web Design"],
+      "budget": "15 - 30 USD",
+      "client": {"spent": null, "hires": null, "rating": null, "country": "United States"},
+      "reasons": ["Low Higher rate"],
+      "gates_failed": ["4_hourly_floor"],
+      "explanation": "Hourly $15-30 below floor; gaming-themed WP build."
+    },
+    {
+      "title": "Family Law Firm Website Redesign",
+      "profile": "Shayan",
+      "skills": ["Web Design", "Web Development", "Graphic Design", "Logo Design"],
+      "budget": "15 - 30 USD",
+      "client": {"spent": null, "hires": null, "rating": null, "country": "United States"},
+      "reasons": ["Low Higher rate", "Out of stack"],
+      "gates_failed": ["1_stack_match", "4_hourly_floor"],
+      "explanation": "Generic 'Web Design / Logo Design' tags + sub-floor hourly."
+    },
+
+    {
+      "title": "Web Manager for Ongoing Maintenance and Updates",
+      "profile": "Shayan",
+      "skills": ["WordPress", "Web Development", "HTML", "PHP", "CSS"],
+      "budget": "Not specified",
+      "client": {"spent": null, "hires": 1, "rating": null, "country": "United States"},
+      "reasons": ["Location loc"],
+      "gates_failed": ["8_no_location_lockin"],
+      "explanation": "On-stack maintenance role but posting requires US-resident freelancer."
+    },
+    {
+      "title": "American based app developer",
+      "profile": "Shayan",
+      "skills": ["JavaScript", "API"],
+      "budget": "Not specified",
+      "client": {"spent": 825.49, "hires": 1, "rating": null, "country": "United States"},
+      "reasons": ["Location loc"],
+      "gates_failed": ["8_no_location_lockin"],
+      "explanation": "Title literally states US-based requirement."
+    },
+    {
+      "title": "Custom ecommerce site migration to WooCommerce",
+      "profile": "Shayan",
+      "skills": ["WooCommerce", "Web Design", "Web Development", "Ecommerce Website Development"],
+      "budget": "3,000 USD",
+      "client": {"spent": 1550.20, "hires": 6, "rating": 5.00, "country": "United States"},
+      "reasons": ["Location loc"],
+      "gates_failed": ["8_no_location_lockin"],
+      "explanation": "Stack-aligned + acceptable client, but US-residency lock in posting body."
+    },
+    {
+      "title": "Strategic Web Designer Needed for Website Build/Rebuild",
+      "profile": "Shayan",
+      "skills": ["Web Design", "Web Development"],
+      "budget": null,
+      "client": {"spent": null, "hires": null, "rating": null, "country": "United States"},
+      "reasons": ["Location loc"],
+      "gates_failed": ["8_no_location_lockin"],
+      "explanation": "Posting requires US-based freelancer."
+    },
+
+    {
+      "title": "Website Updates Needed – FAQ Section, Team Page Completion & Resource Page Setup",
+      "profile": "Shayan",
+      "skills": ["WordPress"],
+      "budget": "Not specified",
+      "client": {"spent": 230.75, "hires": 4, "rating": 1.91, "country": "United States"},
+      "reasons": ["Client Low spending"],
+      "gates_failed": ["5_client_spend_floor", "6_client_rating_floor"],
+      "explanation": "Client spent only $231 + low rating 1.91 — double red flag."
+    },
+    {
+      "title": "Consulting Firm Website Redesign",
+      "profile": "Shayan",
+      "skills": ["Web Design", "Web Development", "WordPress", "Graphic Design"],
+      "budget": "15 - 30 USD",
+      "client": {"spent": 262.24, "hires": 1, "rating": null, "country": "United States"},
+      "reasons": ["Client Low spending"],
+      "gates_failed": ["4_hourly_floor", "5_client_spend_floor"],
+      "explanation": "Sub-floor hourly + client spend $262."
+    },
+    {
+      "title": "IT Expert Needed for Migration Project",
+      "profile": "Shayan",
+      "skills": ["WordPress", "PHP", "Web Development", "Data Entry", "JavaScript"],
+      "budget": "10 - 20 USD",
+      "client": {"spent": 210.97, "hires": 6, "rating": 5.00, "country": "United States"},
+      "reasons": ["Client Low spending"],
+      "gates_failed": ["4_hourly_floor", "5_client_spend_floor"],
+      "explanation": "Hourly $10-20 below floor; client spend $211 below floor; 5.0 rating cannot offset."
+    },
+    {
+      "title": "Framer developer",
+      "profile": "Shayan",
+      "skills": ["Web Development", "Framer", "webdesign", "ui ux"],
+      "budget": "15 - 30 USD",
+      "client": {"spent": 300.19, "hires": 9, "rating": 5.00, "country": "France"},
+      "reasons": ["Client Low spending"],
+      "gates_failed": ["1_stack_match", "4_hourly_floor", "5_client_spend_floor"],
+      "explanation": "Framer (no-code design) not in stack; sub-floor hourly + low spend."
+    },
+
+    {
+      "title": "WordPress Bug Fixing Expert Needed",
+      "profile": "Shayan",
+      "skills": ["WordPress", "PHP", "WordPress Plugin", "Web Development"],
+      "budget": "30 - 50 USD",
+      "client": {"spent": 4063.63, "hires": 9, "rating": 2.07, "country": "United States"},
+      "reasons": ["Bad rating client"],
+      "gates_failed": ["6_client_rating_floor"],
+      "explanation": "Stack-perfect WP work + above-floor budget + above-floor spend, but client rating 2.07 disqualifies."
+    },
+    {
+      "title": "Proactive Funnel & Website Assistant for Showit + Systeme.io",
+      "profile": "Khansa",
+      "skills": ["Landing Page", "system io", "Showit", "Email Marketing"],
+      "budget": "10 - 28 USD",
+      "client": {"spent": 1039.30, "hires": 4, "rating": 1.52, "country": "Netherlands"},
+      "reasons": ["Bad rating client"],
+      "gates_failed": ["1_stack_match", "4_hourly_floor", "6_client_rating_floor"],
+      "explanation": "No-code stack + sub-floor hourly + 1.52 rating."
+    },
+
+    {
+      "title": "Upgrade Laravel Website to Latest Version",
+      "profile": "Sana",
+      "skills": ["PHP", "Laravel", "MySQL", "MySQL Programming"],
+      "budget": "25 - 50 USD",
+      "client": {"spent": 192993.11, "hires": 28, "rating": 5.00, "country": "United States"},
+      "reasons": ["Already hired"],
+      "gates_failed": ["7_job_availability"],
+      "explanation": "Otherwise an ideal job (stack + $193k spend + 5.0 rating) — but already filled."
+    },
+    {
+      "title": "Next.js + Supabase Marketplace Deployment — Fixed Scope",
+      "profile": "Khansa",
+      "skills": ["Next.js", "TypeScript", "Vercel", "Supabase", "Stripe API"],
+      "budget": "5,000 USD",
+      "client": {"spent": null, "hires": null, "rating": null, "country": "United States"},
+      "reasons": ["Already hired"],
+      "gates_failed": ["7_job_availability"],
+      "explanation": "Stack-perfect for Khansa, $5k fixed — but posting closed."
+    },
+
+    {
+      "title": "SEO Specialist – Local SEO (Multiple Businesses)",
+      "profile": "Sana",
+      "skills": ["Local SEO", "On-Page SEO", "SEO Audit", "Search Engine Optimization", "Google business profile", "Organic Traffic Growth"],
+      "budget": "15 - 20 USD",
+      "client": {"spent": 1866, "hires": 12, "rating": 5.00, "country": "United States"},
+      "reasons": ["Job unavailable"],
+      "gates_failed": ["7_job_availability"],
+      "explanation": "Posting taken down before bid sent."
+    },
+    {
+      "title": "ZENTIQ AI – GLOBAL SaaS PLATFORM",
+      "profile": "Khansa",
+      "skills": ["Node.js", "SaaS", "Python", "API", "AWS Application"],
+      "budget": "5,000 USD",
+      "client": {"spent": null, "hires": 1, "rating": null, "country": "United Kingdom"},
+      "reasons": ["Job unavailable"],
+      "gates_failed": ["7_job_availability"],
+      "explanation": "On-stack SaaS work, but posting deleted before triage."
+    },
+
+    {
+      "title": "Product Engineer (Next.js / Node) - AI Encouraged",
+      "profile": "Sana",
+      "skills": ["JavaScript", "Node.js", "React", "PostgreSQL", "Next.js", "TypeScript", "Prisma", "Fastify"],
+      "budget": "40 - 65 USD",
+      "client": {"spent": 1226132.69, "hires": 92, "rating": 4.97, "country": "United States"},
+      "reasons": ["Video Proposal"],
+      "gates_failed": ["9_no_video_proposal"],
+      "explanation": "$1.2M spend + 92 hires + 4.97 rating + on-stack — would be elite, but requires video pitch (out of process)."
+    },
+    {
+      "title": "Frontend QA + UX Polish (Lovable / React) – Mobile App Feel (PWA)",
+      "profile": "Khansa",
+      "skills": ["Responsive Design", "UI Animation", "Front-End Development", "JavaScript", "react.js", "Progressive Web App"],
+      "budget": "15 - 30 USD",
+      "client": {"spent": 59149.46, "hires": 43, "rating": 4.82, "country": "Netherlands"},
+      "reasons": ["Video Proposal"],
+      "gates_failed": ["4_hourly_floor", "9_no_video_proposal"],
+      "explanation": "Strong client + on-stack, but sub-floor hourly + video pitch requirement."
+    },
+
+    {
+      "title": "Ongoing WordPress Maintenance and HubSpot Integration",
+      "profile": "Sana",
+      "skills": ["WordPress", "CSS", "Web Development", "HubSpot", "HTML"],
+      "budget": "14 - 28 USD",
+      "client": {"spent": 14522.11, "hires": 21, "rating": 5.00, "country": "Oman"},
+      "reasons": ["Language barrier"],
+      "gates_failed": [],
+      "soft_signal_failed": ["language_barrier"],
+      "explanation": "Healthy client, on-stack, but client communication non-English. Maps to §8 soft signal, not a hard gate."
+    },
+
+    {
+      "title": "AI-Augmented Software Engineer (Contract) — Ship Features Fast with Claude Code",
+      "profile": "Khansa",
+      "skills": ["Node.js", "AWS Lambda", "TypeScript", "Python", "JavaScript", "Claude", "amazon connect"],
+      "budget": "30 - 45 USD",
+      "client": {"spent": 10412.27, "hires": 1, "rating": null, "country": "Canada"},
+      "reasons": ["Portfolio unavailable"],
+      "gates_failed": ["10_portfolio_match"],
+      "explanation": "Stack-aligned + above-floor, but profile lacked a Claude-Code-style case study to attach."
+    },
+
+    {
+      "title": "HubSpot HTML/CSS Developer Needed – Clean Up Code, Fix Speed Issues",
+      "profile": "Shayan",
+      "skills": ["CSS", "HTML", "JavaScript", "HTML5", "Website", "PHP"],
+      "budget": "Not specified",
+      "client": {"spent": 7672.31, "hires": 26, "rating": 4.72, "country": "United States"},
+      "reasons": ["Duplicate"],
+      "gates_failed": ["11_no_duplicate"],
+      "explanation": "Same `_job_id` already tracked on a sibling profile's board."
+    }
+  ],
+  "proceed_examples": [
+    {
+      "title": "AI + Frontend Integration (Voiceflow + UI State + Kajabi) — Discovery Phase",
+      "profile": "Laiba",
+      "skills": ["API Integration", "Full-Stack Development", "Next.js", "Python", "AI Implementation", "AI Agent Development", "React", "Retrieval Augmented Generation", "LangChain", "Node.js"],
+      "budget": "Not specified",
+      "client": {"spent": 200, "hires": 1, "rating": null, "country": "United States"},
+      "outcome_stage": "Won",
+      "gates_passed": ["1_stack_match", "2_freshness", "3_proposal_saturation", "7_job_availability", "8_no_location_lockin", "9_no_video_proposal", "10_portfolio_match", "11_no_duplicate"],
+      "explanation": "Stack-perfect AI/Next.js work for Laiba; sparse client metadata tolerated due to discovery-phase scope. Closed Won."
+    },
+    {
+      "title": "Full Stack + AI Systems Engineer (AI Operating System for Businesses)",
+      "profile": "Khansa",
+      "skills": ["AI Agent Development", "AI App Development", "AI Model Integration", "Artificial Intelligence", "Python", "Machine Learning", "API"],
+      "budget": "15 - 35 USD",
+      "client": {"spent": 10050.87, "hires": 32, "rating": 4.94, "country": "United States"},
+      "outcome_stage": "InChat",
+      "gates_passed": ["1_stack_match", "2_freshness", "3_proposal_saturation", "5_client_spend_floor", "6_client_rating_floor", "7_job_availability", "8_no_location_lockin"],
+      "explanation": "Stack-perfect AI work + $10k spend + 4.94 rating. Hourly $15-35 borderline (fail on strict $25 floor — bottom is $15) but agent proceeded; flagged for §11 question 1."
+    },
+    {
+      "title": "JavaScript App Code Verification and Server Configuration",
+      "profile": "Shayan",
+      "skills": ["JavaScript", "Node.js", "API"],
+      "budget": "2,400 USD",
+      "client": {"spent": null, "hires": null, "rating": null, "country": "Canada"},
+      "outcome_stage": "InChat",
+      "gates_passed": ["1_stack_match", "2_freshness", "3_proposal_saturation", "7_job_availability"],
+      "explanation": "Stack-aligned JS/Node work; $2,400 fixed implies acceptable hourly. Client metadata sparse but stack signal dominated."
+    },
+    {
+      "title": "Develop an AI-Powered Email Filtering SaaS Platform",
+      "profile": "Khansa",
+      "skills": ["Python", "API", "JavaScript", "Node.js"],
+      "budget": "30 - 50 USD",
+      "client": {"spent": 9800.54, "hires": 38, "rating": 4.98, "country": "United States"},
+      "outcome_stage": "ProposalViews",
+      "gates_passed": ["1_stack_match", "4_hourly_floor", "5_client_spend_floor", "6_client_rating_floor"],
+      "explanation": "Above-floor hourly $30-50 + on-stack + $9.8k spend + 4.98 rating. Textbook proceed."
+    },
+    {
+      "title": "Full-Stack Developer Needed to Build Claude-Powered SaaS MVP",
+      "profile": "Khansa",
+      "skills": ["AI App Development", "Website Redesign", "Web Application", "Claude", "React"],
+      "budget": "25 - 47 USD",
+      "client": {"spent": 110.73, "hires": 5, "rating": 5.00, "country": "Kenya"},
+      "outcome_stage": "ProposalViews",
+      "gates_passed": ["1_stack_match", "4_hourly_floor", "6_client_rating_floor"],
+      "explanation": "Hourly bottom $25 = floor pass; client spend $111 below threshold but agent proceeded on stack-perfection (Claude/React/SaaS for Khansa) — 5.0 rating offsets."
+    },
+    {
+      "title": "RAG + Knowledge Graph System - Fixed Price Build",
+      "profile": "Laiba",
+      "skills": ["Python", "Retrieval Augmented Generation", "Knowledge Graph", "Neo4j", "Vector Database"],
+      "budget": "Not specified",
+      "client": {"spent": 15455.21, "hires": 71, "rating": 4.97, "country": "United Kingdom"},
+      "outcome_stage": "ProposalViews",
+      "gates_passed": ["1_stack_match", "5_client_spend_floor", "6_client_rating_floor"],
+      "explanation": "Niche but Laiba-aligned stack (RAG/KG/Vector); $15k client + 71 hires + 4.97 rating."
+    },
+    {
+      "title": "Local SEO Specialist for U.S. Accounting Firm",
+      "profile": "Sana",
+      "skills": ["Search Engine Optimization", "SEO Keyword Research", "SEO Backlinking", "SEO Audit", "Organic Traffic Growth", "On-Page SEO"],
+      "budget": "Not specified",
+      "client": {"spent": 4807.90, "hires": 19, "rating": 5.00, "country": "United States"},
+      "outcome_stage": "ProposalViews",
+      "gates_passed": ["5_client_spend_floor", "6_client_rating_floor"],
+      "explanation": "SEO work for Sana — note: §6.7 has SEO as out-of-stack for Shayan but Sana's bucket allows SEO/marketing-adjacent. Stack-bucket per profile matters."
+    },
+    {
+      "title": "Software Engineer for Boutique M&A Advisory Firm",
+      "profile": "Sana",
+      "skills": ["API Development", "Python", "JavaScript", "AI Development", "AWS Lambda", "SQL", "Zapier", "CRM Automation"],
+      "budget": "15 - 35 USD",
+      "client": {"spent": 92602.24, "hires": 43, "rating": 5.00, "country": "United States"},
+      "outcome_stage": "ProposalSubmitted",
+      "gates_passed": ["1_stack_match", "5_client_spend_floor", "6_client_rating_floor"],
+      "explanation": "Strong client signal ($92k spend, 5.0 rating) + on-stack Python/AI/AWS. Hourly bottom $15 is below strict floor — agent override on client strength."
+    },
+    {
+      "title": "Senior Full Stack Architect / Technical Lead",
+      "profile": "Sana",
+      "skills": ["NestJS", "Python", "React", "Node.js", "System Architecture", "Full Stack Development", "API Design", "Technical Leadership"],
+      "budget": "25 - 35 USD",
+      "client": {"spent": 8409.58, "hires": 103, "rating": 4.96, "country": "United Kingdom"},
+      "outcome_stage": "ProposalSubmitted",
+      "gates_passed": ["1_stack_match", "4_hourly_floor", "5_client_spend_floor", "6_client_rating_floor"],
+      "explanation": "Hourly $25 floor pass + 103 hires + 4.96 rating + NestJS/Python/React on Sana's bucket."
+    },
+    {
+      "title": "Principal Engineer / Technical Steward for AI-Built Next.js / Vercel / Prisma archive",
+      "profile": "Khansa",
+      "skills": ["React", "TypeScript", "Next.js", "PostgreSQL", "Vercel", "Software Debugging", "Node.js", "Prisma"],
+      "budget": "40 - 75 USD",
+      "client": {"spent": 3636.22, "hires": 18, "rating": 5.00, "country": "United States"},
+      "outcome_stage": "ProposalSubmitted",
+      "gates_passed": ["1_stack_match", "4_hourly_floor", "5_client_spend_floor", "6_client_rating_floor"],
+      "explanation": "All gates pass cleanly: hourly $40-75, client $3.6k, rating 5.0, stack perfect."
+    },
+    {
+      "title": "AI Automation Workflow Setup n8n + Custom AI Agent",
+      "profile": "Laiba",
+      "skills": ["Node.js", "n8n", "Workflow Automation", "AI Integration", "AI Agents", "Python", "REST API", "Webhooks"],
+      "budget": "15 - 20 USD",
+      "client": {"spent": 5867.27, "hires": 146, "rating": 5.00, "country": "United Arab Emirates"},
+      "outcome_stage": "ProposalSubmitted",
+      "gates_passed": ["1_stack_match", "5_client_spend_floor", "6_client_rating_floor"],
+      "explanation": "146 hires + 5.0 rating + n8n/AI core stack. Hourly $15-20 below strict floor — agent override on client strength + stack-perfection."
+    },
+    {
+      "title": "PDR API Integration Development Using Fannie Mae Specifications",
+      "profile": "Shayan",
+      "skills": ["API", "PHP", "JavaScript", "API Integration", "WordPress"],
+      "budget": "6,000 USD",
+      "client": {"spent": null, "hires": null, "rating": null, "country": "United States"},
+      "outcome_stage": "ProposalSubmitted",
+      "gates_passed": ["1_stack_match"],
+      "explanation": "Stack-aligned + $6k fixed scope. Client metadata sparse but agent proceeded on stack signal."
+    }
+  ]
+}
+```
+
+**Usage notes for the n8n classifier author:**
+1. Embed this `reject_examples` + `proceed_examples` array verbatim in the AI Agent system prompt as labeled few-shot examples.
+2. The classifier should output `proceed | reject` plus the reason label (matching §6.2 spelling exactly — `"Out of stack"`, `"Old job"`, `"Low Higher rate"` etc.) so n8n can route directly to the right column.
+3. If a job exhibits multiple gate failures, the AI should return all matching reason labels (the `_reason` field is multi-select on the Task Board UI).
+4. **The LLM MUST NOT invent new reason labels.** Every output reason must be one of the 13 labels in §6.2.
+5. Soft signals (§8) are advisory — the classifier should weigh them but not auto-reject on a single soft signal alone.
+6. To refresh examples, re-run the queries in §14 Appendix A — pick top-N per reason ordered by `created_at DESC`.
+
+---
+
+## 17. Changelog
 
 This section is **append-only**. Every edit to this PRD must add a row at the top with: date (YYYY-MM-DD), version bump, what changed (one line), why (one line), evidence (data query result or stakeholder name), reviewer.
 
 | Date | Version | What changed | Why | Evidence | Reviewer |
 |---|---|---|---|---|---|
+| 2026-05-05 | v0.2 | Added §6.7 (concrete reject examples by reason, ~40 jobs across 13 categories), §6.8 (concrete proceed examples, 25 jobs from Won → Proposal Submitted), and §15.5 Appendix C (LLM-ready JSON example library with `gates_failed` / `gates_passed` annotations and gate-ID reference). Additive only — no edits to v0.1 §1–§13 content. | Make the PRD usable as in-context training data for the upcoming n8n AI classifier node, so a single source of truth governs both human review and machine classification. | Contabo `sales_dashboard` snapshot 2026-05-05: 668 n8n-sourced N/A tasks (taxonomy fully populated) + 124 n8n-sourced Proposal Submitted + 9 Proposal Views + 2 In Chat + 1 Won. Live queries in §14 Appendix A. | Drafted by Claude (relevancy-criteria-keeper persona) in collaboration with Waqas |
 | 2026-05-05 | v0.1 | Initial draft | Define a written rule set for job relevancy from observed agent behaviour | Contabo task board snapshot: 681 N/A + 603 Proposal Submitted tasks, 13 distinct rejection reasons, per-profile matrix, comparative numeric profile | Drafted by Claude in collaboration with Waqas |
 
 ---
