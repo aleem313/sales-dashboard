@@ -1,0 +1,1097 @@
+{
+  "name": "multiple webhooks",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n// PROCESS JOB\n// Parse webhook, match profile, dedup\n// Profiles fetched from dashboard API (single source of truth)\n// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n// ── Fetch profile map from dashboard API (Contabo primary, Vercel fallback) ──\nconst DASHBOARD_URLS = [\n  'http://157.173.110.62/api/profiles/mapping',\n  'https://sales-dashboard-snowy-beta.vercel.app/api/profiles/mapping',\n];\nlet PROFILES = {};\nlet fetchError = '';\nfor (const url of DASHBOARD_URLS) {\n  try {\n    const response = await this.helpers.httpRequest({ method: 'GET', url, json: true });\n    if (response && Object.keys(response).length > 0) { PROFILES = response; break; }\n  } catch (err) {\n    fetchError = err.message;\n  }\n}\nif (!PROFILES || Object.keys(PROFILES).length === 0) {\n  return [{ json: { _result: 'rejected', _reason: 'Failed to fetch profile mapping from all sources: ' + fetchError } }];\n}\n\n// ── Build webhook path to profile name mapping dynamically from API ──\nconst PATH_TO_PROFILE = {};\nfor (const profileName of Object.keys(PROFILES)) {\n  const webhookPath = profileName.toLowerCase() + '-profile-webhook';\n  PATH_TO_PROFILE[webhookPath] = profileName;\n}\n\nconst DEFAULT_LIST = '901815302064';\n\n// ── Get webhook data ──\nconst webhookData = $input.first().json;\nconst body = webhookData.body || webhookData;\nconst headers = webhookData.headers || {};\n\n// ── Extract profile name from webhook path ──\nconst webhookPath = headers.path || '';\nlet filterName = '';\n\nfor (const [path, profileName] of Object.entries(PATH_TO_PROFILE)) {\n  if (webhookPath.includes(path)) {\n    filterName = profileName;\n    break;\n  }\n}\n\nif (!filterName) {\n  filterName = body.filter_name || body.filterName || body.filter?.name || body.filter_tag || body.filter || '';\n}\n\nconst projects = body.projects || [body];\nconst results = [];\n\nfor (const p of projects) {\n  const client = p.client_details || p.client || {};\n\n  let jobUrl = p.url || p.job_url || p.link || '';\n  const urlParam = jobUrl.match(/[?&]url=([^&]+)/);\n  if (urlParam) {\n    try { jobUrl = decodeURIComponent(decodeURIComponent(urlParam[1])); } catch(e) {\n      try { jobUrl = decodeURIComponent(urlParam[1]); } catch(e2) {}\n    }\n  }\n\n  const idMatch = jobUrl.match(/~(\\w+)/);\n  const jobId = p.id || p.job_id || p.uid || (idMatch ? idMatch[1] : '');\n  if (!jobId) continue;\n\n  const skills = Array.isArray(p.skills)\n    ? p.skills\n    : (typeof p.skills === 'string' ? p.skills.split(',').map(s => s.trim()).filter(Boolean) : []);\n\n  const job = {\n    id: jobId,\n    title: p.title || p.job_title || '',\n    description: p.description || p.snippet || p.body || p.job_description || '',\n    url: jobUrl,\n    budget: p.budget || p.fixed_price || p.hourly_budget || '',\n    budgetType: p.job_type || p.type || p.budget_type || '',\n    skills: skills,\n    duration: p.duration || '',\n    postedDate: p.published || p.published_at || p.created_at || p.posted_at || new Date().toISOString(),\n    clientCountry: client.country?.name || client.country || p.client_country || '',\n    clientRating: client.rating || p.client_rating || '',\n    clientSpent: client.total_spent || p.client_total_spent || '',\n    clientHires: client.total_hires || p.client_hires || '',\n    paymentVerified: client.payment_method_verified ?? p.payment_verified ?? false,\n    applicants: p.applicants || p.proposals_count || 0\n  };\n\n  const profile = PROFILES[filterName];\n\n  if (!profile) {\n    results.push({ json: { _result: 'no_profile', _reason: 'No profile matches filter: ' + filterName, job, filterName } });\n    continue;\n  }\n\n  results.push({ json: {\n    _result: 'proceed',\n    job,\n    filterName,\n    profile_id: profile.profile_id || filterName,\n    profile_name: filterName,\n    stack: profile.stack || '',\n    assigned_agent: profile.assigned_agent || '',\n    agent_clickup_id: profile.agent_clickup_id || '',\n    clickup_list_id: profile.clickup_list_id || DEFAULT_LIST,\n    custom_gpt_instructions: ''\n  }});\n}\n\nif (results.length === 0) {\n  return [{ json: { _result: 'rejected', _reason: 'No valid projects in payload' } }];\n}\n\nreturn results;"
+      },
+      "id": "a064f102-37a6-47ec-bfcb-f47bbd95dc6c",
+      "name": "Process Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._result }}",
+                    "rightValue": "proceed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "a89df44f-1798-4206-aa80-2d4cebd55f66"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._result }}",
+                    "rightValue": "no_profile",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "25df86f0-9104-45da-8f07-56adbf915fbc"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._result }}",
+                    "rightValue": "inactive",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "e17e2e37-6cde-42db-86e6-fc94c6788d83"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._result }}",
+                    "rightValue": "duplicate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "16f80cdf-6871-4ae8-ba0d-55d01cfcf068"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._result }}",
+                    "rightValue": "rejected",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "0e718ac7-1bb1-416a-8613-25cfd69964f0"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._result }}",
+                    "rightValue": "weekend",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "1b32c478-bb81-49f5-974f-4394cb77dbf8"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "0053cf63-438a-49d5-9c31-e28cec1465fd",
+      "name": "Route Job",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        32,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n// NODE 10: BUILD GPT INPUT\n// Construct the input string for the stored prompt\n// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nconst item = $input.item.json; \nconst job = item.job;\n\n// Budget display\nconst budgetRaw = String(job.budget || '');\nconst budgetDisplay = budgetRaw || 'Not specified';\n\n// Skills display\nconst skillsDisplay = Array.isArray(job.skills) ? job.skills.join(', ') : String(job.skills || 'N/A');\n\n\n// Hook rotation per profile (A → B → A → B...)\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.hookRotation) staticData.hookRotation = {};\nconst profileId = item.profile_id || 'default';\nconst lastHook = staticData.hookRotation[profileId] || 'B';\nconst useHook = lastHook === 'A' ? 'B' : 'A';\nstaticData.hookRotation[profileId] = useHook;\n\nconst gptInput = [\n  `PROFILE: ${item.profile_name}`,\n  `TECH STACK: ${item.stack}`,\n  `AGENT: ${item.assigned_agent}`,\n  '',\n  `USE HOOK: ${useHook}`,\n  '',\n  'PROFILE-SPECIFIC INSTRUCTIONS:',\n  item.custom_gpt_instructions || 'No additional instructions.',\n  '',\n  '=== JOB TITLE ===',\n  job.title,\n  '',\n  '=== JOB DESCRIPTION ===',\n  job.description.substring(0, 2000),\n  '',\n  '=== BUDGET ===',\n  budgetDisplay,\n  '',\n  '=== REQUIRED SKILLS ===',\n  skillsDisplay,\n  '',\n  '=== CLIENT CONTEXT ===',\n  `- Location: ${job.clientCountry || 'Not specified'}`,\n  `- Rating: ${job.clientRating || 'N/A'}/5`,\n  `- Total Spent: $${job.clientSpent || '0'}`,\n  `- Total Hires: ${job.clientHires || '0'}`,\n  '',\n  'Write the proposal now.'\n].join('\\n');\n\nreturn [{ json: { ...item, gptInput } }];"
+      },
+      "id": "e21fa42e-9d56-43fe-a253-8c83849d4d07",
+      "name": "Build GPT Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-proposal-ok",
+              "leftValue": "={{ $json._proposalOk }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1dc0e9f6-4841-4662-8d66-086d4feafb8e",
+      "name": "Proposal OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n// NODE 14: FORMAT CLICKUP TASK\n// Rich emoji template from CLICKUP_TASK.md\n// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nconst item = $input.item.json;\nconst job = item.job;\nconst ai = item.aiEval || {};\nconst divider = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';\n\n// Formatting helpers\nconst fmt = n => {\n  const num = parseFloat(n) || 0;\n  return num >= 1000 ? `$${(num/1000).toFixed(0)}k` : `$${num}`;\n};\n\n// Budget display\nconst budgetDisplay = String(job.budget || 'Not specified');\n\n// Client spend\nconst spentRaw = parseFloat(String(job.clientSpent || '0').replace(/[^0-9.]/g, '')) || 0;\nconst spent = spentRaw >= 1000 ? `$${(spentRaw/1000).toFixed(0)}k+` : spentRaw > 0 ? `$${spentRaw}` : 'New client';\n\n// Star rating\nconst rating = parseFloat(job.clientRating);\nconst stars = !isNaN(rating) && rating > 0\n  ? `${'\\u2605'.repeat(Math.round(rating))}${'\\u2606'.repeat(5 - Math.round(rating))} (${rating}/5)`\n  : 'No rating yet';\n\n// Skills display\nconst skillsDisplay = Array.isArray(job.skills) ? job.skills.join(', ') : String(job.skills || 'N/A');\n\n// Dates\nconst posted = job.postedDate\n  ? new Date(job.postedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })\n  : 'Unknown';\nconst generated = new Date().toLocaleString('en-US', {\n  month: 'short', day: 'numeric', year: 'numeric',\n  hour: '2-digit', minute: '2-digit',\n  timeZone: 'UTC', timeZoneName: 'short'\n});\n\n// Hires\nconst hires = job.clientHires ? `${job.clientHires}` : 'No hires yet';\n\n// Build task body\nconst lines = [\n  divider,\n  '\\ud83e\\udd16  PROPOSAL  *(copy and send as-is)*',\n  divider,\n  '',\n  item.proposal,\n  '',\n  '',\n  divider,\n  '\\ud83d\\udccc  JOB SNAPSHOT',\n  divider,\n  '',\n  `\\ud83d\\udd17  **Job Link**      \\u2192  [View on Upwork](${job.url})`,\n  `\\ud83d\\udcb0  **Budget**        \\u2192  ${budgetDisplay}`,\n  `\\ud83d\\udee0  **Skills**        \\u2192  ${skillsDisplay}`,\n  `\\ud83d\\udcc5  **Posted**        \\u2192  ${posted}`,\n  '',\n  '',\n  divider,\n  '\\ud83d\\udc64  CLIENT INTEL',\n  divider,\n  '',\n  `\\ud83c\\udf0d  **Location**      \\u2192  ${job.clientCountry || 'Not specified'}`,\n  `\\u2b50  **Rating**        \\u2192  ${stars}`,\n  `\\ud83d\\udcb5  **Total Spent**   \\u2192  ${spent}`,\n  `\\u2705  **Past Hires**    \\u2192  ${hires}`,\n  '',\n  '',\n  divider,\n  '\\ud83c\\udfaf  ROUTING INFO',\n  divider,\n  '',\n  `\\ud83d\\udc64  **Agent**         \\u2192  ${item.assigned_agent}`,\n  `\\ud83d\\udcc1  **Profile**       \\u2192  ${item.profile_name}`,\n  `\\ud83c\\udff7  **Stack**         \\u2192  ${item.stack}`,\n  `\\ud83c\\udd94  **Job ID**        \\u2192  ~${job.id}`,\n  `\\ud83e\\udd16  **Generated**     \\u2192  ${generated}`,\n  ''\n];\n\nconst taskDescription = lines.join('\\n');\nconst taskName = `[${item.profile_name}] ${job.title}`.substring(0, 100);\n\n// Update static data to mark success\nconst staticData = $getWorkflowStaticData('global');\nif (staticData.seenJobs && job.id) {\n  staticData.seenJobs[job.id] = { status: 'success', timestamp: Date.now() };\n}\n\nreturn [{ json: {\n  ...item,\n  taskName,\n  taskDescription,\n  taskBody: {\n    name: taskName,\n    markdown_description: taskDescription,\n    assignees: [Number(item.agent_clickup_id)],\n    priority: 2,\n    due_date: Date.now() + (24 * 60 * 60 * 1000),\n    due_date_time: true,\n    tags: [item.profile_name, 'vollna-auto']\n  }\n} }];"
+      },
+      "id": "6963d485-b2c9-4360-a26f-0c901c8dafa5",
+      "name": "Format ClickUp Task",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n// FORMAT DASHBOARD EVENT\n// Normalize data from all pipeline paths\n// On success path: input = ClickUp API response,\n//   pipeline data pulled from Format ClickUp Task via $()\n// On other paths: input = pipeline data directly\n// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nconst input = $input.item.json;\n\nlet item;\nlet clickupTaskId = null;\nlet clickupTaskUrl = null;\n\ntry {\n  // Success path: pull full pipeline data from Format ClickUp Task\n  item = $('Format ClickUp Task').item.json;\n  // Input on this path is the ClickUp API response\n  clickupTaskId = input.id || null;\n  clickupTaskUrl = input.url || null;\n} catch(e) {\n  // Non-success path: input IS the pipeline data\n  item = input;\n}\n\nconst job = item.job || {};\n\n// Determine outcome\nlet outcome = item._result || 'unknown';\nif (clickupTaskId) outcome = 'proposal_created';\nelse if (item.taskName && item.proposal) outcome = 'proposal_created';\nelse if (item.error_detail) outcome = 'gpt_error';\n\nreturn [{ json: {\n  event: 'job_processed',\n  timestamp: new Date().toISOString(),\n  outcome,\n  reason: item._reason || item._errorDetail || item.error_detail || '',\n\n  job: {\n    id: job.id || item.job_id || '',\n    title: job.title || item.job_title || '',\n    url: job.url || item.job_url || '',\n    budget: job.budget || '',\n    budgetType: job.budgetType || '',\n    skills: Array.isArray(job.skills) ? job.skills : [],\n    duration: job.duration || '',\n    postedDate: job.postedDate || '',\n    applicants: job.applicants || 0,\n    description: (job.description || '').substring(0, 500),\n  },\n\n  client: {\n    country: job.clientCountry || '',\n    rating: job.clientRating || '',\n    spent: job.clientSpent || '',\n    hires: job.clientHires || '',\n    paymentVerified: job.paymentVerified || false,\n  },\n\n  routing: {\n    filterName: item.filterName || item.profile_name || item.profile_id || '',\n    profileName: item.profile_name || '',\n    assignedAgent: item.assigned_agent || '',\n    agentClickupId: item.agent_clickup_id || '',\n  },\n\n  scores: {\n    heuristic: item.heuristicScore ?? null,\n    heuristicFlags: item.heuristicFlags || [],\n    aiScore: item.aiEval?.score ?? null,\n    aiRelevant: item.aiEval?.relevant ?? null,\n    aiReason: item.aiEval?.reason || '',\n    aiHighlights: item.aiEval?.highlights || [],\n    aiRedFlags: item.aiEval?.redFlags || [],\n  },\n\n  proposal: item.proposal || null,\n  clickupTaskName: item.taskName || null,\n\n  clickup: {\n    taskId: clickupTaskId,\n    taskUrl: clickupTaskUrl,\n  },\n} }];"
+      },
+      "id": "7c7e1e23-be07-4ac2-9ccc-48b152bb2770",
+      "name": "Format Dashboard Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "6f516263-704b-4b10-86e5-012e06f33ef9",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "994e28a8-25a0-487e-8e85-1998bd2f4e92",
+      "name": "Webhook - Sana",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1392,
+        -224
+      ],
+      "webhookId": "cc0132a7-c18f-473b-a61e-41973ae849f4",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "590b2765-1695-46d6-8403-5101107c199b",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "c94e20e0-cd61-459e-b24a-c44eb30fc11f",
+      "name": "Webhook - Laiba",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1424,
+        0
+      ],
+      "webhookId": "035e375f-fd9d-4bdb-8b3b-fb942f9edc68",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "f9985fe6-b639-40a0-9c3b-a19b4bdab490",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "019ddaec-6b7a-459d-87ed-f917d751ce85",
+      "name": "Webhook - Khansa",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1440,
+        240
+      ],
+      "webhookId": "84b0f382-1202-4a3a-913a-b81d061da8c2",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "b0ae892c-b7de-4c29-ad2f-2af0b3acbe78",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "0f03fd9b-5a59-46cc-9049-462126b4eb7a",
+      "name": "Webhook - Saim",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1472,
+        464
+      ],
+      "webhookId": "b289501d-2ce2-4172-a5c0-b4dc5a60c721",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fd520319-25f9-474e-a72f-f05ef13d6dc8",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "5928e0b4-50a5-4fe4-b481-226ff4e4d903",
+      "name": "Webhook - Shayan",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1456,
+        704
+      ],
+      "webhookId": "bb63bef8-d0c5-41d3-8db3-07d41311aeb8",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "02d7de17-61db-4980-9444-1ad527079e37",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b7dad9fd-8e5c-451e-9661-a4d42f379315",
+      "name": "Webhook - Craig",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1408,
+        912
+      ],
+      "webhookId": "2a2dc271-5fdd-4f7c-bcd0-b5d4fc02c9aa",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "numberInputs": 8
+      },
+      "id": "5cd3815e-7501-49ee-bb7f-22d4f3bd6f08",
+      "name": "Merge All Webhooks",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -608,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n// NODE 22: EXTRACT GPT ERROR\n// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nconst item = $input.item.json;\nconst job = item.job || {};\n\n// Update static data to mark as gpt_failed (allows retry)\nconst staticData = $getWorkflowStaticData('global');\nif (staticData.seenJobs && job.id) {\n  staticData.seenJobs[job.id] = { status: 'gpt_failed', timestamp: Date.now() };\n}\n\nreturn [{ json: {\n  job_id: job.id || '',\n  job_url: job.url || '',\n  job_title: job.title || '',\n  profile_id: item.profile_id || '',\n  profile_name: item.profile_name || '',\n  assigned_agent: item.assigned_agent || '',\n  error_detail: item._errorDetail || 'Unknown GPT failure'\n} }];"
+      },
+      "id": "2376112b-b0f6-42b9-a80b-6219ab71d6a9",
+      "name": "Extract Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1504,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "proposal",
+              "value": "={{ $json.output.proposal }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "_proposalOk",
+              "value": "={{ $json.output._proposalOk }}",
+              "type": "boolean"
+            },
+            {
+              "id": "id-3",
+              "name": "job",
+              "value": "={{ JSON.stringify($('Build GPT Input').item.json.job) }}",
+              "type": "object"
+            },
+            {
+              "id": "id-4",
+              "name": "profile_id",
+              "value": "={{ $('Build GPT Input').item.json.profile_id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "profile_name",
+              "value": "={{ $('Build GPT Input').item.json.profile_name }}",
+              "type": "string"
+            },
+            {
+              "id": "id-6",
+              "name": "stack",
+              "value": "={{ $('Build GPT Input').item.json.stack }}",
+              "type": "string"
+            },
+            {
+              "id": "id-7",
+              "name": "assigned_agent",
+              "value": "={{ $('Build GPT Input').item.json.assigned_agent }}",
+              "type": "string"
+            },
+            {
+              "id": "id-8",
+              "name": "agent_clickup_id",
+              "value": "={{ $('Build GPT Input').item.json.agent_clickup_id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-9",
+              "name": "clickup_list_id",
+              "value": "={{ $('Build GPT Input').item.json.clickup_list_id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-10",
+              "name": "filterName",
+              "value": "={{ $('Build GPT Input').item.json.filterName }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "8af87299-f9b6-4278-bb94-4a63eeb36abb",
+      "name": "Merge Proposal with Job Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        832,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.gptInput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior Upwork proposal strategist focused on winning long-term software contracts.\n\nWrite like a technical peer. Direct. Concise. Experienced. No fluff. No emotion. No filler.\n\nOBJECTIVE\n\nGenerate high-response proposals that:\n- Signal ownership and long-term reliability\n- Feel product-minded\n- Increase open rate with a sharp hook\n- Stay within strict limits\n\nHARD RULES\n\n- Total word count: 150–230\n- Hook: max 200 characters\n- Hook must be 2–3 sentences\n- No emojis\n- No exclamation marks\n- No hedging words: could, would, might, I think, I believe\n- Never open with: Hi, Dear, I am, I'm a\n- Never use: I look forward to, I'd be happy to\n- Always reference something specific from the job post\n- Always end with a call invitation\n- Sound like a partner, not an applicant\n\nHOOK ROTATION SYSTEM — READ THIS CAREFULLY\n\nAt the start of EVERY response, regardless of which hook the user selected for the proposal body, you MUST print all three hook variants at the top, clearly labeled, before the proposal begins.\n\nFormat exactly like this:\n\n--- Hook A ---\n[Hook A text]\n\n--- Hook B ---\n[Hook B text]\n\n--- Hook C ---\n[Hook C text]\n\n---\n\nThen write the proposal below the final divider line.\n\nThe user will also specify which hook to use in the proposal body (A, B, or C). Use that hook as Section 1 inside the proposal.\n\nHOOK TYPE A — CURIOSITY-LED\n\nFormula:\n\\\"Would you like to see [EXACT PROBLEM FROM POST]? + [I can show on a screen share]\\\"\n\nGoal:\nMake it sound like the solution exists right now and they can see it immediately. Not something you've done before.\n\nMax length: 200 characters.\n\nExample job post mention:\n\\\"We need real-time leaderboard updates during live tournaments\\\"\n\nExample Hook A:\n\\\"Would you like to see a live leaderboard that updates in real time? I can show you exactly how that works on a screen share.\\\"\n\nHOOK TYPE B — PROTOTYPE HOOK\n\nFormula:\n\\\"I have a working prototype that already [EXACT PROBLEM FROM POST] — I can show you on a call.\\\"\n\nGoal:\nMake it sound like the solution exists right now and they can see it immediately. Not something you've done before — something that is already built and ready. One call away.\n\nMax length: 200 characters.\n\nExample job post mention:\n\\\"We need real-time leaderboard updates during live tournaments\\\"\n\nExample Hook B:\n\\\"I have a working prototype that already handles real-time leaderboard sync during live events — I can show you on a call.\\\"\n\n\nHOOK TYPE C — PSYCHOLOGICAL QUESTION HOOK\n\nFormula:\nAsk the single most important, psychologically sharp question derived from the core pain point of the job post. The question must feel like it came from someone who has already lived through this problem — not from a checklist.\n\nGoal:\nStop the client mid-scroll. Make them pause and think \\\"nobody has ever asked me this.\\\" The question should expose a hidden risk or consequence they have not fully considered, and make them feel like you understand their business better than they do.\n\nRules:\n- Derive the question directly from the sharpest pain point in the job post\n- It must feel like a natural, human question — not AI-generated, not from a template\n- No jargon, no dev terminology, no stack names\n- Frame it for a non-technical founder\n- It should be psychologically tricky — a question they cannot easily dismiss\n- Max 200 characters\n- No question marks stacked — exactly one question\n\nExample job post mention:\n\\\"We need real-time leaderboard updates during live tournaments\\\"\n\nExample Hook C (BAD — too technical):\n\\\"Have you thought about WebSocket reconnection handling under concurrent load?\\\"\n\nExample Hook C (GOOD — psychologically sharp):\n\\\"If the scores freeze mid-final and the crowd is watching, who on your team owns that call?\\\"\n\nHOOK RULES (APPLY TO ALL THREE)\n\n- No fluff\n- No \\\"I noticed you're looking for\\\"\n- No generic skills like \\\"React\\\" or \\\"Next.js\\\" alone — always tie it to what they are actually building\n- Hook A must feel like a question they cannot say no to\n- Hook B must feel like the solution already exists and is one call away\n- Hook C must feel like a question only someone who truly understands the business would ask\n- All hooks must be under 200 characters\n\nPROJECT DATABASE\n\n\nProject: [Project Name] What it was: [1 sentence — what it did and what problem it solved] Result: [Measurable outcome if any] URL: [Link] --- Tech Stack, APIs etc\n\nProject: [Project Name] What it was: [1 sentence — what it did and what problem it solved] Result: [Measurable outcome if any] URL: [Link] (Repeat for each project.) -- Tech Stack, APIs etc\n\n\nPROPOSAL STRUCTURE\n\n--- Hook A ---\n[Hook A text]\n\n--- Hook B ---\n[Hook B text]\n\n--- Hook C ---\n[Hook C text]\n\n---\n[Proposal begins here]\n\n---------------------------------\nSECTION 0 — SCREENING ANSWER (conditional)\n---------------------------------\nIf the job post contains a required screening question:\n\n1. Check if the client specifies WHERE to place the answer\n   - If they say \\\"at the top\\\" → write it before the hook\n   - If they say \\\"at the bottom\\\" → write it after the CTA\n   - If no placement is specified → place it before the hook by default\n\n2. Keep the answer under 30 words\n3. Be technically specific, not generic\n4. No heading required\n5. Leave a blank line between the answer and whatever section follows it\n\nIf no screening question exists: skip this section entirely.\n\n---------------------------------\nSECTION 1 — HOOK (max 200 characters)\n---------------------------------\nWrite the hook the user specified (A, B, or C) as the opening of the proposal.\nLeave a blank line after the hook.\n\n---------------------------------\nSECTION 2 — RELEVANCE PROOF (20 words)\n---------------------------------\nScan ONLY the PROJECT DATABASE block above.\nMatch entries against the job post by topic, problem, or domain.\n\nFormat exactly:\nHeading: \\\"Some other similar projects i did:\\\"\n- Step under 10 words\n- Step under 10 words\n- Step under 10 words\n\n- If 1 match found: list it with project name and URL\n- If 2 matches found: list both, names and URLs only\n- If no match found: skip this section entirely — write nothing\n\nHARD RULE: If the project is not in the PROJECT DATABASE, it does not exist.\nDo not invent. Do not guess. Do not fill the gap.\n\n---------------------------------\nSECTION 3 — CURIOSITY LINE\n---------------------------------\nWrite 1 short statement that sounds like a natural, human observation.\n\nTone: Like a senior dev casually flagging something important mid-conversation.\nFeel: Calm. Knowing. Not alarming. Not robotic.\n\nUse openers like:\n- \\\"One thing worth keeping in mind here is that,\\\"\n- \\\"Something that often gets missed with this type of build is that,\\\"\n\nThen complete the thought in plain English. Name the hidden risk or edge case in a way a smart non-technical person immediately understands.\n\nMax length: 15 words after the opener.\n\nExample of BAD (robotic):\n\\\"While achieving instant live updates, need to make sure to keep in mind judge disconnects?\\\"\n\nExample of GOOD (human):\n\\\"One thing worth keeping in mind here — live updates break in ways users blame the product for.\\\"\n\n---------------------------------\nSECTION 4 — PROBLEM UNDERSTANDING\n---------------------------------\n\nWrite exactly 3 lines in this exact format, with a blank line between each.\n\nLine 1: What they want to achieve. Plain, natural. Max 15 words.\n\nLine 2: Write exactly \\\"BUT...\\\" on its own line. Nothing else.\n\nLine 3: The risk or consequence if this goes wrong. Casual, honest. Max 15 words.\n\nTone: Like a developer who has built this before and genuinely gets it.\nFeel: Empathetic but direct. Not alarming. Not salesy.\n\nRules:\nNo corporate language.\nNo words like \\\"ensure\\\", \\\"seamless\\\", \\\"robust\\\", \\\"flawless\\\".\nThe \\\"BUT...\\\" must always be on its own line with a blank line before and after it.\nLine 1 and Line 3 must feel like two connected thoughts.\nShould feel like the start of a conversation, not a diagnosis.\n\nOutput must look exactly like this:\n\nYou want live scores and brackets that just work in front of a live audience.\n\nBUT...\n\nOne bad sync moment on stage and the whole event feels broken.\n\n---------------------------------\nSECTION 5 — MINI-PLAN (40 words)\n---------------------------------\nHeading must be exactly:\nHere is my approach:\n\nFormat exactly:\nHere is my approach:\n- Step under 10 words\n- Step under 10 words\n- Step under 10 words\n- Optional step under 10 words\n\nRules:\n- Mirror language from the job post\n- No generic steps\n- No \\\"testing\\\" or \\\"deployment\\\"\n- Every step must be specific to the job post\n\n---------------------------------\nSECTION 6 — DIFFERENTIATOR (1 sentence)\n---------------------------------\nWrite 1 sentence about yourself. Use \\\"I\\\" or \\\"My.\\\"\n\nTone: Human. Slightly self-aware. Like a confident developer who does not need to oversell.\nFeel: Natural, grounded — the kind of thing someone actually says on a call, not in a cover letter.\n\nYou can open with a light, self-aware setup like:\n- \\\"Not to brag, but...\\\"\n- \\\"I will let the work speak, but...\\\"\n- \\\"For what it's worth,\\\"\n\nThen land on exactly one of these truths:\n- You stay on projects long-term and treat them like your own\n- You flag problems before they become the client's emergency\n- You communicate like a partner, not a contractor waiting for tickets\n- You have deep domain experience in exactly this type of build\n- You are available in their timezone and show up consistently\n\nRules:\n- No tech stack names\n- No corporate phrases like \\\"end-to-end ownership\\\" or \\\"seamless delivery\\\"\n- Must sound like something a real human would actually say\n- Max 15 words after the opener\n\nExample of BAD (robotic):\n\\\"I take end-to-end ownership ensuring flawless implementation aligned to your specifications.\\\"\n\nExample of GOOD (human):\n\\\"Not to brag, but I have never once had a client chase me for an update.\\\"\n\n---------------------------------\nSECTION 7 — STRATEGIC QUESTIONS\n---------------------------------\nWrite exactly 1 question. No more.\n\nStart with one of these openers: \\\"Have you thought about...\\\" or \\\"How are you planning to...\\\"\n\nWrite \\\"P.S:\\\" directly before the question on the same line.\n\nRules:\n- Ask exactly 1 question — never 2, never 3\n- Frame it for a non-technical founder — no jargon, no stack names, no dev terminology\n- The question must hint at a real hidden problem they have not considered\n- It should feel like you are protecting their business, not showing off your knowledge\n- The question should naturally lead toward needing your expertise as the answer\n- No basic questions like \\\"what is your budget\\\" or \\\"what is your timeline\\\"\n\nExample of BAD question (too technical):\n\\\"Have you thought about WebSocket reconnection handling under concurrent load?\\\"\n\nExample of GOOD question (founder-friendly):\n\\\"Have you thought about what happens to live scores if a judge loses internet mid-round?\\\"\n\n---------------------------------\nSECTION 8 — CTA (1 sentence, 13–15 words)\n---------------------------------\nWrite exactly 1 sentence. Up to 15 words.\n\nOffer a 15-minute call. Mention you have a prototype to show and questions to ask.\n\nTone: Confident. Composed. Like someone with a full calendar offering a small window.\n\nRules:\nNo desperation.\nNo \\\"I'd love to\\\" or \\\"I look forward to\\\".\nNo exclamation marks.\nMust feel like you are offering value, not asking for a chance.\n\nExample of BAD (desperate):\n\\\"Would love to hop on a quick call and show you what I have built for you.\\\"\n\nExample of GOOD (composed):\n\\\"A 15-minute call works, I have a prototype ready and a few questions worth covering.\\\"\n\n=============================================================\nOUTPUT FORMAT\n=============================================================\n\nReturn only the proposal text.\n\nAlways start with all three hooks printed at the top, labeled exactly:\n--- Hook A ---\n--- Hook B ---\n--- Hook C ---\n\nThen write the proposal below the final divider.\nNo extra commentary. No meta-explanation. No headers visible to the client inside the proposal body.\""
+        }
+      },
+      "id": "0abcc32a-14e5-4a79-9bb8-601144963b9c",
+      "name": "AI Agent - Proposal Writer",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        480,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-haiku-4-5-20251001",
+          "mode": "list",
+          "cachedResultName": "Claude Haiku 4.5"
+        },
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "f7686d01-1ec0-45ef-862f-7d5d84b93e55",
+      "name": "Claude Chat Model - Proposal",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        496,
+        384
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "fVtEWZhGXzEBZDoS",
+          "name": "Aleem Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"proposal\":{\"type\":\"string\",\"description\":\"The complete Upwork proposal text\"},\"_proposalOk\":{\"type\":\"boolean\",\"description\":\"Whether the proposal was successfully generated\"}},\"required\":[\"proposal\",\"_proposalOk\"],\"additionalProperties\":false}",
+        "autoFix": true
+      },
+      "id": "a1770725-54c4-4d93-aa96-d805e28de19a",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        624,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "9733236f-2f73-4fe8-904a-959aa57b514e",
+      "name": "Respond - Sana",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1216,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "c58eedfe-e7a6-431c-9ae1-e5508d127044",
+      "name": "Respond - Laiba",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1216,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "40296d51-82b6-4657-b740-7a08efc5fcfb",
+      "name": "Respond - Khansa",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1248,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "608b1006-dda7-4a09-97cb-f9311b5e4514",
+      "name": "Respond - Saim",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1248,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "0ea4453a-485f-4aca-873d-8448a4fde85f",
+      "name": "Respond - Shayan",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1264,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "4d0731fe-8c34-4063-8db5-81220f2ff693",
+      "name": "Respond - Craig",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1232,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rebekah-profile-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1e417cf6-2460-41c4-95fa-aa5ba344424f",
+      "name": "Webhook - Rebekah",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1408,
+        1136
+      ],
+      "webhookId": "3efa17c8-34d4-434a-bf42-1a0e791389a6",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "34d95c67-8578-480e-aa66-b1d17e5857d2",
+      "name": "Respond - Rebekah",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1216,
+        1136
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nawal-profile-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d7b6b539-4db8-475d-a297-47941393422c",
+      "name": "Webhook - Nawal",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1408,
+        1360
+      ],
+      "webhookId": "0e4c251a-b689-4622-8beb-816c51251011",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "600448a4-88a3-4c9e-92d5-4433ba18e90b",
+      "name": "Respond - Nawal",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1216,
+        1360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://157.173.110.62/api/webhook/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "14801340-dff9-4ee2-8552-cb7f1cbe3f37",
+      "name": "Send to Self-Hosted Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1952,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://157.173.110.62/api/v1/webhooks/tasks",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer n8n-board-sync"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }) } }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "a55e6692-843c-4ef6-ba9b-e62a3ddab7b6",
+      "name": "Create Board Task - Self-Hosted",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1504,
+        -320
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Process Job": {
+      "main": [
+        [
+          {
+            "node": "Route Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Job": {
+      "main": [
+        [
+          {
+            "node": "Build GPT Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Dashboard Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Dashboard Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Dashboard Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Dashboard Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build GPT Input": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Proposal Writer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proposal OK?": {
+      "main": [
+        [
+          {
+            "node": "Format ClickUp Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format ClickUp Task": {
+      "main": [
+        [
+          {
+            "node": "Format Dashboard Event",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Board Task - Self-Hosted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Dashboard Event": {
+      "main": [
+        [
+          {
+            "node": "Send to Self-Hosted Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Craig": {
+      "main": [
+        [
+          {
+            "node": "Respond - Craig",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Sana": {
+      "main": [
+        [
+          {
+            "node": "Respond - Sana",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Laiba": {
+      "main": [
+        [
+          {
+            "node": "Respond - Laiba",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Khansa": {
+      "main": [
+        [
+          {
+            "node": "Respond - Khansa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Saim": {
+      "main": [
+        [
+          {
+            "node": "Respond - Saim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Shayan": {
+      "main": [
+        [
+          {
+            "node": "Respond - Shayan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Error": {
+      "main": [
+        [
+          {
+            "node": "Format Dashboard Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Proposal with Job Data": {
+      "main": [
+        [
+          {
+            "node": "Proposal OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent - Proposal Writer",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Chat Model - Proposal": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - Proposal Writer",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Structured Output Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Proposal Writer": {
+      "main": [
+        [
+          {
+            "node": "Merge Proposal with Job Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond - Sana": {
+      "main": [
+        [
+          {
+            "node": "Merge All Webhooks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Rebekah": {
+      "main": [
+        [
+          {
+            "node": "Respond - Rebekah",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Nawal": {
+      "main": [
+        [
+          {
+            "node": "Respond - Nawal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond - Nawal": {
+      "main": [
+        [
+          {
+            "node": "Merge All Webhooks",
+            "type": "main",
+            "index": 7
+          }
+        ]
+      ]
+    },
+    "Respond - Laiba": {
+      "main": [
+        [
+          {
+            "node": "Merge All Webhooks",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Respond - Khansa": {
+      "main": [
+        [
+          {
+            "node": "Merge All Webhooks",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Respond - Saim": {
+      "main": [
+        [
+          {
+            "node": "Merge All Webhooks",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Respond - Shayan": {
+      "main": [
+        [
+          {
+            "node": "Merge All Webhooks",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Respond - Craig": {
+      "main": [
+        [
+          {
+            "node": "Merge All Webhooks",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "Respond - Rebekah": {
+      "main": [
+        [
+          {
+            "node": "Merge All Webhooks",
+            "type": "main",
+            "index": 6
+          }
+        ]
+      ]
+    },
+    "Merge All Webhooks": {
+      "main": [
+        [
+          {
+            "node": "Process Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timezone": "Asia/Karachi",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "saveExecutionProgress": true
+  },
+  "versionId": "e251bf20-e3bf-4dfd-b8d0-00ba4e156f39",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "1194d02bb87bd2498f40a85f574613266b65b061794b8e2470a56086a2860b5d"
+  },
+  "id": "EWnZg3svZWwcIRs4",
+  "tags": []
+}

@@ -1,9 +1,12 @@
-# Upwork Relevancy Scoring AI — Build Plan **v3**
+# Upwork Relevancy Scoring AI — Build Plan **v3.1**
 
-**Status:** Engineering-ready · 2026-05-06
-**Supersedes:** `upwork-relevancy-scoring-ai-plan-v2.md` (2026-05-06) and `upwork-relevancy-scoring-ai-plan.md` (v1)
+**Status:** Engineering-ready · 2026-05-07
+**Supersedes:** `upwork-relevancy-scoring-ai-plan-v2.md` (2026-05-06), v3 (2026-05-06), v1
 **Source PRD:** `job_relevancy_criteria_prd.md` v0.2
 **Stack:** Apify (Upwork scrape) → n8n (4 workflows) → Gemini Flash 2.5 → Postgres (Contabo) + Next.js admin dashboard
+**Stable n8n backup:** [`docs/multiple webhooks (07-05-2026 working).json`](./multiple%20webhooks%20%2807-05-2026%20working%29.json) — see [§14 Rollback Strategy](#14-rollback-strategy)
+
+**v3.1 changes vs v3:** added §13 Production Readiness & n8n Update Strategy, §14 Rollback Strategy, §15 Execution Requirements, §16 Identified Gaps & Production-Readiness Recommendations. No changes to architecture, schemas, or workflows from v3 — v3.1 is a hardening + ops-readiness pass.
 
 v3 keeps the v2 classifier core (gates + rubric + Gemini Flash 2.5) and adds the three operational pieces v2 lacked:
 
@@ -34,8 +37,12 @@ The classifier from v2 is refactored into a **shared n8n sub-workflow** (`_relev
 10. [Admin Dashboard Design](#10-admin-dashboard-design)
 11. [Performance + Cost Considerations](#11-performance--cost-considerations)
 12. [Future Enhancements](#12-future-enhancements)
-13. [Appendix A — Open Questions](#appendix-a--open-questions)
-14. [Appendix B — Build Order](#appendix-b--build-order)
+13. [Production Readiness & n8n Update Strategy](#13-production-readiness--n8n-update-strategy)
+14. [Rollback Strategy](#14-rollback-strategy)
+15. [Execution Requirements](#15-execution-requirements)
+16. [Identified Gaps & Production-Readiness Recommendations](#16-identified-gaps--production-readiness-recommendations)
+17. [Appendix A — Open Questions](#appendix-a--open-questions)
+18. [Appendix B — Build Order](#appendix-b--build-order)
 
 ---
 
@@ -1242,6 +1249,527 @@ The auto pipeline stays inside the existing 5-20s end-to-end PRD §10.4 budget. 
 
 ---
 
+## 13. Production Readiness & n8n Update Strategy
+
+The v3 plan splices into the **live** workflow `EWnZg3svZWwcIRs4` that currently processes ~40 jobs/day end-to-end (Vollna → ClickUp Task Board). Any change must preserve existing functionality. This section documents the safe-update protocol and the operational guardrails missing from v2.
+
+### 13.1 Safe n8n workflow update protocol
+
+Every change to `EWnZg3svZWwcIRs4` (or any production workflow) MUST follow this order. The `n8n-workflow-keeper` agent is the only sanctioned executor.
+
+**Pre-flight (before any edit):**
+
+1. **Snapshot current state** — call `n8n_get_workflow` and write the result to `docs/multiple-webhooks-<YYYY-MM-DD-HHMM>-pre-update.json`. Commit before the edit lands.
+2. **Pull `n8n_workflow_versions`** — record `versionId` for fast revert via the n8n UI.
+3. **Verify the stable backup exists** — `docs/multiple webhooks (07-05-2026 working).json` must be present and parseable. This is the canonical fallback (see §14).
+4. **`n8n_validate_workflow`** on the current state to catch pre-existing errors before our edit gets blamed for them.
+5. **Pause Vollna feeds** for high-risk changes (anything touching `Process Job`, `Route Job`, or `Merge All Webhooks`). For low-risk additive splices (new sub-workflow invocation), keep traffic flowing but watch executions.
+
+**Edit:**
+
+6. **Always use `n8n_update_partial_workflow`** with explicit `addNode`, `addConnection`, `updateNode`, `removeConnection` operations. NEVER use `n8n_update_full_workflow` for incremental edits — it overwrites position metadata, destroys sticky notes, and makes diffs unreviewable. `n8n_update_full_workflow` is reserved for rollback (§14) only.
+7. **Pin every new node's `typeVersion`** explicitly. The n8n keeper agent has node-version compatibility memory; trust it but verify with `mcp__n8n-mcp__get_node` if unsure.
+8. **Set `onError` explicitly** on every new HTTP / Apify / executeWorkflow node. Default to `continueRegularOutput` for sinks (don't block pipeline on a logging failure) and `continueErrorOutput` for fetches that have a fallback path. Never leave it implicit.
+9. **No inline secrets.** All API tokens reference n8n credentials by ID. Ingest tokens live in the `Header Auth` credential type.
+10. **Wire one branch at a time.** A 3-node splice gets shipped in 3 partial updates with validation between each, not one big diff.
+
+**Post-flight:**
+
+11. **`n8n_validate_workflow`** after every partial update. Reject the change if any error severity surfaces.
+12. **`n8n_test_workflow`** with a known-good fixture (a recent successful execution from the n8n exec log) to confirm the splice doesn't break the happy path.
+13. **Watch executions for 1 hour** post-deploy. Any new error pattern → revert via §14.
+14. **Update `docs/n8n_workflow_prd.md`** with: new node names, IDs, typeVersions, position coordinates, and a one-line purpose. Update `CLAUDE.md` § "n8n Integration" if the topology changed.
+15. **Tag the success** — call `n8n_get_workflow` again, write `docs/multiple-webhooks-<date>-stable.json`, and commit. The newest stable file becomes the next §14 rollback target after a 7-day soak.
+
+### 13.2 Documentation standard for new n8n nodes
+
+Every new node MUST be paired with:
+
+| Artifact | Where | Purpose |
+|---|---|---|
+| **Sticky note** | n8n canvas, adjacent to the node | One paragraph: purpose, inputs, outputs, failure modes |
+| **PRD entry** | `docs/n8n_workflow_prd.md` § "Nodes" | Permanent record |
+| **CLAUDE.md gotcha** | `CLAUDE.md` § "n8n Integration Gotchas" | Only if the node has a non-obvious constraint (e.g., "Merge v3.2 only — do not downgrade") |
+| **Memory entry** | `n8n_multiple_webhooks_workflow.md` | If the node represents a topology change |
+
+The n8n-workflow-keeper agent enforces this as part of every successful change.
+
+### 13.3 Workflow ownership matrix
+
+| Workflow | Risk class | Edit gate | Pause traffic? |
+|---|---|---|---|
+| `EWnZg3svZWwcIRs4` (Vollna auto-pipeline) | **HIGH** — live revenue path | n8n-workflow-keeper + signed-off by user | Yes, for `Process Job` / `Route Job` / `Merge` edits |
+| `_relevancy-classifier-core` (NEW) | Medium — but invoked by HIGH | Same as above | No (parent fails open to `review`) |
+| `profile-ingest` (NEW) | Low — manual trigger only | n8n-keeper | No |
+| `profile-sync` (NEW) | Low for manual / Medium for cron | n8n-keeper | Pause cron during edit |
+| `job-evaluate-manual` (NEW) | Low — admin tool | n8n-keeper | No |
+
+### 13.4 Migration 017 update strategy
+
+- **Idempotency** — every `CREATE TABLE` uses `IF NOT EXISTS`; every `ALTER TABLE` uses `ADD COLUMN IF NOT EXISTS`. Re-runs are safe.
+- **Order** — run migration 017 BEFORE deploying any code that reads the new columns. The columns are nullable so old code keeps working.
+- **Forward compatibility** — code MUST treat new columns as optional for one full deploy cycle (write old + new, read old fallback to new) until all instances are upgraded. Contabo is single-instance so this is moot in practice, but the plan should not assume it forever.
+- **Rollback** — additive migrations are not reversible without data loss. A rollback script `017_rollback.sql` ships alongside but only DROPs the new tables (`profile_*`, `skills_taxonomy`, `relevancy_*`, `manual_job_evaluations`, `criteria_versions`) — the additive `ALTER TABLE profiles ADD COLUMN …` columns stay (they're nullable and harmless).
+- **Pre-deploy snapshot** — `pg_dump` the affected schemas to a timestamped file in `/var/backups/postgres/` on Contabo before applying.
+
+### 13.5 Shadow-mode rollout (Phase 17 expansion)
+
+Phase 17 in Appendix B says "Shadow rollout, 1 week, write to log only." Operationalized:
+
+1. `Score Relevancy` node ships with `decision` output **NOT WIRED** to the routing branch. The IF after it stays on its v0 (`{{$json.decision === 'proceed'}}`) but downstream of that IF, both branches go to `Build GPT Input` — i.e. the classifier opinion is recorded but ignored.
+2. `relevancy_scores` rows accumulate with `request_meta.shadow = true`.
+3. Daily review by Waqas: pivot decisions × actual agent action 24h later. If classifier-says-reject + agent-moves-to-N/A agreement ≥ 85% on Day 7 → flip to active routing (Phase 19).
+4. A kill-switch n8n env var `RELEVANCY_CLASSIFIER_ENABLED` (boolean) lets the parent workflow short-circuit the executeWorkflow node if anything goes sideways. Default: `true`. The IF before `Score Relevancy` reads `$env.RELEVANCY_CLASSIFIER_ENABLED !== 'false'`. Toggling to `false` reverts to v2 behavior in <30s without redeploy.
+
+---
+
+## 14. Rollback Strategy
+
+> **If any workflow update breaks functionality, immediately revert using:**
+> **`docs/multiple webhooks (07-05-2026 working).json`**
+>
+> **Treat this file as the stable backup workflow. Always export workflow backups before major updates.**
+
+### 14.1 Trigger conditions
+
+Roll back when ANY of the following is observed within the first hour after a deploy:
+
+- `n8n_validate_workflow` reports new errors not present pre-deploy
+- New executions show error rate > 5% (where pre-deploy was <1%)
+- Vollna jobs stop landing on the Task Board (zero board-task creates in 15 min during business hours)
+- Dashboard `/api/webhook/n8n` 4xx/5xx rate exceeds 10/min
+- Apify spend spikes >3× expected
+- Gemini error rate >10% over 50+ calls
+- Any human report: "no proposals are getting drafted"
+- The `RELEVANCY_CLASSIFIER_ENABLED` kill-switch (§13.5) doesn't restore healthy behavior within 5 minutes
+
+### 14.2 Rollback procedure (n8n workflow)
+
+```
+# Step 1 — pause incoming traffic
+- Disable all 8 Vollna webhook entries on Vollna's side (or set
+  RELEVANCY_CLASSIFIER_ENABLED=false if only the splice is broken)
+
+# Step 2 — restore the stable workflow snapshot
+- Read docs/multiple webhooks (07-05-2026 working).json
+- Use n8n_update_full_workflow with the JSON contents
+  (this is the ONLY sanctioned use of n8n_update_full_workflow)
+- The file represents the validated workflow as of 2026-05-07
+
+# Step 3 — validate
+- n8n_validate_workflow → expect 0 errors
+- n8n_workflow_versions → confirm new version pointer
+
+# Step 4 — smoke test
+- Fire a synthetic Vollna webhook with a known-good fixture
+- Confirm one Task Board card lands within 60s
+- Confirm /api/webhook/n8n receives the matching dashboard event
+
+# Step 5 — re-enable traffic
+- Re-enable Vollna webhooks (or unset the kill-switch)
+
+# Step 6 — post-mortem
+- Tag the failed forward-deploy in commit history
+- Write a memory entry under E--laragon-www-sales-dashboard/memory/
+- Update docs/n8n_workflow_prd.md changelog
+```
+
+### 14.3 Rollback procedure (database, migration 017)
+
+The forward migration is fully additive. A true rollback (drop tables, drop columns) is only safe if NO code is reading the new schema yet. Procedure:
+
+```
+# Only if zero relevancy_scores rows exist AND no /api/profiles/:id/context
+# call has touched the new tables
+
+psql -f src/lib/migrations/017_rollback.sql
+```
+
+If data exists in any new table → do NOT drop. Instead:
+- Stop reads (revert dashboard code first)
+- Leave tables in place; they're inert until something queries them
+
+The new ALTER TABLE columns on `profiles` (nullable) are harmless and never need to be dropped.
+
+### 14.4 Rollback procedure (admin dashboard)
+
+```
+git revert <commit-hash>
+# Vercel: auto-deploys on push (Vercel decommissioned per CLAUDE.md but kept here for completeness)
+# Contabo: GitHub Actions deploys on push to main
+# Verify: curl http://157.173.110.62/api/health
+```
+
+If the rollback commit reintroduces a different bug:
+- `git push origin main --force-with-lease` is permitted ONLY with explicit user approval
+- Otherwise create a forward fix
+
+### 14.5 Backup discipline
+
+| Backup | When created | Retention | Purpose |
+|---|---|---|---|
+| `docs/multiple webhooks (07-05-2026 working).json` | Pre-v3 baseline | Permanent | Stable rollback target until next 7-day-soak success |
+| `docs/multiple-webhooks-<date>-pre-update.json` | Before each partial update | 30 days, then archive | Per-change rollback |
+| `docs/multiple-webhooks-<date>-stable.json` | After 7-day soak with no incidents | Permanent (replaces previous stable) | New rollback baseline |
+| `n8n_workflow_versions` | Automatic (n8n cloud) | Provider-managed | Quick UI revert |
+| `pg_dump` snapshot | Before migration 017 | 90 days | DB rollback |
+
+The "newest stable" rule: only one file at a time has the `(working)` suffix. After a 7-day-clean window, rename the new snapshot, archive the previous stable, and update `CLAUDE.md` and the rollback memory entry to point at the new file.
+
+### 14.6 What MUST NOT be rolled back
+
+- Migration 017 column additions on `profiles` (nullable, harmless)
+- `criteria_versions` rows (they're append-only audit history)
+- `relevancy_scores` rows in shadow mode (they're observation-only)
+
+Rolling these back loses calibration evidence with no upside.
+
+---
+
+## 15. Execution Requirements
+
+The user (Waqas) MUST provide the following before Phase 1 of Appendix B can start. This list is exhaustive — engineering will block on any missing item.
+
+### 15.1 API keys & secrets
+
+| Secret | Provider | Where it lives | Used by |
+|---|---|---|---|
+| `APIFY_TOKEN` | Apify | n8n credentials + Next.js env | `Fetch via Apify` HTTP nodes; `/api/scrape/upwork/*` |
+| Apify **profile actor ID** | Apify | n8n env `APIFY_PROFILE_ACTOR_ID` | `profile-ingest`, `profile-sync` |
+| Apify **job actor ID** | Apify | n8n env `APIFY_JOB_ACTOR_ID` | `job-evaluate-manual` |
+| `GEMINI_API_KEY` | Google AI Studio | n8n credentials | `_relevancy-classifier-core` |
+| `PROFILE_INGEST_TOKEN` | Generated (32-byte random) | n8n Header Auth credential + dashboard env | Webhook auth on `profile-ingest` |
+| `PROFILE_SYNC_TOKEN` | Generated | Same | Webhook auth on `profile-sync` |
+| `MANUAL_EVAL_TOKEN` | Generated | Same | Webhook auth on `job-evaluate-manual` |
+| `CRITERIA_PRD_VERSION` | Hardcoded `0.2` | n8n env | Embedded in classifier prompt; mirrors `criteria_versions.version` |
+| `RELEVANCY_CLASSIFIER_ENABLED` | Boolean | n8n env | Kill-switch (§13.5) |
+| `N8N_API_KEY` | n8n cloud | Dashboard env (already present) | Profile webhook auto-provisioning |
+| `N8N_API_URL` | `https://ikonicdev.app.n8n.cloud/api/v1` | Dashboard env (already present) | Same |
+| `n8n-board-sync` Bearer | Existing | Dashboard env (already present) | n8n → Next.js callbacks |
+| (Optional) `SLACK_ALERT_WEBHOOK` | Slack | Dashboard env | Relevancy + sync alerts |
+
+### 15.2 Third-party accounts
+
+| Account | Plan | Why | Cost ceiling |
+|---|---|---|---|
+| **Apify** | Personal/Team with $5+ credit | Profile + job scraping. Free tier insufficient for cron. | Set hard cap at $30/mo via Apify settings |
+| **Google AI Studio** | Free tier OK at current volume | Gemini Flash 2.5. Move to paid if traffic >10× baseline. | N/A on free; budget alert at $20/mo if paid |
+| **Slack** (optional) | Existing workspace | Alerting | Free |
+
+### 15.3 Infrastructure access
+
+| Resource | Status | Notes |
+|---|---|---|
+| Contabo SSH | Already in memory | `id_ed25519` key path documented |
+| Postgres write access on Contabo | Already configured | DATABASE_URL in env |
+| n8n MCP server | Already configured | Memory `n8n_mcp_server.md` |
+| GitHub repo write | User has admin | Required for migration push + dashboard deploy |
+| Vercel | **Decommissioned 2026-04-29** | Skip Vercel-targeting steps unless user reverses decision |
+
+### 15.4 Decisions required from user (Appendix A blockers)
+
+These MUST be resolved before Phase 1 begins:
+
+| # | Question | Decision needed | Recommendation |
+|---|---|---|---|
+| 1 | Apify actor selection | Run a 4-hour spike comparing `apify/upwork-public-profile-scraper` vs `epctex/upwork-scraper` | n8n-keeper or Waqas runs the spike |
+| 2 | Profile-thresholds storage | JSONB column vs dedicated table | v3 picks JSONB; user confirms |
+| 3 | Manual eval against `active=false` profiles allowed? | Yes/No | v3 default: yes |
+| 4 | Override "why" prompt | Optional input vs required | v3 default: optional |
+| 5 | Skills taxonomy seed source | Hand-curate ~500 vs scrape | v3 default: hand-curate |
+| 6 | Reason label typo migration timing | Pre-launch vs post-shadow | v3 default: post-shadow |
+| 7 | Apify per-URL cache TTL | 0 / 5min / 1hr / 24hr | v3 default: 1h profile, 0 job |
+| 8 | Cron sync `active=false` profiles | Skip vs include | v3 default: skip |
+
+### 15.5 Stakeholder sign-offs
+
+- **PRD freeze** — `docs/job_relevancy_criteria_prd.md` v0.2 (already signed per current state).
+- **Vollna pause window approval** — for high-risk n8n splices and shadow-rollout calibration cycles.
+- **Per-agent threshold approvals** — each agent (or owner) signs off on their `thresholds_overrides` JSONB before active rollout.
+- **Cost ceilings** — explicit Apify + Gemini monthly cap from Waqas.
+
+### 15.6 Things that are NOT required from the user
+
+For clarity on scope:
+
+- ClickUp credentials — ClickUp is fully decommissioned (see CLAUDE.md). Do not request.
+- New Vercel env vars — Vercel is decommissioned.
+- New Postgres database — uses existing Contabo Postgres.
+- Custom n8n hosting — uses existing n8n cloud.
+- New domain or SSL — Contabo over HTTP; HTTPS is post-domain (CLAUDE.md).
+
+---
+
+## 16. Identified Gaps & Production-Readiness Recommendations
+
+This section catalogs gaps in v3 (as written before this revision) and provides actionable recommendations. Every recommendation is non-breaking for existing functionality.
+
+### 16.1 Security hardening
+
+| # | Gap | Risk | Recommendation |
+|---|---|---|---|
+| S1 | No SSRF protection on `/api/scrape/upwork/*` proxy routes | Admin (or attacker if endpoint leaks) can pass arbitrary URLs to Apify, leaking internal hosts via DNS lookups | Server-side allowlist: only `https://www.upwork.com/...` hosts. Reject anything else with 400. Validate post-redirect target too. |
+| S2 | `requested_by` taken from request body | Spoofable — could falsely attribute manual evals | Always derive `requested_by` from `getServerSession()`, never from body. Body field, if present, is ignored. |
+| S3 | HMAC signing on n8n → Next.js callbacks not detailed | Replay risk on `/api/webhook/n8n` and the new callback endpoints | Document the signing scheme: `X-Signature: sha256=<hmac(body, secret)>` + `X-Timestamp` + 5-min replay window. Reject duplicates by `(timestamp, hash)` cache (Redis or in-process LRU). |
+| S4 | No rotation policy for `PROFILE_INGEST_TOKEN`, `MANUAL_EVAL_TOKEN`, `n8n-board-sync` | Long-lived secrets are exposure-prone | Rotate every 90 days. Store rotation date in n8n env metadata. Issue with `crypto.randomBytes(32).toString('hex')`. |
+| S5 | No CSRF on admin POST forms (`/profiles/new`, `/relevancy-evaluator`) | CSRF can fire actions on behalf of logged-in admin | NextAuth v5 ships CSRF tokens for credentials flow; ensure they're applied to all admin POSTs (Server Actions handle this automatically — explicit fetch calls do NOT). |
+| S6 | Profile description / job description / portfolio description rendered in HTML | XSS risk if Apify returns malicious content | Always render via React (escapes by default). NEVER use `dangerouslySetInnerHTML` on scraped content. If a description contains markdown, sanitize via `dompurify` first. |
+| S7 | `upwork_url` length unbounded | DoS via giant URL | Server-side validate ≤2048 chars. |
+| S8 | Apify proxy auth missing | Unauthenticated scrape proxy = abuse vector | Require admin session OR n8n-board-sync Bearer. Rate-limit per session at 30 req/min. |
+| S9 | PII in logs (job descriptions, profile bios) | Privacy leak | Scrub `description`, `feedback_text`, `headline` from log payloads. Log only IDs + outcome. |
+| S10 | No data retention policy | `relevancy_scores` and `activity_log` grow unbounded | 12-month retention on `relevancy_scores`, 90-day on `profile_versions` snapshots (keep change_set forever, prune full snapshot blob), 180-day on `activity_log`. Add nightly prune cron. |
+| S11 | No PII export/erasure pathway for scraped Upwork profiles | If the Upwork user requests deletion, no defined process | Document: profile owner can call `DELETE /api/profiles/:id/scraped-data` which wipes `profile_*` rows but keeps the dashboard `profiles` row (agent assignments, scoring history). |
+
+### 16.2 Validation & schema enforcement
+
+| # | Gap | Recommendation |
+|---|---|---|
+| V1 | No Zod schemas on API request bodies | Define a shared Zod schema per endpoint in `src/lib/relevancy/schemas.ts`. Reuse server + client. |
+| V2 | Apify response trusted blindly | Wrap parser (P4 / S4 / J4) in a Zod schema; on failure, mark `scrape_status='failed'` and return 502. |
+| V3 | `change_set` from S6 → S8 not validated server-side | `PATCH /api/profiles/:id/apply-diff` re-validates the diff against the canonical schema before applying. |
+| V4 | Job URL pattern check is client-only | Server re-validates `^https://www\.upwork\.com/jobs/~?[A-Za-z0-9_-]+/?$`. |
+| V5 | Profile URL pattern check missing | Same: `^https://www\.upwork\.com/freelancers/~?[A-Za-z0-9_-]+/?$`. |
+| V6 | `target_column` in `promote-to-card` not validated | Server checks the column belongs to a project the admin can write to. |
+| V7 | `gates_failed[]` may contain out-of-range gate IDs | DB CHECK constraint: `gates_failed <@ ARRAY[1,2,3,4,5,6,7,8,9,10,11]`. |
+| V8 | `decision` enum not enforced at app layer | Centralize in a TypeScript const: `export const DECISIONS = ['proceed','reject','review'] as const`. Use `z.enum(DECISIONS)` everywhere. |
+| V9 | TEXT columns unbounded | Cap at app layer: headline 200, description 5000, title 200, etc. Reject scrapes that exceed (Upwork doesn't generate them; means parser drift). |
+| V10 | No `criteria_version` foreign key | Add `FOREIGN KEY (criteria_version) REFERENCES criteria_versions(version)` on `relevancy_scores`. Catches typos and stale versions. |
+
+### 16.3 Rate limiting & cost caps
+
+| # | Gap | Recommendation |
+|---|---|---|
+| R1 | No rate limit on `/api/relevancy/evaluate` | Cap admin manual evals at 60/hr, 300/day per admin user. Use `@upstash/ratelimit` or in-process Postgres-backed counter. Returns 429 with `Retry-After`. |
+| R2 | No rate limit on `/api/profiles/:id/sync` | Cap manual sync at 10/profile/hour. Sync button shows cooldown timer. |
+| R3 | No global Apify cost cap | Daily cost guard: count rows in `relevancy_scores WHERE source='manual_url' AND evaluated_at >= today` × $0.02. If >$5/day, reject new manual evals with "Daily Apify budget exhausted." |
+| R4 | No Gemini quota guard | Track `SUM(input_tokens + output_tokens)` per day; alert at 80% of 1M-token soft cap. |
+| R5 | Cron sync runs all 8 profiles in batches (1 req/30s = 4 min total) | Acceptable; document the rate. If profile count grows, add Apify-side concurrency cap. |
+| R6 | No spam detection on "Re-run" button | Same admin clicking 5× in 30s → rate limit at 6/min/job per admin (forces re-scrape only on expiration of internal cache). |
+
+### 16.4 Idempotency & retry handling
+
+| # | Gap | Recommendation |
+|---|---|---|
+| I1 | n8n callback POSTs lack idempotency keys | Every n8n → Next.js POST sends `X-Idempotency-Key: <uuid>` (n8n generates per execution). Server caches `(key, response)` for 24h; replay returns cached response. |
+| I2 | `Persist Relevancy Score` (C10) is fire-and-forget | Switch `neverError: true` so verdict is returned to caller even if write lags. Failed writes go to a DLQ table `relevancy_scores_dlq` for manual replay. |
+| I3 | Apify retry × 2 has no jitter | Exponential backoff: 1s, 4s, 16s with ±25% jitter. n8n's built-in retry config supports this (`retryOnFail: true`, `waitBetweenTries: 2000`, `maxTries: 3`). |
+| I4 | Cron sync mid-run failure has no resume | Per-profile state in `profile_sync_runs` table: `(run_id, profile_id, status: pending/done/failed, error, attempted_at)`. On crash, next cron picks up `pending` rows. |
+| I5 | Promote-to-card double-submit creates two cards | Server enforces unique on `(score_id, target_column)` in `tasks.custom_fields._score_id` lookup. Returns existing task ID on retry. |
+| I6 | Manual eval mid-flight if admin closes tab | Server kicks off n8n call regardless; UI on revisit can hydrate from `manual_job_evaluations` history. Don't tie completion to client connection. |
+| I7 | n8n executeWorkflow retries on transient failure not configured | Configure `retryOnFail: true, maxTries: 2, waitBetweenTries: 1500` on the `Score Relevancy` node. |
+
+### 16.5 Logging & monitoring
+
+| # | Gap | Recommendation |
+|---|---|---|
+| L1 | No structured logging | Use `pino` in Next.js with JSON output. Required fields: `timestamp`, `request_id`, `route`, `user_id`, `latency_ms`, `outcome`. |
+| L2 | No request ID propagation | Generate `X-Request-Id` at ingress. Forward through n8n header, persist on `relevancy_scores.request_id`. Lets you trace one job end-to-end. |
+| L3 | No alerts on Gemini error spike | Add a check: `SELECT COUNT(*) FROM relevancy_scores WHERE evaluated_at > NOW() - INTERVAL '15 min' AND model='gemini-2.5-flash' AND ai_score IS NULL`. Alert if >5% over a 15-min window. |
+| L4 | No cost dashboard | Audit page tile: "This month's spend = Apify scrapes × $0.015 + Gemini tokens × $0.075/1M". Live read-out. |
+| L5 | No Slack alert pipeline | Reuse existing `src/lib/alerts.ts` Slack client. New event types: `RELEVANCY_OVERRIDE_RATE_HIGH`, `STALE_PROFILES`, `APIFY_FAILURE_BURST`, `GEMINI_QUOTA_NEAR`. |
+| L6 | Activity log unbounded | 180-day retention prune cron. |
+| L7 | No SLO definition | Documented SLOs: manual eval p95 ≤ 20s, manual eval error rate ≤ 2%, profile sync error rate ≤ 5%, classifier-vs-agent agreement ≥ 85%. Audit page tracks all four. |
+| L8 | Score-to-task traceability missing | Audit page: "Lookup by job ID" search box. Returns the score row + linked task + override (if any) + activity timeline. |
+| L9 | No prompt-version change audit | Insert a `criteria_versions` row whenever PRD bumps. Audit page shows a vertical timeline of prompt + criteria version changes overlaid on decision-distribution charts. |
+| L10 | No cost-per-decision metric | `SELECT decision, AVG((input_tokens + output_tokens) * cost_per_token) FROM relevancy_scores GROUP BY decision`. Identifies whether rejects are cheaper than proceeds (they should be, given Mode B). |
+
+### 16.6 Data consistency & atomicity
+
+| # | Gap | Recommendation |
+|---|---|---|
+| D1 | Sync apply-diff (S8) and version snapshot (S9) are two separate HTTP calls — partial failure leaves DB inconsistent | Combine into one server endpoint `/api/profiles/:id/sync-commit` that does apply + snapshot + activity log in one transaction. |
+| D2 | `profile_versions` has no FK to `criteria_versions` for the diff that triggered it | Add `criteria_version` column on `profile_versions`; useful when reviewing why a sync ran. |
+| D3 | Concurrent sync (cron + manual) on same profile causes race | Acquire advisory lock: `SELECT pg_try_advisory_lock(hashtext('profile-sync-' || $profile_id))`. If false, return 409 `{error: 'sync_already_running'}`. |
+| D4 | Override capture relies on `moveTaskAction` instrumentation | Document: any task move that bypasses `moveTaskAction` (raw `PATCH /api/tasks/:id/move`) misses override capture (same caveat as funnel — see CLAUDE.md "Funnel KPIs"). Either lock down the raw endpoint or instrument it too. |
+| D5 | Skills taxonomy slug rename desyncs historical `relevancy_scores` | Slugs are immutable once created. Renames go through the alias map: add new slug, append old slug to `aliases[]`, never delete. |
+| D6 | Promote-to-card creates a `tasks` row but `task_id` on the `relevancy_scores` row is set by a separate UPDATE | Combine in one transaction inside `/api/relevancy/promote-to-card`. |
+| D7 | Profile re-ingest with same `upwork_url` not handled | Server: if `profile_id` already has `ingest_status='complete'`, the ingest endpoint requires `force=true` flag and creates a `profile_versions` entry of source `re-ingest`. |
+| D8 | `archived_at` on portfolios doesn't update unique constraint | Replace `UNIQUE (profile_id, external_id)` with a partial unique: `CREATE UNIQUE INDEX ON profile_portfolios(profile_id, external_id) WHERE archived_at IS NULL`. Lets a previously-archived item come back. |
+
+### 16.7 AI scoring quality controls
+
+| # | Gap | Recommendation |
+|---|---|---|
+| A1 | No retry on Gemini parse-fail beyond once | After 1 retry, fall back to Mode A (full prompt) regardless of input. After Mode A fails too, return `decision='review'` with `_errorDetail` set. Never silently default to `proceed`. |
+| A2 | No model fallback if Gemini Flash 2.5 is unavailable | Secondary: Gemini Flash 2.5 8B (cheaper, slower); tertiary: Claude Haiku 4.5 via existing Anthropic credential. Document fallback in `_relevancy-classifier-core` README. |
+| A3 | Gemini hallucination on gate evidence (e.g. claims gate 9 passed when "loom" is in description) | Lightweight verifier in C6: regex-scan job description for {`loom`, `video`, `screen recording`, `record yourself`}; if found AND classifier said gate 9 passed → flip to fail with `Video Proposal` reason. Apply same pattern to gates 8 (location) and 7 (already hired). |
+| A4 | No grounding-evidence audit | Every gate evidence must cite a substring from the job description OR profile context. C6 verifies via fuzzy match (token-set ratio ≥ 80%). Mismatches flagged in `relevancy_scores.confidence_warnings TEXT[]`. |
+| A5 | Token-window overrun (giant job descriptions) | Truncate description to 1500 chars (already in v2); skill list to 30 items; portfolio to top 5 by recency. Apply BEFORE building the user message. |
+| A6 | `criteria_version` snapshot not enforced — manual PRD edit could ship without bumping | Add a CI check: `criteria_versions` table must have a row whose `effective_at >= git log HEAD docs/job_relevancy_criteria_prd.md`. |
+| A7 | Gemini temperature not specified | Set `temperature: 0.0` for the classifier (deterministic outputs for the same input — matches Apple-grade reproducibility on calibration). |
+| A8 | `evidence_panel` only generated for manual_url path | Auto-pipeline cards have empty `evidence_panel` — UI should fall back to rendering `gates_evidence` + `components.reason` (already stored). Document this in 10.x rendering rules. |
+| A9 | Bias risk: deterministic results passed to LLM could cause confirmation bias | Mode B prompt explicitly says "Do not re-evaluate gates 1-6 and 11; trust the deterministic verdict." Verify via spot checks during shadow phase. |
+| A10 | Gemini structured-output schema drift between prompt versions | Lock the JSON schema in `criteria_versions.output_schema JSONB` per criteria version. Validate every Gemini response against the version's schema. |
+
+### 16.8 Edge cases & failure scenarios
+
+| # | Edge case | Behavior in v3 (if not addressed) | Recommendation |
+|---|---|---|---|
+| E1 | Profile has zero portfolio items | Gate 10 fails deterministically → reject. Even strong-stack-match jobs get rejected. | Soft-pass gate 10 (don't fail) when `profile_portfolios` is empty AND profile is `top_rated=true OR jss_score >= 90`. Mark as `gate_10_softpassed` in evidence. |
+| E2 | Profile has zero work history | Rubric `domain_match` and `skill_match` lose evidence anchor | Fall back to headline-only. Cap component scores at 7/10 in this case (visible in UI as "limited evidence"). |
+| E3 | Hourly job with `budget_min=null AND budget_max=null` | Gate 4 deterministic check passes (ambiguous) → LLM evaluates | Document explicit behavior in §7.3. LLM scans description for rate hints; if none found → mark `gate_4_unverified` (proceed but flag). |
+| E4 | Job description in non-English | LLM accuracy on gates 7-9 degrades silently | Light language detection (cld3 or franc). Non-English → set `confidence -= 0.1` and add `language_warning: true`. |
+| E5 | Apify returns partial profile (skills present, portfolio missing) | `ingest_status='partial'`, banner shows | Already handled. Document the user-facing message: "Profile ingested but portfolio scrape failed. Retry sync to complete." |
+| E6 | Same job evaluated twice (manual + auto) | Two separate `relevancy_scores` rows | Acceptable; flag as `duplicate_evaluation: true` on the second one. UI shows both side-by-side. |
+| E7 | Cron sync collides with manual sync (same profile) | Race condition; both write versions | Advisory lock (D3); manual wins, cron skips with `_skipped: 'manual_in_progress'`. |
+| E8 | Profile `upwork_url` 404s (account closed) | Sync fails forever | After 3 consecutive 404s, set `profiles.ingest_status='failed'`, `active=false`, send Slack alert. Stop trying until admin re-enables. |
+| E9 | Skill taxonomy slug renamed | Old `relevancy_scores.gates_evidence` references obsolete slug | Slugs immutable (D5); never rename. |
+| E10 | Backfill scenario: scoring jobs older than 30 days | Gate 2 (freshness) fails by default | Add `request_meta.bypass_freshness=true` flag (admin-only on manual eval). Stored in `relevancy_scores.request_meta`. |
+| E11 | Webhook replay (n8n retry) | Duplicate writes | Idempotency key (I1). |
+| E12 | Concurrent overrides on same task | Last-write-wins | Use Postgres row lock: `SELECT … FOR UPDATE` in `moveTaskAction`. |
+| E13 | Long-running Apify run >60s (synchronous timeout) | n8n times out, profile half-ingested | Switch to async pattern: `POST /v2/acts/<id>/runs`, then poll `GET /v2/acts/<id>/runs/<runId>` every 5s up to 5 min. Or use `run-sync-get-dataset-items` with timeout=300. |
+| E14 | Apify returns multiple items when 1 expected | First wins silently | Defensive: if `items.length > 1`, log warning, take first, mark `scrape_status='partial'`. |
+| E15 | Profile inactive between ingest start and finish | Inconsistent state | Re-check `active=true` before persist. If now inactive, abort persist, return 409. |
+| E16 | Promote-to-card on a manual eval where job was scraped but not stored as a "real" job | `_job_id` on the new task references nothing in the `jobs` table | Either: (a) store the scraped job in `jobs` table at promote time (preferred); or (b) set `_job_id=null` and `_source='manual_eval_orphan'`. v3 picks (a). |
+| E17 | Override capture for a card created by manual_eval (not auto pipeline) | Override exists but the score was `source='manual_url'` — analytics distort | `relevancy_overrides` includes `source` snapshot; audit page filters on `source='auto'` for the canonical rate. |
+
+### 16.9 Frontend states catalog
+
+The plan describes UI but doesn't enumerate all states each screen must handle. Each screen MUST implement:
+
+**Profile Management (`/profiles`)**
+
+| State | Trigger | UI |
+|---|---|---|
+| Loading | Initial fetch | Skeleton rows (8 placeholders) |
+| Empty | No profiles in DB | Empty state CTA: "Add your first profile" |
+| Error | Fetch fails | Inline error banner + Retry button |
+| Stale | `last_synced_at < NOW() - INTERVAL '48 hours'` | Yellow badge "Stale — sync needed" |
+| Failed ingest | `ingest_status='failed'` | Red badge + tooltip with last error |
+
+**Profile Create Modal (`/profiles/new`)**
+
+| State | Trigger | UI |
+|---|---|---|
+| Idle | Default | Form with URL + name fields |
+| Validating URL | onBlur of URL field | Spinner + "Checking URL pattern…" |
+| URL invalid | Pattern fail | Inline error + disabled submit |
+| Submitting | Form submit | Disable form, show "Ingesting profile (5-30s)…" with cancel button |
+| Apify failed | n8n returns 502 | Error panel + "Paste profile JSON manually" CTA opens fallback paste UI |
+| Profile not public | n8n returns 422 | "This profile is private — paste JSON manually below" |
+| Success | n8n returns 200 | Toast + redirect to `/profiles/:id` |
+| Network failure | Fetch error | Generic retry banner; preserves form state |
+
+**Profile Detail (`/profiles/:id`)**
+
+| State | Trigger | UI |
+|---|---|---|
+| Tab loading | Tab switch | Per-tab skeleton |
+| Empty stack | `profile_stacks` empty | "No skills ingested yet — try Sync Now" |
+| Empty portfolio | `profile_portfolios` empty | Same pattern |
+| Empty work history | `profile_work_history` empty | Same pattern |
+| Sync in progress | After clicking Sync Now | Modal with 4-stage progress + cancel button |
+| Sync diff modal | Sync success with `has_changes=true` | Diff panel with Save/Discard |
+| Sync no-op | Sync success with `has_changes=false` | Toast: "Profile up to date." |
+| Sync failed | n8n returns error | Modal stays, error banner with Retry |
+| Unmatched skills queue | Any flagged skill | Yellow card at top: "N unmatched skills — Review" |
+| Stale sync | last_synced_at >48h | Banner: "Last synced {timeago}. Refresh recommended." |
+
+**Job Evaluator (`/relevancy-evaluator`)**
+
+| State | Trigger | UI |
+|---|---|---|
+| Idle | Default | Form fields, Evaluate disabled until both filled |
+| URL invalid | Pattern fail | Inline error |
+| Profile picker empty | Zero active profiles | Disabled picker + "Add a profile first" link |
+| Submitting | Click Evaluate | 4-stage progress (validate → scrape → load profile → classify); each stage shows duration; admin can abort |
+| Apify failed | Stage 2 fails | Error panel + Retry; saves attempt to `manual_job_evaluations` with `scrape_status='failed'` for audit |
+| Gemini failed | Stage 4 fails | Show partial result (deterministic gates only) + "Re-run" button |
+| Verdict ready | Backend returns | Result panel renders |
+| Save-to-board failed | Promote-to-card returns error | Inline error + Retry |
+| Rate-limited | 429 from `/api/relevancy/evaluate` | Banner with cooldown countdown |
+
+**Relevancy Audit (`/relevancy-audit`)**
+
+| State | Trigger | UI |
+|---|---|---|
+| Cold start | Zero `relevancy_scores` rows | Empty state: "No evaluations yet. Run a manual eval to seed data." |
+| Loading | Tile fetch | Per-tile skeleton |
+| Error | One tile fails | Tile-level error with Retry; other tiles still render |
+| Empty filter result | Date range too tight | "No data in this range. Try expanding the window." |
+
+**Sync Diff Modal**
+
+| State | Trigger | UI |
+|---|---|---|
+| Diff rendered | n8n returns change_set | Render added/removed/changed sections; Save+Discard actions |
+| Discard pending | Click Discard | Confirm dialog: "Revert profile to version N? This rewrites the database. Cannot be undone." |
+| Discard executing | Confirm | Spinner + disable buttons |
+| Discard failed | Server error | Error banner; modal stays open |
+| Save pending | Click Save | Already saved server-side; just dismisses with toast "Saved" |
+
+**Universal**
+
+- Every async action → optimistic-spinner pattern with abort capability.
+- Every error → toast + inline panel (don't only-toast destructive errors).
+- Every fetch → must handle `4xx` (validation/auth — show specific message) vs `5xx` (server — generic retry) differently.
+- Every modal → focus trap, Escape closes, click-outside closes (with confirm if dirty), `aria-modal`, `aria-labelledby`, `aria-live` polite for status messages.
+- All long-running progress (>3s) → screen reader announces stage transitions via `aria-live="polite"`.
+- All keyboard navigable: Tab order matches visual order, Enter submits primary action, Escape cancels.
+- All buttons have `disabled` state during inflight requests; multi-click guarded.
+
+### 16.10 Performance bottlenecks
+
+| # | Bottleneck | Recommendation |
+|---|---|---|
+| P1 | `/api/profiles/:id/context` joins 5 tables every call | Materialize as `profile_context_v` view OR cache the JSON output in a `profile_context_cache` table refreshed on sync. |
+| P2 | `relevancy_scores` partition strategy missing | At 12k rows/year baseline this is fine, but plan for partitioning by month at 100k+ rows/year. |
+| P3 | `gates_evidence JSONB` per row inflates row size | After 90 days, archive gates_evidence + evidence_panel to `relevancy_scores_archive`. Active table keeps only the structured decision/score fields. |
+| P4 | `profile_versions.snapshot` is full JSON; grows fast | Keep latest 12 snapshots fully; older entries store only `change_set`. |
+| P5 | n8n `executeWorkflow` adds 200-500ms latency | Acceptable for v3; document. Consider direct embedding into parent workflow if latency budget tightens. |
+| P6 | No indexes on `activity_log` for relevancy queries | Add `CREATE INDEX ON activity_log (entity_type, entity_id, action) WHERE entity_type IN ('profile','task')`. |
+| P7 | Cache invalidation between Next.js and n8n is one-way | Use a tag-based invalidation scheme: dashboard sets `last_invalidated_at` on profile; n8n compares its cached value's `context_generated_at` and refetches if stale. |
+| P8 | Manual eval p95 16s blocks the admin UI tab | Keep the UI tab usable: stream progress via SSE (or chunked transfer); don't block on the full request. |
+
+### 16.11 Fallback mechanisms (degraded modes)
+
+| # | Failure | Degraded mode |
+|---|---|---|
+| F1 | Apify down | Manual JSON paste fallback for ingest/sync; manual evaluator returns 503 with "Try again later — Apify unavailable" |
+| F2 | Gemini down | Auto pipeline: emit `decision='review'` with `_errorDetail='gemini_unavailable'`; cards land in `Todo` column. Manual evaluator: same. Never silently default to `proceed`. |
+| F3 | Postgres write fails (relevancy_scores) | Verdict still returned to caller; row goes to in-memory DLQ + retry every 30s for 10 min. After that, write to disk-based DLQ JSON file. Alert. |
+| F4 | Profile context endpoint down | n8n falls back to `n8n_static_data` cache (1h TTL). Never hard-fail the parent workflow. |
+| F5 | Both Apify and Gemini down | Auto pipeline reverts to v2-pre-classifier behavior (kill-switch §13.5). Manual evaluator + profile management are unavailable; admin sees a system status banner. |
+| F6 | `criteria_versions` row missing for the version the prompt cites | Refuse to score; return `decision='review'` with `_errorDetail='criteria_version_unknown'`. Forces a deploy fix instead of silent drift. |
+
+### 16.12 Implementation priority
+
+Recommendations are grouped into three buckets. Phase numbers refer to Appendix B.
+
+**P0 — must ship before active rollout (Phase 19):**
+
+- §13.1 entire safe-update protocol
+- §13.5 kill-switch
+- §14 rollback procedure + JSON backup discipline
+- §15 all execution requirements
+- S1, S2, S3, S5, S6, S8 (security)
+- V1, V2, V4, V5, V8, V10 (validation)
+- I1, I2, I5, I7 (idempotency)
+- A1, A2, A6, A7, A10 (AI quality)
+- D1, D3, D6 (consistency)
+- L2, L7 (logging baselines)
+- F2, F3, F6 (fallbacks)
+- All §16.9 frontend states for the four primary screens
+
+**P1 — must ship within 30 days of active rollout:**
+
+- S4, S7, S9, S10, S11
+- V3, V6, V7, V9
+- R1, R2, R3, R4
+- I3, I4, I6
+- A3, A4, A5, A8, A9
+- D2, D4, D5, D7, D8
+- L1, L3, L4, L5, L8, L9, L10
+- E1–E17 (all edge cases) — at minimum documented if not coded
+
+**P2 — quality of life within 90 days:**
+
+- §16.10 (P1–P8 performance)
+- §10.2 sync-diff polish
+- Audit page deep-dives
+
+---
+
 ## Appendix A — Open Questions
 
 These are decisions BEFORE running migration 017:
@@ -1263,29 +1791,35 @@ Follows PRD §12 phases, with v3 additions interleaved:
 
 | Phase | Scope | Owner | Effort | Done when |
 |---|---|---|---|---|
-| **0. PRD freeze** | Lock PRD v0.2; resolve Appendix A questions | Waqas + leads | — | Sign-off |
-| **1. Migration 017** | All 9 new/extended tables | Dashboard | 4h | Idempotent run on Contabo |
+| **0. PRD freeze + Execution Requirements** | Lock PRD v0.2; resolve Appendix A; Waqas provides §15 secrets + accounts | Waqas + leads | 4h | Sign-off; all keys in n8n credentials |
+| **0a. Pre-flight backup** | Snapshot current `EWnZg3svZWwcIRs4` to `docs/multiple webhooks (07-05-2026 working).json`; tag PostgreSQL pre-migration | n8n-keeper | 30m | Backup file committed; pg_dump archived |
+| **1. Migration 017** | All 9 new/extended tables + rollback script `017_rollback.sql` | Dashboard | 4h | Idempotent run on Contabo; rollback tested in dev |
 | **2. skills_taxonomy seed** | Hand-curate ~500 skills + alias map | Dashboard | 1d | Seed runs; coverage check passes |
-| **3. Apify actor evaluation** | Pick profile + job actors | Waqas | 4h | Spike report |
-| **4. `/api/scrape/upwork/*` proxy routes** | Apify wrappers | Dashboard | 1d | Returns canonical JSON |
+| **3. Apify actor evaluation** | Pick profile + job actors (Appendix A Q1) | Waqas | 4h | Spike report |
+| **4. `/api/scrape/upwork/*` proxy routes** | Apify wrappers + S1 SSRF allowlist + S8 admin auth | Dashboard | 1d | Returns canonical JSON; only `*.upwork.com` allowed |
 | **5. `/api/profiles/:id/context` endpoint** | Reads profile_* tables | Dashboard | 4h | Returns classifier-ready JSON for all 8 profiles |
 | **6. `/api/skills/normalize`** | Skill matcher | Dashboard | 4h | Lev + alias match works |
-| **7. `_relevancy-classifier-core` sub-workflow** | Extract from v2's planned splice | n8n-keeper | 4h | Validation green; mock job test passes |
-| **8. Existing workflow splice** | Insert `Score Relevancy` node into `EWnZg3svZWwcIRs4` | n8n-keeper | 2h | Mock job through full path |
-| **9. `profile-ingest` workflow** | NEW | n8n-keeper | 4h | Public profile ingests cleanly |
-| **10. `profile-sync` workflow** | NEW | n8n-keeper | 6h | Cron + manual + diff verified |
-| **11. `job-evaluate-manual` workflow** | NEW | n8n-keeper | 4h | Returns verdict in <20s |
-| **12. Admin UI: Profile Management** | List + create modal + detail page | Dashboard | 2d | Admin can ingest a profile |
-| **13. Admin UI: Sync diff modal** | Renders change_set | Dashboard | 1d | Diffs visualized |
-| **14. Admin UI: Job Evaluator page** | Paste URL + profile picker + result panel | Dashboard | 2d | End-to-end manual eval |
-| **15. Admin UI: Relevancy Audit page** | Tiles + drilldowns | Dashboard | 2d | Decision distribution + gate-fail rates live |
+| **6a. Shared schemas + idempotency middleware** | V1 Zod schemas, I1 idempotency-key middleware, S3 HMAC verification | Dashboard | 1d | All POST endpoints validated + idempotent |
+| **6b. Kill-switch env var** | `RELEVANCY_CLASSIFIER_ENABLED` wired into n8n; rate-limit middleware (R1-R4) | Dashboard + n8n-keeper | 4h | Toggle reverts to v2 in <30s |
+| **7. `_relevancy-classifier-core` sub-workflow** | Extract from v2's planned splice + A1 retry/fallback + A3 verifier + A7 temp=0 | n8n-keeper | 6h | Validation green; mock job test passes |
+| **8. Existing workflow splice** | Insert `Score Relevancy` node + IF + kill-switch read; follow §13.1 protocol | n8n-keeper | 2h | Mock job through full path; backup snapshot taken |
+| **9. `profile-ingest` workflow** | NEW + manual JSON paste fallback (F1) | n8n-keeper | 4h | Public profile ingests cleanly |
+| **10. `profile-sync` workflow** | NEW + advisory lock (D3) + sync-commit transaction (D1) | n8n-keeper | 6h | Cron + manual + diff verified |
+| **11. `job-evaluate-manual` workflow** | NEW + rate limiting (R1) | n8n-keeper | 4h | Returns verdict in <20s |
+| **12. Admin UI: Profile Management** | List + create modal + detail page; all §16.9 states | Dashboard | 2d | Admin can ingest a profile |
+| **13. Admin UI: Sync diff modal** | Renders change_set; all states from §16.9 | Dashboard | 1d | Diffs visualized |
+| **14. Admin UI: Job Evaluator page** | Paste URL + profile picker + result panel + SSE progress + abort | Dashboard | 2d | End-to-end manual eval |
+| **15. Admin UI: Relevancy Audit page** | Tiles + drilldowns + L8 lookup + L4 cost dashboard | Dashboard | 2d | Decision distribution + gate-fail rates + cost live |
+| **15a. Logging + alerts baseline** | L1 pino structured, L2 request_id, L5 Slack alerts, F2/F3/F6 fallback paths | Dashboard | 1d | Trace one job end-to-end through logs |
 | **16. Smoke test** | Replay 20 historical N/A tasks through manual evaluator | Waqas | 4h | ≥85% agreement |
-| **17. Shadow rollout** | `Score Relevancy` writes to log only; doesn't reroute cards | n8n-keeper | 1 week | 7 days × 8 profiles of `relevancy_scores` rows |
+| **17. Shadow rollout** | `Score Relevancy` writes to log only; kill-switch verified; daily decision pivot | n8n-keeper + Waqas | 1 week | 7 days × 8 profiles of `relevancy_scores` rows; agreement ≥85% |
 | **18. Calibration review** | Audit shadow data; tune per-profile thresholds | Waqas | 1d | Threshold doc updated |
-| **19. Active rollout** | Connect `Score Relevancy` → routing branch | n8n-keeper | 1h | First N/A card auto-created |
+| **19. Active rollout** | Connect `Score Relevancy` → routing branch; pre-flight §13.1 + post-flight smoke | n8n-keeper | 1h | First N/A card auto-created |
 | **20. Override capture** | Wire `relevancy_overrides` insertion into `moveTaskAction` | Dashboard | 4h | Override rate visible in audit |
+| **21. P1 hardening pass** | All §16 P1 items (R1-R6, A3-A9, S4/S7/S9-S11, V3/V6/V7/V9, etc.) | Dashboard + n8n | 1 week | All P1 items closed in audit |
+| **22. Post-launch review** | 30-day review; promote stable JSON snapshot to backup; archive previous | Waqas | 1h | New `(working).json` baseline; `CLAUDE.md` updated |
 
-**Total engineering effort**: ~15 working days, gated by Apify actor selection (Phase 3), PRD freeze, and 1-week shadow.
+**Total engineering effort**: ~17–18 working days, gated by Apify actor selection (Phase 3), PRD freeze, Execution Requirements (Phase 0), and 1-week shadow. P0 items (§16.12) are blocking for Phase 19; P1 items run in parallel with Phase 19+.
 
 ---
 
