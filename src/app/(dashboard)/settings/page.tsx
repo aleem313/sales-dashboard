@@ -1,23 +1,35 @@
 import { Header } from "@/components/layout/header";
 import { Separator } from "@/components/ui/separator";
-import { getSyncLogs, getSystemHealth, getAllAgents, getAllProfiles, getAlertHistory } from "@/lib/data";
+import {
+  getSyncLogs,
+  getSystemHealth,
+  getAllAgents,
+  getAllProfiles,
+  getAlertHistory,
+  getUpworkProfileSnapshotSummaries,
+} from "@/lib/data";
 import { SyncControls } from "@/components/settings/sync-controls";
 import { SyncLogTable } from "@/components/settings/sync-log-table";
 import { AgentManagement } from "@/components/settings/agent-management";
 import { ProfileManagement } from "@/components/settings/profile-management";
 import { AlertThresholds } from "@/components/settings/alert-thresholds";
 import { AlertHistory } from "@/components/settings/alert-history";
+import { auth } from "@/lib/auth";
 import type { SyncLog } from "@/lib/types";
 
 export const revalidate = 0;
 
 export default async function SettingsPage() {
-  const [syncLogs, systemHealth, agents, profiles, alertHistory] = await Promise.all([
+  const session = await auth();
+  const isAdmin = session?.user?.role === "admin";
+
+  const [syncLogs, systemHealth, agents, profiles, alertHistory, snapshotSummaries] = await Promise.all([
     getSyncLogs(20),
     getSystemHealth(),
     getAllAgents(),
     getAllProfiles(),
     getAlertHistory(50),
+    getUpworkProfileSnapshotSummaries(),
   ]);
 
   return (
@@ -34,7 +46,12 @@ export default async function SettingsPage() {
 
       <AgentManagement agents={agents} profiles={profiles} />
 
-      <ProfileManagement profiles={profiles} agents={agents} />
+      <ProfileManagement
+        profiles={profiles}
+        agents={agents}
+        snapshotSummaries={snapshotSummaries}
+        isAdmin={isAdmin}
+      />
 
       <AlertThresholds />
 

@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "migrate-tasks") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "migrate-tasks") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
   }
 
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const sourceBoard = request.nextUrl.searchParams.get("from") || "e8442ebd-afd3-4217-99c4-e55ee20d4bfa";
     const destBoard = request.nextUrl.searchParams.get("to") || "351494d8-918e-475e-b16c-2eee3232aefe";
     return runMigrateTasks(sourceBoard, destBoard);
+  }
+
+  if (migration === "017") {
+    return run017();
   }
 
   if (migration === "016") {
@@ -432,6 +436,83 @@ async function run011() {
     return NextResponse.json({
       success: false,
       migration: "011_fix_profile_assignments",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run017() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 017: Create upwork_profile_snapshots table + view...");
+
+    await sql`CREATE EXTENSION IF NOT EXISTS pg_trgm`;
+    results.push("✓ pg_trgm extension ensured");
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS upwork_profile_snapshots (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        profile_id          TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+        extracted_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        is_current          BOOLEAN NOT NULL DEFAULT TRUE,
+        name                TEXT,
+        title               TEXT,
+        hourly_rate         NUMERIC(10,2),
+        rating              NUMERIC(3,2),
+        job_success_score   INTEGER,
+        top_rated_status    TEXT,
+        total_jobs_worked   INTEGER,
+        total_hours         NUMERIC(10,2),
+        last_worked_on      DATE,
+        profile_url         TEXT,
+        ciphertext          TEXT,
+        skills_summary      TEXT,
+        data                JSONB NOT NULL,
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    results.push("✓ upwork_profile_snapshots table created");
+
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_upwork_snapshot_current_per_profile
+        ON upwork_profile_snapshots(profile_id) WHERE is_current = TRUE
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_upwork_snapshot_profile      ON upwork_profile_snapshots(profile_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_upwork_snapshot_extracted_at ON upwork_profile_snapshots(extracted_at DESC)`;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_upwork_snapshot_top_rated ON upwork_profile_snapshots(top_rated_status)
+        WHERE is_current = TRUE
+    `;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_upwork_snapshot_skills_trgm ON upwork_profile_snapshots
+        USING GIN (skills_summary gin_trgm_ops) WHERE is_current = TRUE
+    `;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_upwork_snapshot_skills_jsonb ON upwork_profile_snapshots
+        USING GIN ((data->'skills')) WHERE is_current = TRUE
+    `;
+    results.push("✓ indexes ensured (1 unique partial + 5 lookup)");
+
+    await sql`
+      CREATE OR REPLACE VIEW upwork_profile_snapshots_current AS
+        SELECT * FROM upwork_profile_snapshots WHERE is_current = TRUE
+    `;
+    results.push("✓ upwork_profile_snapshots_current view ensured");
+
+    const cacheWipe = await sql`DELETE FROM stats_cache`;
+    results.push(`✓ Cleared stats_cache: ${cacheWipe.rowCount} rows removed`);
+
+    return NextResponse.json({
+      success: true,
+      migration: "017_upwork_profile_snapshots",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "017_upwork_profile_snapshots",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });

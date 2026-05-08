@@ -3173,3 +3173,241 @@ export async function getSlowResponseJobs(
     response_minutes: Math.round(parseFloat(row.response_minutes) || 0),
   })) as (Job & { agent_name: string | null; profile_name: string | null; response_minutes: number })[];
 }
+
+// ============================================================
+// UPWORK PROFILE SNAPSHOTS (migration 017)
+// ============================================================
+
+// Reads the current snapshot for a profile from upwork_profile_snapshots_current view.
+// Returns null if no snapshot has ever been saved for this profile.
+export async function getUpworkProfileSnapshot(
+  profileId: string
+): Promise<import("./types").UpworkProfileSnapshot | null> {
+  const result = await sql`
+    SELECT * FROM upwork_profile_snapshots_current
+    WHERE profile_id = ${profileId}
+    LIMIT 1
+  `;
+  if (result.rows.length === 0) return null;
+
+  const row = result.rows[0];
+  return {
+    id: row.id as string,
+    profile_id: row.profile_id as string,
+    extracted_at: row.extracted_at as string,
+    is_current: row.is_current as boolean,
+    name: (row.name as string | null) ?? null,
+    title: (row.title as string | null) ?? null,
+    hourly_rate: row.hourly_rate != null ? parseFloat(row.hourly_rate as string) : null,
+    rating: row.rating != null ? parseFloat(row.rating as string) : null,
+    job_success_score: row.job_success_score != null ? parseInt(row.job_success_score as string) : null,
+    top_rated_status: (row.top_rated_status as string | null) ?? null,
+    total_jobs_worked: row.total_jobs_worked != null ? parseInt(row.total_jobs_worked as string) : null,
+    total_hours: row.total_hours != null ? parseFloat(row.total_hours as string) : null,
+    last_worked_on: row.last_worked_on
+      ? (typeof row.last_worked_on === "string"
+        ? row.last_worked_on
+        : new Date(row.last_worked_on as Date).toISOString().slice(0, 10))
+      : null,
+    profile_url: (row.profile_url as string | null) ?? null,
+    ciphertext: (row.ciphertext as string | null) ?? null,
+    skills_summary: (row.skills_summary as string | null) ?? null,
+    data: row.data,
+    created_at: row.created_at as string,
+  };
+}
+
+// Returns a map of profile_id → current-snapshot summary for ALL profiles that have one.
+// Used by the Settings page to render "📄 Snapshot · last updated X" badges per row.
+// Profiles without a snapshot are simply absent from the returned map.
+export async function getUpworkProfileSnapshotSummaries(): Promise<
+  Record<string, {
+    extractedAt: string;
+    name: string | null;
+    rating: number | null;
+    jobSuccessScore: number | null;
+    totalJobsWorked: number | null;
+  }>
+> {
+  const result = await sql<{
+    profile_id: string;
+    extracted_at: string;
+    name: string | null;
+    rating: string | null;
+    job_success_score: number | null;
+    total_jobs_worked: number | null;
+  }>`
+    SELECT profile_id, extracted_at, name, rating, job_success_score, total_jobs_worked
+    FROM upwork_profile_snapshots_current
+  `;
+
+  const out: Record<string, {
+    extractedAt: string; name: string | null; rating: number | null;
+    jobSuccessScore: number | null; totalJobsWorked: number | null;
+  }> = {};
+  for (const row of result.rows) {
+    out[row.profile_id] = {
+      extractedAt: row.extracted_at,
+      name: row.name,
+      rating: row.rating != null ? parseFloat(row.rating) : null,
+      jobSuccessScore: row.job_success_score != null ? Number(row.job_success_score) : null,
+      totalJobsWorked: row.total_jobs_worked != null ? Number(row.total_jobs_worked) : null,
+    };
+  }
+  return out;
+}
+
+// Returns the snapshot history for a profile (lightweight: no full JSONB), most recent first.
+// Used to render the History tab in the Settings drawer and for retrospective analysis.
+export async function getUpworkProfileSnapshotHistory(
+  profileId: string,
+  limit = 20
+): Promise<import("./types").UpworkProfileSnapshotHistoryRow[]> {
+  const result = await sql`
+    SELECT
+      id,
+      extracted_at,
+      rating,
+      job_success_score,
+      total_jobs_worked,
+      total_hours,
+      is_current
+    FROM upwork_profile_snapshots
+    WHERE profile_id = ${profileId}
+    ORDER BY extracted_at DESC
+    LIMIT ${limit}
+  `;
+
+  return result.rows.map((row) => ({
+    id: row.id as string,
+    extracted_at: row.extracted_at as string,
+    rating: row.rating != null ? parseFloat(row.rating as string) : null,
+    job_success_score: row.job_success_score != null ? parseInt(row.job_success_score as string) : null,
+    total_jobs_worked: row.total_jobs_worked != null ? parseInt(row.total_jobs_worked as string) : null,
+    total_hours: row.total_hours != null ? parseFloat(row.total_hours as string) : null,
+    is_current: row.is_current as boolean,
+  }));
+}
+
+// Core snapshot save: validates the JSON shape, extracts hot columns, and atomically
+// (single CTE statement) demotes the previous current row + inserts the new row.
+// Returns the new snapshot id and whether a previous snapshot was demoted.
+//
+// Auth is the caller's responsibility — the server action wraps this with admin/agent checks,
+// the CLI import script calls it directly.
+export async function saveUpworkProfileSnapshot(
+  profileId: string,
+  json: unknown
+): Promise<{ id: string; replaced: boolean }> {
+  if (!profileId || typeof profileId !== "string") {
+    throw new Error("profileId is required");
+  }
+  if (!json || typeof json !== "object") {
+    throw new Error("Snapshot JSON is not an object");
+  }
+
+  const obj = json as Record<string, unknown>;
+  const identity = (obj.identity ?? {}) as {
+    name?: string; title?: string; profileUrl?: string; ciphertext?: string;
+  };
+  if (!identity.name) {
+    throw new Error("JSON missing required field: identity.name");
+  }
+  const stats = obj.stats as {
+    rating?: number; jobSuccessScore?: number; topRatedStatus?: string;
+    totalJobsWorked?: number; totalHours?: number; totalHoursActual?: number;
+    lastWorkedOn?: string; hourlyRate?: { amount?: number };
+  } | undefined;
+  if (!stats || typeof stats !== "object") {
+    throw new Error("JSON missing required field: stats");
+  }
+
+  const skills = Array.isArray(obj.skills) ? obj.skills as Array<{ name?: string }> : [];
+
+  const name = identity.name ?? null;
+  const title = identity.title ?? null;
+  const profileUrl = identity.profileUrl ?? null;
+  const ciphertext = identity.ciphertext ?? null;
+
+  const hourlyRate = typeof stats.hourlyRate?.amount === "number" ? stats.hourlyRate.amount : null;
+  const rating = typeof stats.rating === "number" ? stats.rating : null;
+  const jss = typeof stats.jobSuccessScore === "number" ? stats.jobSuccessScore : null;
+  const topRated = stats.topRatedStatus ?? null;
+  const totalJobs = typeof stats.totalJobsWorked === "number" ? stats.totalJobsWorked : null;
+  const totalHours = typeof stats.totalHoursActual === "number"
+    ? stats.totalHoursActual
+    : (typeof stats.totalHours === "number" ? stats.totalHours : null);
+  const lastWorkedOn = typeof stats.lastWorkedOn === "string"
+    ? stats.lastWorkedOn.slice(0, 10)
+    : null;
+
+  const skillsSummary = skills
+    .map((s) => (s && typeof s === "object" ? s.name : undefined))
+    .filter((n): n is string => typeof n === "string" && n.length > 0)
+    .join(", ");
+
+  // Single atomic statement: demote current row (if any) and insert the new row.
+  // Postgres validates the partial unique index at command end, after both modifications
+  // are applied — so only one is_current=TRUE row per profile_id is ever visible.
+  const result = await sql<{ id: string; replaced: boolean }>`
+    WITH demoted AS (
+      UPDATE upwork_profile_snapshots
+      SET is_current = FALSE
+      WHERE profile_id = ${profileId} AND is_current = TRUE
+      RETURNING id
+    )
+    INSERT INTO upwork_profile_snapshots (
+      profile_id, name, title, hourly_rate, rating, job_success_score,
+      top_rated_status, total_jobs_worked, total_hours, last_worked_on,
+      profile_url, ciphertext, skills_summary, data
+    )
+    VALUES (
+      ${profileId}, ${name}, ${title}, ${hourlyRate}, ${rating}, ${jss},
+      ${topRated}, ${totalJobs}, ${totalHours}, ${lastWorkedOn}::date,
+      ${profileUrl}, ${ciphertext}, ${skillsSummary || null},
+      ${JSON.stringify(json)}::jsonb
+    )
+    RETURNING id, (SELECT COUNT(*) FROM demoted) > 0 AS replaced
+  `;
+
+  const row = result.rows[0];
+  if (!row) throw new Error("Failed to insert snapshot");
+  return { id: row.id, replaced: row.replaced };
+}
+
+// Fetches a specific historical snapshot by id (returns the full JSONB).
+// Used when the History tab user clicks an older row to view its content.
+export async function getUpworkProfileSnapshotById(
+  id: string
+): Promise<import("./types").UpworkProfileSnapshot | null> {
+  const result = await sql`
+    SELECT * FROM upwork_profile_snapshots WHERE id = ${id} LIMIT 1
+  `;
+  if (result.rows.length === 0) return null;
+
+  const row = result.rows[0];
+  return {
+    id: row.id as string,
+    profile_id: row.profile_id as string,
+    extracted_at: row.extracted_at as string,
+    is_current: row.is_current as boolean,
+    name: (row.name as string | null) ?? null,
+    title: (row.title as string | null) ?? null,
+    hourly_rate: row.hourly_rate != null ? parseFloat(row.hourly_rate as string) : null,
+    rating: row.rating != null ? parseFloat(row.rating as string) : null,
+    job_success_score: row.job_success_score != null ? parseInt(row.job_success_score as string) : null,
+    top_rated_status: (row.top_rated_status as string | null) ?? null,
+    total_jobs_worked: row.total_jobs_worked != null ? parseInt(row.total_jobs_worked as string) : null,
+    total_hours: row.total_hours != null ? parseFloat(row.total_hours as string) : null,
+    last_worked_on: row.last_worked_on
+      ? (typeof row.last_worked_on === "string"
+        ? row.last_worked_on
+        : new Date(row.last_worked_on as Date).toISOString().slice(0, 10))
+      : null,
+    profile_url: (row.profile_url as string | null) ?? null,
+    ciphertext: (row.ciphertext as string | null) ?? null,
+    skills_summary: (row.skills_summary as string | null) ?? null,
+    data: row.data,
+    created_at: row.created_at as string,
+  };
+}

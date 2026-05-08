@@ -44,6 +44,15 @@ import {
 import { toast } from "sonner";
 import { Plus, Copy, Check } from "lucide-react";
 import type { Agent, Profile } from "@/lib/types";
+import { ProfileUpworkSnapshotSheet } from "./profile-upwork-snapshot";
+
+type SnapshotSummary = {
+  extractedAt: string;
+  name: string | null;
+  rating: number | null;
+  jobSuccessScore: number | null;
+  totalJobsWorked: number | null;
+};
 
 const N8N_WEBHOOK_BASE = "https://ikonicdev.app.n8n.cloud/webhook";
 
@@ -55,9 +64,13 @@ function getWebhookUrl(profileName: string) {
 export function ProfileManagement({
   profiles,
   agents,
+  snapshotSummaries = {},
+  isAdmin = false,
 }: {
   profiles: Profile[];
   agents: Agent[];
+  snapshotSummaries?: Record<string, SnapshotSummary>;
+  isAdmin?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
@@ -249,6 +262,7 @@ export function ProfileManagement({
                 <TableHead className="hidden sm:table-cell">Platform</TableHead>
                 <TableHead className="hidden lg:table-cell">Webhook URL</TableHead>
                 <TableHead>Agent</TableHead>
+                <TableHead>Snapshot</TableHead>
                 <TableHead>Active</TableHead>
               </TableRow>
             </TableHeader>
@@ -319,6 +333,21 @@ export function ProfileManagement({
                         </Select>
                       </TableCell>
                       <TableCell>
+                        <div className="flex flex-col items-start gap-1">
+                          <ProfileUpworkSnapshotSheet
+                            profileUuid={profile.id}
+                            profileName={profile.profile_name}
+                            hasSnapshot={!!snapshotSummaries[profile.profile_id]}
+                            isAdmin={isAdmin}
+                          />
+                          {snapshotSummaries[profile.profile_id] && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {formatRelative(snapshotSummaries[profile.profile_id]!.extractedAt)}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         <Switch
                           checked={profile.active}
                           disabled={loading === profile.id}
@@ -337,4 +366,15 @@ export function ProfileManagement({
       </CardContent>
     </Card>
   );
+}
+
+function formatRelative(iso: string): string {
+  const then = new Date(iso).getTime();
+  const diffSec = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (diffSec < 60) return "just now";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  if (diffSec < 86400 * 30) return `${Math.floor(diffSec / 86400)}d ago`;
+  if (diffSec < 86400 * 365) return `${Math.floor(diffSec / (86400 * 30))}mo ago`;
+  return `${Math.floor(diffSec / (86400 * 365))}y ago`;
 }

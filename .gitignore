@@ -54,3 +54,9 @@ agency-dashboard*.html
 
 /backend
 /backups
+
+# Saved Upwork profiles — HTMLs / JSONs / Chrome asset dirs / extractor script
+# all stay local. Personal data (freelancer names, photos, feedback comments)
+# should not be in the repo. The canonical store post-M017 is the
+# upwork_profile_snapshots Postgres table.
+docs/profiles/

@@ -305,3 +305,40 @@ export async function deleteConnectsPurchaseAction(purchaseId: string): Promise<
   return { ok: true };
 }
 
+// ============================================================
+// UPWORK PROFILE SNAPSHOTS (migration 017)
+// ============================================================
+
+// Saves a new snapshot for the given profile. Auth-gated wrapper around
+// saveUpworkProfileSnapshot in data.ts: admins can save any profile, agents can only save
+// their own assigned profiles. The actual SQL atomicity (demote + insert in one CTE) lives
+// in the data-layer function so the import script can reuse it without going through auth.
+export async function saveUpworkProfileSnapshotAction(
+  profileId: string,
+  json: unknown
+): Promise<{ id: string; replaced: boolean }> {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+
+  if (!profileId || typeof profileId !== "string") {
+    throw new Error("profileId is required");
+  }
+
+  if (session.user.role !== "admin") {
+    const profileAgentId = await getProfileAgentId(profileId);
+    if (!profileAgentId || profileAgentId !== session.user.agentId) {
+      throw new Error("Not authorized for this profile");
+    }
+  }
+
+  const { saveUpworkProfileSnapshot } = await import("./data");
+  const result = await saveUpworkProfileSnapshot(profileId, json);
+
+  const { sql } = await import("./db");
+  await sql`DELETE FROM stats_cache`;
+  revalidatePath("/settings");
+  revalidatePath("/profiles");
+  revalidatePath("/my-dashboard");
+
+  return result;
+}

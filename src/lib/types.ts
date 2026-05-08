@@ -37,6 +37,45 @@ export interface Profile {
   created_at: string;
 }
 
+// Snapshot of an Upwork freelancer profile, populated from docs/profiles/extract-profile.js output.
+// Append-only: every save inserts a new row and demotes the previous current row to is_current=false.
+// The upwork_profile_snapshots_current view returns only is_current=true rows.
+export interface UpworkProfileSnapshot {
+  id: string;
+  profile_id: string;
+  extracted_at: string;
+  is_current: boolean;
+  // promoted hot columns
+  name: string | null;
+  title: string | null;
+  hourly_rate: number | null;
+  rating: number | null;
+  job_success_score: number | null;
+  top_rated_status: string | null;
+  total_jobs_worked: number | null;
+  total_hours: number | null;
+  last_worked_on: string | null;
+  profile_url: string | null;
+  ciphertext: string | null;
+  skills_summary: string | null;
+  // full extractor JSON; shape mirrors docs/profiles/Shayan.json
+  // (typed as unknown — consumers cast to the partial shape they need; tighten with a
+  // dedicated UpworkProfileData interface in a future migration if call sites grow)
+  data: unknown;
+  created_at: string;
+}
+
+// Lightweight row returned by the history fetcher — no JSONB, just the timeline + key stats.
+export interface UpworkProfileSnapshotHistoryRow {
+  id: string;
+  extracted_at: string;
+  rating: number | null;
+  job_success_score: number | null;
+  total_jobs_worked: number | null;
+  total_hours: number | null;
+  is_current: boolean;
+}
+
 export interface ConnectsPurchase {
   id: string;
   profile_id: string;
