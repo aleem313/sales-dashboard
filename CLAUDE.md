@@ -161,6 +161,7 @@ Agents have full dashboard access scoped to their own data. All agent pages forc
 | 015 | `015_stage_entered_at_filter.sql` | — | Backfill `jobs.stage_entered_at` from `received_at`, set DEFAULT NOW(), add `idx_jobs_stage_entered_at`, wipe `stats_cache`. Enables status-update-date filtering on dashboards/pipeline. |
 | 016 | `016_connects_purchases.sql` | — | New `connects_purchases` ledger table (profile_id, purchased_on, connects_count, amount_spent, notes, created_by) + 2 indexes. Replaces hardcoded 150 budget fallback with real per-profile purchase totals. |
 | 017 | `017_upwork_profile_snapshots.sql` | — | New `upwork_profile_snapshots` append-only table for storing rich Upwork freelancer profile JSON (output of `docs/profiles/extract-profile.js`). Promoted hot columns (rating, JSS, hourly_rate, totals, top_rated_status, last_worked_on, etc.) + JSONB `data` blob. Partial unique index `(profile_id) WHERE is_current = TRUE` enforces "exactly one current snapshot per profile" at the DB level. View `upwork_profile_snapshots_current` is the default read path. `pg_trgm` extension + GIN index on `skills_summary` for fast `ILIKE '%Laravel%'` skill keyword search. Second GIN index on `data->'skills'` for structural matches like `data->'skills' @> '[{"name":"Laravel"}]'::jsonb`. |
+| 018 | `018_relevancy_scoring.sql` | — | Upwork Relevancy Scoring AI substrate (plan v3.3). Adds `system_settings` key/value table (seeded with `relevancy.classifier_mode='shadow'` and `relevancy.min_score=50`), 3 new columns on `profiles` (`thresholds_overrides JSONB`, `classifier_enabled BOOLEAN DEFAULT TRUE`, `min_score_override INTEGER 0-100 nullable`), `criteria_versions` PRD-version registry (starts empty — Phase 4 seeds v0.2), `relevancy_scores` canonical audit log with v3.3 threshold fields (`effective_decision`, `threshold_flipped`, `min_score_at_decision`, `classifier_mode_at_decision`, `snapshot_id`) + 10 indexes, `relevancy_scores_dlq` dead-letter queue, `manual_job_evaluations` for the Task Card Evaluator, `relevancy_overrides` to capture agent disagreements (calibration source), and `idempotency_keys` 24h replay cache for n8n callbacks. Fully additive — old code keeps working. Rollback in `018_relevancy_scoring_down.sql`. |
 
 ## Migration Execution
 
@@ -172,7 +173,7 @@ https://sales-dashboard-snowy-beta.vercel.app/api/migrate?v={VERSION}&secret=YOU
 
 **Latest migration:**
 ```
-http://157.173.110.62/api/migrate?v=017&secret=YOUR_CRON_SECRET
+http://157.173.110.62/api/migrate?v=018&secret=YOUR_CRON_SECRET
 ```
 
 Vercel is decommissioned (2026-04-29) — Contabo is the only target. Earlier migrations were dual-target.

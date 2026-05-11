@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "migrate-tasks") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "migrate-tasks") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
   }
 
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const sourceBoard = request.nextUrl.searchParams.get("from") || "e8442ebd-afd3-4217-99c4-e55ee20d4bfa";
     const destBoard = request.nextUrl.searchParams.get("to") || "351494d8-918e-475e-b16c-2eee3232aefe";
     return runMigrateTasks(sourceBoard, destBoard);
+  }
+
+  if (migration === "018") {
+    return run018();
   }
 
   if (migration === "017") {
@@ -436,6 +440,193 @@ async function run011() {
     return NextResponse.json({
       success: false,
       migration: "011_fix_profile_assignments",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run018() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 018: Upwork Relevancy Scoring AI — operator controls + scoring tables...");
+
+    // 1. system_settings + seed defaults
+    await sql`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key          TEXT PRIMARY KEY,
+        value        JSONB NOT NULL,
+        description  TEXT,
+        updated_by   TEXT,
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_system_settings_updated ON system_settings (updated_at DESC)`;
+    results.push("✓ system_settings table + index ensured");
+
+    await sql`
+      INSERT INTO system_settings (key, value, description) VALUES
+        ('relevancy.classifier_mode', '"shadow"'::jsonb,
+         'Global classifier routing mode. shadow = score only, no routing. active = AI decision drives routing.'),
+        ('relevancy.min_score', '50'::jsonb,
+         'Global minimum total_score threshold. proceed verdicts with total_score < this value are flipped to reject when classifier_mode=active.')
+      ON CONFLICT (key) DO NOTHING
+    `;
+    results.push("✓ system_settings seeded (classifier_mode=shadow, min_score=50)");
+
+    // 2. Per-profile operator controls
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS thresholds_overrides JSONB DEFAULT '{}'::jsonb`;
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS classifier_enabled BOOLEAN NOT NULL DEFAULT TRUE`;
+    await sql`
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS min_score_override INTEGER
+        CHECK (min_score_override IS NULL OR (min_score_override >= 0 AND min_score_override <= 100))
+    `;
+    results.push("✓ profiles columns added (thresholds_overrides, classifier_enabled, min_score_override)");
+
+    // 3. criteria_versions (immutable PRD-version registry)
+    await sql`
+      CREATE TABLE IF NOT EXISTS criteria_versions (
+        version          TEXT PRIMARY KEY,
+        prd_changelog    TEXT NOT NULL,
+        thresholds       JSONB NOT NULL,
+        reason_enum      TEXT[] NOT NULL,
+        output_schema    JSONB,
+        prompt_versions  TEXT[],
+        effective_at     TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    results.push("✓ criteria_versions table ensured (starts empty — Phase 4 seeds v0.2)");
+
+    // 4. relevancy_scores
+    await sql`
+      CREATE TABLE IF NOT EXISTS relevancy_scores (
+        id                          BIGSERIAL PRIMARY KEY,
+        task_id                     UUID REFERENCES tasks(id) ON DELETE SET NULL,
+        job_external_id             TEXT,
+        profile_id                  TEXT REFERENCES profiles(profile_id),
+        decision                    TEXT NOT NULL CHECK (decision IN ('proceed','reject','review')),
+        effective_decision          TEXT NOT NULL CHECK (effective_decision IN ('proceed','reject','review')),
+        threshold_flipped           BOOLEAN NOT NULL DEFAULT FALSE,
+        min_score_at_decision       INTEGER CHECK (min_score_at_decision IS NULL OR (min_score_at_decision BETWEEN 0 AND 100)),
+        classifier_mode_at_decision TEXT NOT NULL CHECK (classifier_mode_at_decision IN ('shadow','active')),
+        snapshot_id                 UUID,
+        rejection_reasons           TEXT[],
+        gates_passed                INTEGER[] CHECK (gates_passed <@ ARRAY[1,2,3,4,5,6,7,8,9,10,11]),
+        gates_failed                INTEGER[] CHECK (gates_failed <@ ARRAY[1,2,3,4,5,6,7,8,9,10,11]),
+        gates_evidence              JSONB,
+        components                  JSONB,
+        total_score                 INTEGER,
+        tier                        TEXT,
+        confidence                  NUMERIC(4,3),
+        confidence_warnings         TEXT[],
+        proposal_angles             TEXT[],
+        evidence_panel              JSONB,
+        summary                     TEXT,
+        missing_signals             TEXT[],
+        thresholds_used             JSONB,
+        model                       TEXT NOT NULL,
+        prompt_version              TEXT NOT NULL,
+        prompt_mode                 TEXT NOT NULL CHECK (prompt_mode IN ('A_full','B_edge')),
+        criteria_version            TEXT NOT NULL REFERENCES criteria_versions(version),
+        evaluation_path             TEXT NOT NULL CHECK (evaluation_path IN ('deterministic','llm','llm_after_deterministic','manual_url','shadow')),
+        request_id                  UUID,
+        source                      TEXT CHECK (source IN ('auto','manual_url')),
+        requested_by                TEXT,
+        input_tokens                INTEGER,
+        output_tokens               INTEGER,
+        latency_ms                  INTEGER,
+        evaluated_at                TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_rs_effective  ON relevancy_scores (effective_decision, evaluated_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_rs_flipped    ON relevancy_scores (threshold_flipped, evaluated_at DESC) WHERE threshold_flipped = TRUE`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_rs_mode       ON relevancy_scores (classifier_mode_at_decision, evaluated_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_rs_snapshot   ON relevancy_scores (snapshot_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_rs_task       ON relevancy_scores (task_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_rs_profile    ON relevancy_scores (profile_id, evaluated_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_rs_decision   ON relevancy_scores (decision)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_rs_evaluated  ON relevancy_scores (evaluated_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_rs_source     ON relevancy_scores (source, evaluated_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_rs_request    ON relevancy_scores (request_id)`;
+    results.push("✓ relevancy_scores table + 10 indexes ensured");
+
+    // 5. relevancy_scores_dlq
+    await sql`
+      CREATE TABLE IF NOT EXISTS relevancy_scores_dlq (
+        id              BIGSERIAL PRIMARY KEY,
+        payload         JSONB NOT NULL,
+        error_detail    TEXT NOT NULL,
+        attempts        INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        resolved_at     TIMESTAMPTZ
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_rs_dlq_pending ON relevancy_scores_dlq (next_attempt_at) WHERE resolved_at IS NULL`;
+    results.push("✓ relevancy_scores_dlq table + partial index ensured");
+
+    // 6. manual_job_evaluations
+    await sql`
+      CREATE TABLE IF NOT EXISTS manual_job_evaluations (
+        id            BIGSERIAL PRIMARY KEY,
+        task_id       UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        profile_id    TEXT NOT NULL REFERENCES profiles(profile_id),
+        score_id      BIGINT REFERENCES relevancy_scores(id),
+        requested_by  TEXT NOT NULL,
+        load_status   TEXT CHECK (load_status IN ('success','partial','failed')),
+        load_error    TEXT,
+        created_at    TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_mje_profile ON manual_job_evaluations (profile_id, created_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_mje_task    ON manual_job_evaluations (task_id, created_at DESC)`;
+    results.push("✓ manual_job_evaluations table + 2 indexes ensured");
+
+    // 7. relevancy_overrides
+    await sql`
+      CREATE TABLE IF NOT EXISTS relevancy_overrides (
+        id                  BIGSERIAL PRIMARY KEY,
+        score_id            BIGINT NOT NULL REFERENCES relevancy_scores(id),
+        task_id             UUID NOT NULL REFERENCES tasks(id),
+        classifier_decision TEXT NOT NULL,
+        agent_action        TEXT NOT NULL,
+        agent_id            UUID REFERENCES agents(id),
+        override_reason     TEXT[],
+        source              TEXT CHECK (source IN ('auto','manual_url')),
+        created_at          TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_overrides_score ON relevancy_overrides (score_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_overrides_task  ON relevancy_overrides (task_id, created_at DESC)`;
+    results.push("✓ relevancy_overrides table + 2 indexes ensured");
+
+    // 8. idempotency_keys
+    await sql`
+      CREATE TABLE IF NOT EXISTS idempotency_keys (
+        key             TEXT PRIMARY KEY,
+        response_status INTEGER NOT NULL,
+        response_body   JSONB,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at      TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '24 hours'
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_idempotency_expires ON idempotency_keys (expires_at)`;
+    results.push("✓ idempotency_keys table + index ensured");
+
+    // 9. Bust stats cache
+    const cacheWipe = await sql`DELETE FROM stats_cache`;
+    results.push(`✓ Cleared stats_cache: ${cacheWipe.rowCount} rows removed`);
+
+    return NextResponse.json({
+      success: true,
+      migration: "018_relevancy_scoring",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "018_relevancy_scoring",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });
