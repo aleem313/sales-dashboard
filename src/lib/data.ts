@@ -3582,7 +3582,12 @@ export async function getProfileContext(
       categories,
       stats: {
         rating: snapshot.rating,
-        jss: snapshot.job_success_score,
+        // JSS numeric value is no longer exposed by Upwork's SSR (audited 2026-05-11
+        // against Shayan's saved HTML). The legacy stats.nSS100BwScore field is now
+        // a binary flag (1 = JSS calculated, 0 = not), not a 0-100 percentage.
+        // Classifier should use top_rated_status as the quality proxy:
+        //   top_rated_plus ≈ elite, top_rated ≈ excellent, null ≈ unrated/junior.
+        jss: null,
         top_rated_status: snapshot.top_rated_status,
         // top_rated_plus lives at data.stats.topRatedPlusStatus (separate from topRatedStatus).
         // A freelancer can be both top_rated AND top_rated_plus — distinct flags on Upwork side.
