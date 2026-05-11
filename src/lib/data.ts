@@ -3683,13 +3683,17 @@ export async function getTaskJobPayload(
   taskId: string,
   source: "auto" | "manual_url" = "manual_url"
 ): Promise<import("./types").JobPayload | null> {
+  // tasks has no stage_entered_at — that column only lives on `jobs` (migration 015).
+  // updated_at is the established "last touched" proxy across the codebase
+  // (see CLAUDE.md current-state KPI tile pattern: COALESCE(j.stage_entered_at,
+  // t.updated_at, t.created_at)).
   const result = await sql<{
     id: string;
     title: string;
     description: string | null;
     custom_fields: Record<string, unknown> | null;
     created_at: string;
-    stage_entered_at: string | null;
+    updated_at: string | null;
     column_name: string | null;
     assignee_names: string[] | null;
   }>`
@@ -3699,7 +3703,7 @@ export async function getTaskJobPayload(
       t.description,
       t.custom_fields,
       t.created_at,
-      t.stage_entered_at,
+      t.updated_at,
       c.name AS column_name,
       ARRAY(
         SELECT a.name FROM task_assignees ta
@@ -3783,7 +3787,7 @@ export async function getTaskJobPayload(
       current_column: row.column_name,
       current_assignee_name: row.assignee_names?.[0] ?? null,
       created_at: row.created_at,
-      stage_entered_at: row.stage_entered_at,
+      stage_entered_at: row.updated_at, // updated_at is the proxy — see SELECT comment above
     },
     job_id: (cf._job_id as string | null) ?? null,
     url: (cf._job_url as string | null) ?? null,
