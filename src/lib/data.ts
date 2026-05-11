@@ -3631,8 +3631,10 @@ function parseBudget(raw: string | null): {
   if (!raw || raw.trim() === "" || raw.toLowerCase().includes("not specified")) {
     return { budget_type: null, budget_min: null, budget_max: null, fixed_amount: null };
   }
+  // Strip thousands separators so "2,500 USD" parses the same as "2500 USD".
+  const normalized = raw.replace(/,/g, "");
   // "15 - 35 USD" → hourly range
-  const hourlyRange = raw.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*[A-Z]{0,3}/);
+  const hourlyRange = normalized.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*[A-Z]{0,3}/);
   if (hourlyRange) {
     return {
       budget_type: "hourly",
@@ -3641,8 +3643,8 @@ function parseBudget(raw: string | null): {
       fixed_amount: null,
     };
   }
-  // "100 USD" or "100" → fixed amount (single number)
-  const fixed = raw.match(/^(\d+(?:\.\d+)?)\s*[A-Z]{0,3}\s*$/);
+  // "100 USD" / "2500 USD" / "2,500 USD" → fixed amount
+  const fixed = normalized.match(/^(\d+(?:\.\d+)?)\s*[A-Z]{0,3}\s*$/);
   if (fixed) {
     return {
       budget_type: "fixed",
