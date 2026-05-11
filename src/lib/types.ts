@@ -67,6 +67,58 @@ export interface UpworkProfileSnapshot {
 
 // Relevancy classifier operator controls (Phase 5b, plan v3.3 §10.6).
 export type ClassifierMode = "shadow" | "active";
+export type RelevancyDecision = "proceed" | "reject" | "review";
+export type PromptMode = "A_full" | "B_edge";
+export type EvaluationPath = "deterministic" | "llm" | "llm_after_deterministic" | "manual_url" | "shadow";
+export type RelevancySource = "auto" | "manual_url";
+
+// Payload accepted by POST /api/relevancy-scores. Mirrors the relevancy_scores
+// SQL columns (migration 018). Required fields are the same as the SQL NOT NULL
+// constraints; everything else is optional.
+export interface RelevancyScoreInsert {
+  // Identity
+  task_id?: string | null;                       // UUID
+  job_external_id?: string | null;
+  profile_id: string;
+  snapshot_id?: string | null;
+  // Decisions
+  decision: RelevancyDecision;
+  effective_decision: RelevancyDecision;
+  threshold_flipped?: boolean;
+  min_score_at_decision?: number | null;
+  classifier_mode_at_decision: ClassifierMode;
+  // Verdict body
+  rejection_reasons?: string[] | null;
+  gates_passed?: number[] | null;
+  gates_failed?: number[] | null;
+  gates_evidence?: Record<string, unknown> | null;
+  components?: Record<string, unknown> | null;
+  total_score?: number | null;
+  tier?: string | null;
+  confidence?: number | null;
+  confidence_warnings?: string[] | null;
+  proposal_angles?: string[] | null;
+  evidence_panel?: Record<string, unknown> | null;
+  summary?: string | null;
+  missing_signals?: string[] | null;
+  thresholds_used?: Record<string, unknown> | null;
+  // Lineage / version pins
+  model: string;
+  prompt_version: string;
+  prompt_mode: PromptMode;
+  criteria_version: string;
+  evaluation_path: EvaluationPath;
+  // Tracing
+  request_id?: string | null;
+  source?: RelevancySource | null;
+  requested_by?: string | null;
+  // Performance metrics
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  latency_ms?: number | null;
+}
+
+
 
 export interface RelevancySystemSettings {
   classifier_mode: ClassifierMode;

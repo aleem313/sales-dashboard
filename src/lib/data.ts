@@ -3524,6 +3524,121 @@ export async function setProfileClassifierConfigRow(
 }
 
 // ============================================================
+// RELEVANCY CLASSIFIER — SCORE INGESTION + DLQ (Phase 6, plan v3.3 §10.9.2)
+// ============================================================
+
+// Inserts a single relevancy_scores row. Returns the assigned BIGSERIAL id.
+// Maps every nullable / array / JSONB column from the v3.3 schema; missing
+// fields fall through to NULL or [] defaults at the SQL layer.
+export async function insertRelevancyScore(
+  row: import("./types").RelevancyScoreInsert
+): Promise<{ id: number }> {
+  // JSON-stringify JSONB fields once so they can be parameterized as text + cast.
+  const gatesEvidenceJson = row.gates_evidence != null ? JSON.stringify(row.gates_evidence) : null;
+  const componentsJson = row.components != null ? JSON.stringify(row.components) : null;
+  const evidencePanelJson = row.evidence_panel != null ? JSON.stringify(row.evidence_panel) : null;
+  const thresholdsUsedJson = row.thresholds_used != null ? JSON.stringify(row.thresholds_used) : null;
+
+  const result = await sql<{ id: number | string }>`
+    INSERT INTO relevancy_scores (
+      task_id, job_external_id, profile_id, snapshot_id,
+      decision, effective_decision, threshold_flipped, min_score_at_decision, classifier_mode_at_decision,
+      rejection_reasons, gates_passed, gates_failed,
+      gates_evidence, components,
+      total_score, tier, confidence, confidence_warnings, proposal_angles,
+      evidence_panel, summary, missing_signals, thresholds_used,
+      model, prompt_version, prompt_mode, criteria_version, evaluation_path,
+      request_id, source, requested_by,
+      input_tokens, output_tokens, latency_ms
+    ) VALUES (
+      ${row.task_id ?? null},
+      ${row.job_external_id ?? null},
+      ${row.profile_id},
+      ${row.snapshot_id ?? null},
+      ${row.decision},
+      ${row.effective_decision},
+      ${row.threshold_flipped ?? false},
+      ${row.min_score_at_decision ?? null},
+      ${row.classifier_mode_at_decision},
+      ${row.rejection_reasons ?? null},
+      ${row.gates_passed ?? null},
+      ${row.gates_failed ?? null},
+      ${gatesEvidenceJson}::jsonb,
+      ${componentsJson}::jsonb,
+      ${row.total_score ?? null},
+      ${row.tier ?? null},
+      ${row.confidence ?? null},
+      ${row.confidence_warnings ?? null},
+      ${row.proposal_angles ?? null},
+      ${evidencePanelJson}::jsonb,
+      ${row.summary ?? null},
+      ${row.missing_signals ?? null},
+      ${thresholdsUsedJson}::jsonb,
+      ${row.model},
+      ${row.prompt_version},
+      ${row.prompt_mode},
+      ${row.criteria_version},
+      ${row.evaluation_path},
+      ${row.request_id ?? null},
+      ${row.source ?? null},
+      ${row.requested_by ?? null},
+      ${row.input_tokens ?? null},
+      ${row.output_tokens ?? null},
+      ${row.latency_ms ?? null}
+    )
+    RETURNING id
+  `;
+
+  return { id: Number(result.rows[0].id) };
+}
+
+// Parks a failed score payload in relevancy_scores_dlq for later retry.
+// Plan §16.6 I2: never block the parent verdict on the audit-log write.
+export async function insertRelevancyScoreDlq(
+  payload: unknown,
+  errorDetail: string
+): Promise<{ id: number }> {
+  const result = await sql<{ id: number | string }>`
+    INSERT INTO relevancy_scores_dlq (payload, error_detail)
+    VALUES (${JSON.stringify(payload)}::jsonb, ${errorDetail})
+    RETURNING id
+  `;
+  return { id: Number(result.rows[0].id) };
+}
+
+// Idempotency cache lookup. Returns the cached response when the key is fresh
+// AND not expired. Returns null on miss (caller proceeds to process the request).
+export async function getCachedIdempotencyResponse(
+  key: string
+): Promise<{ status: number; body: unknown } | null> {
+  const result = await sql<{ response_status: number; response_body: unknown }>`
+    SELECT response_status, response_body
+    FROM idempotency_keys
+    WHERE key = ${key} AND expires_at > NOW()
+    LIMIT 1
+  `;
+  if (result.rows.length === 0) return null;
+  return {
+    status: result.rows[0].response_status,
+    body: result.rows[0].response_body,
+  };
+}
+
+// Persists an idempotency-cached response (24h TTL via column default).
+// Uses ON CONFLICT to handle races where two replays land simultaneously.
+export async function cacheIdempotencyResponse(
+  key: string,
+  status: number,
+  body: unknown
+): Promise<void> {
+  await sql`
+    INSERT INTO idempotency_keys (key, response_status, response_body)
+    VALUES (${key}, ${status}, ${JSON.stringify(body)}::jsonb)
+    ON CONFLICT (key) DO NOTHING
+  `;
+}
+
+// ============================================================
 // RELEVANCY CLASSIFIER — PROFILE CONTEXT (Phase 3, plan v3.3 §5.4)
 // ============================================================
 
