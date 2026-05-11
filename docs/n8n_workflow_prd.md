@@ -2,14 +2,14 @@
 
 | | |
 |---|---|
-| **Document version** | 1.0 |
-| **Last reviewed** | 2026-04-29 |
+| **Document version** | 1.1 |
+| **Last reviewed** | 2026-05-11 |
 | **Workflow ID** | `EWnZg3svZWwcIRs4` |
 | **Workflow name** | `multiple webhooks` |
 | **n8n instance** | `ikonicdev.app.n8n.cloud` (n8n cloud, v2.42.3) |
 | **Status** | Active in production |
 | **Owners** | Rising Lions Analytics — Admin (M. Waqas) |
-| **Related docs** | `CLAUDE.md`, `docs/multiple webhooks (working flow).json`, `docs/taskboard_prd.md` |
+| **Related docs** | `CLAUDE.md`, `docs/multiple webhooks (working flow).json`, `docs/taskboard_prd.md`, `docs/n8n_relevancy_classifier_core_prd.md` (sub-workflow, pending splice in Phase 7) |
 
 ---
 
@@ -554,6 +554,14 @@ mcp__n8n-mcp__n8n_update_partial_workflow with operations:
 
 ## 12. Recent changes
 
+### 2026-05-11 — Relevancy classifier sub-workflow created (NOT YET SPLICED)
+- **What:** New sub-workflow `_relevancy-classifier-core` (id `hi71jhPU8tmq7hEp`) built and validated. 14 nodes, end-to-end smoke-tested (Shayan + synthetic SaaS job → `proceed/91/apply_now` in 18.2s). Currently **inactive** — no path in this parent workflow invokes it yet.
+- **What does NOT change in this parent workflow:** No edits to `EWnZg3svZWwcIRs4`. `Process Job → Build GPT Input → AI Agent (Proposal Writer)` still runs unchanged. The classifier is built but quarantined.
+- **Why:** Phases 6A + 6B of plan v3.3 split the rollout: build + smoke-test the classifier first (this milestone); splice into the parent workflow as a separate Phase 7 to keep blast radius minimal and reversal trivial.
+- **What ships in Phase 7** (per plan v3.3 §4.2 / §4.4.1): a kill-switch IF (`$env.RELEVANCY_CLASSIFIER_ENABLED`), a `Score Relevancy` executeWorkflow node calling `hi71jhPU8tmq7hEp`, a `Route Verdict` switch keyed on `effective_decision + classifier_mode`, an `End (Audit Only)` noOp for active-reject branches, and a one-line edit to `Format ClickUp Task` setting `column: "Todo"` (today it writes `"Proposal Submitted"` which is operationally misleading — a Todo card is "drafted, needs human to paste + submit on Upwork"; Proposal Submitted is "live on Upwork awaiting client response", human-only destination).
+- **Why ship in Shadow mode by default** (plan v3.3 §10.6.1): the new system_settings seed has `relevancy.classifier_mode='shadow'`, so even after the parent splice, the existing proposal writer + Todo-card creation runs as today. Shadow mode logs verdicts but does NOT change routing. Flipping to Active is a Settings-UI operator action.
+- **Sub-workflow PRD:** `docs/n8n_relevancy_classifier_core_prd.md`.
+
 ### 2026-04-29 — Vercel sinks retired; workflow now writes only to Contabo (SHIPPED)
 - **What:**
   - Deleted `Create Board Task` (Vercel) and its inbound edge from `Format ClickUp Task`. Fan-out from `Format ClickUp Task` is now 2-way: `Create Board Task - Self-Hosted` (Contabo) + `Format Dashboard Event`.
@@ -597,6 +605,7 @@ mcp__n8n-mcp__n8n_update_partial_workflow with operations:
 
 | Priority | Idea | Effort |
 |---|---|---|
+| **P1** | **Phase 7**: splice `_relevancy-classifier-core` into this workflow. Adds 4 nodes (kill-switch IF, Score Relevancy executeWorkflow, Route Verdict switch, End audit-only noOp) + edits `Format ClickUp Task.column` from "Proposal Submitted" → "Todo". Shadow-mode by default. See plan v3.3 §4.2 / §4.4.1 and the sub-workflow PRD. | ~1h partial-update + ~30 min Vollna live verification |
 | P1 | Add retry to the 2 active sinks (TD-5 / TD-10) | 1 partial-update call, ~5 min — first-order priority since Vercel parallel was retired |
 | P2 | Decide on `Process Job` Vercel fallback for `/api/profiles/mapping` (keep as safety net OR remove once Vercel is fully retired) | <5 min via `patchNodeField` |
 | P2 | Wire Hook C into rotation OR remove from system prompt (TD-2) | Code-node patch, ~10 min |
