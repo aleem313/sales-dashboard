@@ -3411,3 +3411,194 @@ export async function getUpworkProfileSnapshotById(
     created_at: row.created_at as string,
   };
 }
+
+// ============================================================
+// RELEVANCY CLASSIFIER — PROFILE CONTEXT (Phase 3, plan v3.3 §5.4)
+// ============================================================
+
+// Reads one row from system_settings. Returns undefined when the key isn't seeded.
+// Value is the raw JSONB (already parsed by pg driver — string, number, object, etc.).
+export async function getSystemSetting<T = unknown>(key: string): Promise<T | undefined> {
+  const result = await sql`SELECT value FROM system_settings WHERE key = ${key} LIMIT 1`;
+  if (result.rows.length === 0) return undefined;
+  return result.rows[0].value as T;
+}
+
+// Returns the most recently effective criteria_versions row's version string.
+// At the v3.3 baseline this is '0.2' (seeded by migration 019). Callers use this
+// as the FK value for new relevancy_scores inserts AND as the value passed back
+// to n8n in the /context response.
+export async function getActiveCriteriaVersion(): Promise<string | null> {
+  const result = await sql`
+    SELECT version FROM criteria_versions
+    ORDER BY effective_at DESC NULLS LAST, version DESC
+    LIMIT 1
+  `;
+  return result.rows.length === 0 ? null : (result.rows[0].version as string);
+}
+
+// Computes effective classifier mode per the 4-precedence cases in plan §1.4:
+//   global=shadow, profile=enabled  → shadow   (global wins)
+//   global=shadow, profile=disabled → shadow   (global wins; per-profile is moot)
+//   global=active, profile=enabled  → active
+//   global=active, profile=disabled → shadow   (per-profile veto)
+function resolveEffectiveMode(
+  globalMode: "shadow" | "active",
+  profileEnabled: boolean
+): "shadow" | "active" {
+  if (globalMode === "shadow") return "shadow";
+  if (profileEnabled === false) return "shadow";
+  return "active";
+}
+
+// Token-matches a portfolio description against the profile's skill list to produce
+// tech_stack_inferred[]. Case-insensitive substring match — gate 10 (portfolio_match)
+// consumes this as a deterministic overlap target without requiring a curated taxonomy.
+function inferTechStack(description: string, skills: string[]): string[] {
+  if (!description) return [];
+  const haystack = description.toLowerCase();
+  const matched = new Set<string>();
+  for (const skill of skills) {
+    if (!skill) continue;
+    const needle = skill.toLowerCase();
+    if (needle.length >= 2 && haystack.includes(needle)) {
+      matched.add(needle);
+    }
+  }
+  return Array.from(matched);
+}
+
+const SNAPSHOT_STALE_DAYS = 60;
+
+// Assembles the full classifier-ready profile context. Returns null when no current
+// snapshot exists for the profile (HTTP 404 at the route layer). Plan v3.3 §5.4.
+//
+// Read paths:
+//   - upwork_profile_snapshots_current view (snapshot row)
+//   - profiles                              (classifier_enabled, min_score_override, thresholds_overrides)
+//   - system_settings                       (relevancy.classifier_mode, relevancy.min_score)
+//   - criteria_versions                     (active version)
+//
+// Caller MUST wrap with unstable_cache + revalidateTag('profile-context-<id>')
+// + revalidateTag('system-settings'). See src/app/api/profiles/[id]/context/route.ts.
+export async function getProfileContext(
+  profileId: string
+): Promise<import("./types").ProfileContext | null> {
+  const snapshot = await getUpworkProfileSnapshot(profileId);
+  if (!snapshot) return null;
+
+  const profileRow = await sql`
+    SELECT classifier_enabled, min_score_override, thresholds_overrides
+    FROM profiles
+    WHERE profile_id = ${profileId}
+    LIMIT 1
+  `;
+  // Defaults match migration 018: classifier_enabled defaults TRUE, overrides default {}.
+  const profileEnabled = profileRow.rows[0]?.classifier_enabled !== false;
+  const profileMinOverride = profileRow.rows[0]?.min_score_override != null
+    ? Number(profileRow.rows[0].min_score_override)
+    : null;
+  const thresholdsOverrides = (profileRow.rows[0]?.thresholds_overrides as Record<string, unknown>) ?? {};
+
+  // system_settings reads. Defaults are the migration 018 seed values.
+  const globalMode = (await getSystemSetting<string>("relevancy.classifier_mode")) ?? "shadow";
+  const globalMinScore = (await getSystemSetting<number>("relevancy.min_score")) ?? 50;
+  if (globalMode !== "shadow" && globalMode !== "active") {
+    throw new Error(`Invalid system_settings.relevancy.classifier_mode: ${globalMode}`);
+  }
+
+  const criteriaVersion = (await getActiveCriteriaVersion()) ?? "0.2";
+
+  // Project the snapshot data JSONB into the lean shape the classifier consumes.
+  type SnapshotData = {
+    skills?: Array<{ name?: string }>;
+    portfolio?: Array<{ title?: string; description?: string; uid?: string }>;
+    workHistory?: Array<{
+      title?: string;
+      type?: string;
+      status?: string;
+      totalHours?: number;
+      feedback?: { score?: number };
+    }>;
+    jobCategories?: Array<{ groupName?: string; name?: string }>;
+    identity?: { country?: string };
+    description?: string;
+  };
+  const data = (snapshot.data ?? {}) as SnapshotData;
+
+  const skills = (data.skills ?? [])
+    .map((s) => s?.name)
+    .filter((n): n is string => typeof n === "string" && n.length > 0);
+
+  const portfolioTldr = (data.portfolio ?? []).map((p) => {
+    const description = (p?.description ?? "").trim();
+    return {
+      title: (p?.title ?? "").trim(),
+      description_excerpt: description.length > 280 ? description.slice(0, 280) + "…" : description,
+      tech_stack_inferred: inferTechStack(description, skills),
+    };
+  });
+
+  const workHistoryTldr = (data.workHistory ?? []).map((w) => ({
+    title: (w?.title ?? "").trim(),
+    type: w?.type ?? null,
+    status: w?.status ?? null,
+    totalHours: typeof w?.totalHours === "number" ? w.totalHours : null,
+    feedback_score: typeof w?.feedback?.score === "number" ? w.feedback.score : null,
+  }));
+
+  const categories = (data.jobCategories ?? [])
+    .filter((c) => typeof c?.groupName === "string" && typeof c?.name === "string")
+    .map((c) => ({ groupName: c.groupName as string, name: c.name as string }));
+
+  const country = data.identity?.country ?? null;
+
+  // Snapshot age + warnings (plan §6.1 freshness policy).
+  const extractedAt = new Date(snapshot.extracted_at);
+  const snapshotAgeDays = Math.floor((Date.now() - extractedAt.getTime()) / (1000 * 60 * 60 * 24));
+  const warnings: string[] = [];
+  if (snapshotAgeDays > SNAPSHOT_STALE_DAYS) warnings.push("stale_snapshot");
+  if (skills.length === 0) warnings.push("missing_skills");
+  if (portfolioTldr.length === 0) warnings.push("missing_portfolio");
+
+  const effectiveMode = resolveEffectiveMode(globalMode, profileEnabled);
+  const effectiveMinScore = profileMinOverride ?? globalMinScore;
+
+  return {
+    profile: {
+      id: snapshot.id,
+      profile_id: snapshot.profile_id,
+      name: snapshot.name,
+      headline: snapshot.title ?? data.description?.split("\n")[0] ?? null,
+      skills,
+      skills_summary: snapshot.skills_summary,
+      portfolio_tldr: portfolioTldr,
+      work_history_tldr: workHistoryTldr,
+      categories,
+      stats: {
+        rating: snapshot.rating,
+        jss: snapshot.job_success_score,
+        top_rated_status: snapshot.top_rated_status,
+        top_rated_plus: snapshot.top_rated_status === "top_rated_plus",
+        hourly_rate_usd: snapshot.hourly_rate,
+        total_jobs: snapshot.total_jobs_worked,
+        total_hours: snapshot.total_hours,
+        last_worked_on: snapshot.last_worked_on,
+      },
+      country,
+      snapshot_age_days: snapshotAgeDays,
+      snapshot_extracted_at: snapshot.extracted_at,
+      _warnings: warnings,
+    },
+    thresholds_overrides: thresholdsOverrides,
+    _system: {
+      classifier_mode: effectiveMode,
+      effective_min_score: effectiveMinScore,
+      global_mode: globalMode,
+      profile_enabled: profileEnabled,
+      profile_min_override: profileMinOverride,
+    },
+    criteria_version: criteriaVersion,
+    context_generated_at: new Date().toISOString(),
+  };
+}

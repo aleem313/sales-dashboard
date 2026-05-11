@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import {
   toggleAgentActive,
   createAgent,
@@ -339,6 +339,11 @@ export async function saveUpworkProfileSnapshotAction(
   revalidatePath("/settings");
   revalidatePath("/profiles");
   revalidatePath("/my-dashboard");
+
+  // Phase 3 (plan v3.3 §5.4 + §11.4): bust the classifier's profile-context cache
+  // so the next score reads the fresh snapshot. "Latest snapshot wins" semantics.
+  // updateTag (vs revalidateTag) gives read-your-own-writes from within this Server Action.
+  updateTag(`profile-context-${profileId}`);
 
   return result;
 }

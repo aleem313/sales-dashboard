@@ -65,6 +65,57 @@ export interface UpworkProfileSnapshot {
   created_at: string;
 }
 
+// Classifier-ready profile context, assembled server-side by getProfileContext()
+// from the snapshot, profiles overrides, system_settings, and criteria_versions.
+// Shape mirrors plan v3.3 §5.4. Consumed by the n8n classifier sub-workflow (C1).
+export interface ProfileContext {
+  profile: {
+    id: string;
+    profile_id: string;
+    name: string | null;
+    headline: string | null;                      // description/title from snapshot
+    skills: string[];                             // flat list of skill names
+    skills_summary: string | null;                // raw skills_summary column
+    portfolio_tldr: Array<{
+      title: string;
+      description_excerpt: string;
+      tech_stack_inferred: string[];              // lowercased skill names that appear in description
+    }>;
+    work_history_tldr: Array<{
+      title: string;
+      type: string | null;                        // "Hourly" | "Fixed"
+      status: string | null;                      // "Closed" | "In Progress" | ...
+      totalHours: number | null;
+      feedback_score: number | null;
+    }>;
+    categories: Array<{ groupName: string; name: string }>;
+    stats: {
+      rating: number | null;
+      jss: number | null;
+      top_rated_status: string | null;
+      top_rated_plus: boolean | null;
+      hourly_rate_usd: number | null;
+      total_jobs: number | null;
+      total_hours: number | null;
+      last_worked_on: string | null;
+    };
+    country: string | null;
+    snapshot_age_days: number;
+    snapshot_extracted_at: string;
+    _warnings: string[];                          // ['stale_snapshot', ...]
+  };
+  thresholds_overrides: Record<string, unknown>;  // raw profiles.thresholds_overrides JSONB
+  _system: {
+    classifier_mode: "shadow" | "active";         // effective for THIS profile
+    effective_min_score: number;                  // profile.min_score_override ?? global.min_score
+    global_mode: "shadow" | "active";             // raw global value (for audit transparency)
+    profile_enabled: boolean;                     // profiles.classifier_enabled
+    profile_min_override: number | null;          // null = inherit global
+  };
+  criteria_version: string;
+  context_generated_at: string;
+}
+
 // Lightweight row returned by the history fetcher — no JSONB, just the timeline + key stats.
 export interface UpworkProfileSnapshotHistoryRow {
   id: string;
