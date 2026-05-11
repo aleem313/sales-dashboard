@@ -65,6 +65,26 @@ export interface UpworkProfileSnapshot {
   created_at: string;
 }
 
+// Relevancy classifier operator controls (Phase 5b, plan v3.3 §10.6).
+export type ClassifierMode = "shadow" | "active";
+
+export interface RelevancySystemSettings {
+  classifier_mode: ClassifierMode;
+  min_score: number;                              // 0-100
+  mode_updated_by: string | null;                 // session.user.id of last editor
+  mode_updated_at: string | null;                 // ISO
+  score_updated_by: string | null;
+  score_updated_at: string | null;
+}
+
+export interface ProfileClassifierConfig {
+  profile_id: string;                             // slug, e.g. "shayan"
+  profile_name: string;                           // display name
+  classifier_enabled: boolean;                    // FALSE = per-profile veto when global is Active
+  min_score_override: number | null;              // null = inherit global
+  has_snapshot: boolean;                          // true if upwork_profile_snapshots_current row exists
+}
+
 // Classifier-ready profile context, assembled server-side by getProfileContext()
 // from the snapshot, profiles overrides, system_settings, and criteria_versions.
 // Shape mirrors plan v3.3 §5.4. Consumed by the n8n classifier sub-workflow (C1).

@@ -3413,6 +3413,117 @@ export async function getUpworkProfileSnapshotById(
 }
 
 // ============================================================
+// RELEVANCY CLASSIFIER — OPERATOR SETTINGS (Phase 5b, plan v3.3 §10.6)
+// ============================================================
+
+// Reads both relevancy system settings + their per-key "last changed" audit
+// columns. One round-trip, two rows.
+export async function getRelevancySystemSettings(): Promise<import("./types").RelevancySystemSettings> {
+  const result = await sql<{
+    key: string;
+    value: unknown;
+    updated_by: string | null;
+    updated_at: string | null;
+  }>`
+    SELECT key, value, updated_by, updated_at
+    FROM system_settings
+    WHERE key IN ('relevancy.classifier_mode', 'relevancy.min_score')
+  `;
+
+  const byKey = new Map(result.rows.map((r) => [r.key, r]));
+  const modeRow = byKey.get("relevancy.classifier_mode");
+  const scoreRow = byKey.get("relevancy.min_score");
+
+  const mode = (modeRow?.value as string) ?? "shadow";
+  if (mode !== "shadow" && mode !== "active") {
+    throw new Error(`Invalid classifier_mode in system_settings: ${mode}`);
+  }
+  const minScore = scoreRow?.value != null ? Number(scoreRow.value) : 50;
+
+  return {
+    classifier_mode: mode,
+    min_score: minScore,
+    mode_updated_by: modeRow?.updated_by ?? null,
+    mode_updated_at: modeRow?.updated_at ?? null,
+    score_updated_by: scoreRow?.updated_by ?? null,
+    score_updated_at: scoreRow?.updated_at ?? null,
+  };
+}
+
+// Returns one row per profile with classifier config + snapshot presence flag.
+// Profiles without a snapshot are still listed (the UI greys their controls).
+export async function getProfileClassifierConfigs(): Promise<
+  import("./types").ProfileClassifierConfig[]
+> {
+  const result = await sql<{
+    profile_id: string;
+    profile_name: string;
+    classifier_enabled: boolean;
+    min_score_override: number | string | null;
+    has_snapshot: boolean;
+  }>`
+    SELECT
+      p.profile_id,
+      p.profile_name,
+      p.classifier_enabled,
+      p.min_score_override,
+      EXISTS (
+        SELECT 1 FROM upwork_profile_snapshots_current s WHERE s.profile_id = p.profile_id
+      ) AS has_snapshot
+    FROM profiles p
+    WHERE p.active = TRUE
+    ORDER BY p.profile_name
+  `;
+
+  return result.rows.map((row) => ({
+    profile_id: row.profile_id,
+    profile_name: row.profile_name,
+    classifier_enabled: row.classifier_enabled,
+    min_score_override: row.min_score_override != null ? Number(row.min_score_override) : null,
+    has_snapshot: row.has_snapshot,
+  }));
+}
+
+// Writes a single system_settings row + its updated_by/updated_at audit columns.
+// Caller is responsible for cache invalidation (server action wraps with updateTag).
+export async function setSystemSettingValue(
+  key: string,
+  value: unknown,
+  userId: string | null
+): Promise<void> {
+  await sql`
+    UPDATE system_settings
+    SET value = ${JSON.stringify(value)}::jsonb,
+        updated_by = ${userId},
+        updated_at = NOW()
+    WHERE key = ${key}
+  `;
+}
+
+// Patches profiles.classifier_enabled and/or profiles.min_score_override
+// for one profile. Either field may be omitted (only patches what's provided).
+export async function setProfileClassifierConfigRow(
+  profileId: string,
+  patch: { classifier_enabled?: boolean; min_score_override?: number | null }
+): Promise<void> {
+  // Two narrow UPDATEs keep the SQL static — matches CLAUDE.md "raw sql" pattern.
+  if (patch.classifier_enabled !== undefined) {
+    await sql`
+      UPDATE profiles
+      SET classifier_enabled = ${patch.classifier_enabled}
+      WHERE profile_id = ${profileId}
+    `;
+  }
+  if (patch.min_score_override !== undefined) {
+    await sql`
+      UPDATE profiles
+      SET min_score_override = ${patch.min_score_override}
+      WHERE profile_id = ${profileId}
+    `;
+  }
+}
+
+// ============================================================
 // RELEVANCY CLASSIFIER — PROFILE CONTEXT (Phase 3, plan v3.3 §5.4)
 // ============================================================
 

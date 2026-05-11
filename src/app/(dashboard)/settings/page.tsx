@@ -7,6 +7,8 @@ import {
   getAllProfiles,
   getAlertHistory,
   getUpworkProfileSnapshotSummaries,
+  getRelevancySystemSettings,
+  getProfileClassifierConfigs,
 } from "@/lib/data";
 import { SyncControls } from "@/components/settings/sync-controls";
 import { SyncLogTable } from "@/components/settings/sync-log-table";
@@ -14,6 +16,7 @@ import { AgentManagement } from "@/components/settings/agent-management";
 import { ProfileManagement } from "@/components/settings/profile-management";
 import { AlertThresholds } from "@/components/settings/alert-thresholds";
 import { AlertHistory } from "@/components/settings/alert-history";
+import { RelevancyClassifierSettings } from "@/components/settings/relevancy-classifier-settings";
 import { auth } from "@/lib/auth";
 import type { SyncLog } from "@/lib/types";
 
@@ -23,13 +26,24 @@ export default async function SettingsPage() {
   const session = await auth();
   const isAdmin = session?.user?.role === "admin";
 
-  const [syncLogs, systemHealth, agents, profiles, alertHistory, snapshotSummaries] = await Promise.all([
+  const [
+    syncLogs,
+    systemHealth,
+    agents,
+    profiles,
+    alertHistory,
+    snapshotSummaries,
+    relevancySettings,
+    profileClassifierConfigs,
+  ] = await Promise.all([
     getSyncLogs(20),
     getSystemHealth(),
     getAllAgents(),
     getAllProfiles(),
     getAlertHistory(50),
     getUpworkProfileSnapshotSummaries(),
+    getRelevancySystemSettings(),
+    getProfileClassifierConfigs(),
   ]);
 
   return (
@@ -52,6 +66,13 @@ export default async function SettingsPage() {
         snapshotSummaries={snapshotSummaries}
         isAdmin={isAdmin}
       />
+
+      {isAdmin && (
+        <RelevancyClassifierSettings
+          initialSettings={relevancySettings}
+          initialProfiles={profileClassifierConfigs}
+        />
+      )}
 
       <AlertThresholds />
 

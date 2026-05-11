@@ -347,3 +347,87 @@ export async function saveUpworkProfileSnapshotAction(
 
   return result;
 }
+
+// ============================================================
+// RELEVANCY CLASSIFIER — OPERATOR SETTINGS (Phase 5b, plan v3.3 §10.6)
+// ============================================================
+
+// Flips the global classifier mode. Admin only.
+// On success: busts the `system-settings` tag so every profile-context cache
+// picks up the new effective mode within 60s (n8n's static-data TTL).
+export async function setRelevancyModeAction(
+  mode: "shadow" | "active"
+): Promise<{ ok: true; mode: "shadow" | "active" }> {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+
+  if (mode !== "shadow" && mode !== "active") {
+    throw new Error("Invalid mode — must be 'shadow' or 'active'");
+  }
+
+  const { setSystemSettingValue } = await import("./data");
+  await setSystemSettingValue("relevancy.classifier_mode", mode, session.user.id ?? null);
+
+  updateTag("system-settings");
+  revalidatePath("/settings");
+
+  return { ok: true, mode };
+}
+
+// Updates global min_score (0-100 integer). Admin only.
+export async function setMinScoreAction(
+  value: number
+): Promise<{ ok: true; value: number }> {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+
+  if (!Number.isInteger(value) || value < 0 || value > 100) {
+    throw new Error("min_score must be an integer between 0 and 100");
+  }
+
+  const { setSystemSettingValue } = await import("./data");
+  await setSystemSettingValue("relevancy.min_score", value, session.user.id ?? null);
+
+  updateTag("system-settings");
+  revalidatePath("/settings");
+
+  return { ok: true, value };
+}
+
+// Patches a profile's classifier config (enabled flag and/or min_score override). Admin only.
+// Busts the per-profile context cache so subsequent classifier reads see the new config.
+export async function setProfileClassifierConfigAction(
+  profileId: string,
+  patch: { classifier_enabled?: boolean; min_score_override?: number | null }
+): Promise<{ ok: true }> {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+
+  if (!profileId || typeof profileId !== "string") {
+    throw new Error("profileId is required");
+  }
+
+  // Validate min_score_override (null OR 0-100 integer)
+  if (patch.min_score_override !== undefined && patch.min_score_override !== null) {
+    const v = patch.min_score_override;
+    if (!Number.isInteger(v) || v < 0 || v > 100) {
+      throw new Error("min_score_override must be null or an integer between 0 and 100");
+    }
+  }
+
+  // Reject empty patch (no fields to update)
+  if (patch.classifier_enabled === undefined && patch.min_score_override === undefined) {
+    throw new Error("Patch must include classifier_enabled and/or min_score_override");
+  }
+
+  const { setProfileClassifierConfigRow } = await import("./data");
+  await setProfileClassifierConfigRow(profileId, patch);
+
+  updateTag(`profile-context-${profileId}`);
+  revalidatePath("/settings");
+
+  return { ok: true };
+}
