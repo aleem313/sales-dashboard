@@ -116,6 +116,51 @@ export interface ProfileContext {
   context_generated_at: string;
 }
 
+// Classifier-ready job payload, projected server-side by getTaskJobPayload()
+// from one row of `tasks` + its `custom_fields` JSONB.
+// Shape mirrors plan v3.3 §6.2. Consumed by both the manual eval (J3 fetches it)
+// and the auto pipeline (n8n's `Process Job` produces the same shape from Vollna).
+export interface JobPayload {
+  task_id: string;
+  task: {
+    title: string;                                  // task title with [profile] prefix stripped
+    raw_title: string;                              // original title with prefix kept (UI display)
+    current_column: string | null;                  // column.name from join
+    current_assignee_name: string | null;
+    created_at: string;
+    stage_entered_at: string | null;
+  };
+  job_id: string | null;                            // Upwork stable ID
+  url: string | null;
+  title: string;                                    // job title (= task.title without prefix)
+  description: string | null;                       // job description text
+  skills_required: string[];                        // parsed _skills array
+  category: string | null;                          // not always populated
+  budget_type: "hourly" | "fixed" | null;
+  budget_min: number | null;
+  budget_max: number | null;
+  fixed_amount: number | null;
+  client: {
+    country: string | null;
+    total_spent: number | null;
+    hires: number | null;
+    rating: number | null;
+    payment_verified: boolean | null;
+    member_since: string | null;
+  };
+  proposals_count: number | null;
+  interviewing_count: number | null;
+  invites_sent_count: number | null;
+  hires_made_count: number | null;
+  posted_at: string | null;                         // ISO from parsed _generated
+  source: "auto" | "manual_url";                    // tag set by the caller
+  card_age_days: number;
+  _proposal_already_drafted: string | null;         // surfaced for UI; NOT fed back to classifier
+  _assigned_agent: string | null;
+  _profile_name: string | null;                     // matches profiles.profile_id
+  _missing_fields: string[];                        // populated when _budget_*, _proposals_count etc. are absent
+}
+
 // Lightweight row returned by the history fetcher — no JSONB, just the timeline + key stats.
 export interface UpworkProfileSnapshotHistoryRow {
   id: string;

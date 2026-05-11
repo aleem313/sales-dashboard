@@ -3614,3 +3614,208 @@ export async function getProfileContext(
     context_generated_at: new Date().toISOString(),
   };
 }
+
+// ============================================================
+// RELEVANCY CLASSIFIER — JOB PAYLOAD (Phase 4, plan v3.3 §6.2)
+// ============================================================
+
+// Parses an Upwork _budget string ("15 - 35 USD" / "100 USD" / "Not Specified")
+// into structured budget_type + min + max + fixed_amount.
+// Returns nulls when the string can't be parsed.
+function parseBudget(raw: string | null): {
+  budget_type: "hourly" | "fixed" | null;
+  budget_min: number | null;
+  budget_max: number | null;
+  fixed_amount: number | null;
+} {
+  if (!raw || raw.trim() === "" || raw.toLowerCase().includes("not specified")) {
+    return { budget_type: null, budget_min: null, budget_max: null, fixed_amount: null };
+  }
+  // "15 - 35 USD" → hourly range
+  const hourlyRange = raw.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*[A-Z]{0,3}/);
+  if (hourlyRange) {
+    return {
+      budget_type: "hourly",
+      budget_min: parseFloat(hourlyRange[1]),
+      budget_max: parseFloat(hourlyRange[2]),
+      fixed_amount: null,
+    };
+  }
+  // "100 USD" or "100" → fixed amount (single number)
+  const fixed = raw.match(/^(\d+(?:\.\d+)?)\s*[A-Z]{0,3}\s*$/);
+  if (fixed) {
+    return {
+      budget_type: "fixed",
+      budget_min: null,
+      budget_max: null,
+      fixed_amount: parseFloat(fixed[1]),
+    };
+  }
+  return { budget_type: null, budget_min: null, budget_max: null, fixed_amount: null };
+}
+
+// Parses _generated ("May 6, 2026, 09:53 PM UTC") into ISO. Returns null on failure.
+function parsePostedAt(raw: string | null): string | null {
+  if (!raw) return null;
+  const ms = Date.parse(raw);
+  return isNaN(ms) ? null : new Date(ms).toISOString();
+}
+
+// Strips a "[profile]" prefix from a task title. "[Shayan] Foo" → "Foo".
+// If no prefix present, returns the input unchanged.
+function stripProfilePrefix(title: string): string {
+  return title.replace(/^\[[^\]]+\]\s*/, "");
+}
+
+// Returns the canonical classifier-ready job payload for one task. Reads `tasks` +
+// joined column + assignee, projects `custom_fields` JSONB into the §6.2 shape, and
+// populates _missing_fields[] for every field absent from the actual cards on this
+// system (older cards from before Vollna started populating it / manual cards never
+// linked to a Vollna job — see plan §6.2.2).
+//
+// Returns null when the task doesn't exist.
+//
+// Caller (the route) tags `source` based on the eval flow:
+//   - manual evaluator: source = "manual_url"
+//   - auto pipeline (Phase 6+): n8n produces the same shape from Vollna directly
+//     so this function is mostly used by the manual flow.
+export async function getTaskJobPayload(
+  taskId: string,
+  source: "auto" | "manual_url" = "manual_url"
+): Promise<import("./types").JobPayload | null> {
+  const result = await sql<{
+    id: string;
+    title: string;
+    description: string | null;
+    custom_fields: Record<string, unknown> | null;
+    created_at: string;
+    stage_entered_at: string | null;
+    column_name: string | null;
+    assignee_names: string[] | null;
+  }>`
+    SELECT
+      t.id,
+      t.title,
+      t.description,
+      t.custom_fields,
+      t.created_at,
+      t.stage_entered_at,
+      c.name AS column_name,
+      ARRAY(
+        SELECT a.name FROM task_assignees ta
+        JOIN agents a ON a.id = ta.agent_id
+        WHERE ta.task_id = t.id
+      ) AS assignee_names
+    FROM tasks t
+    LEFT JOIN columns c ON c.id = t.column_id
+    WHERE t.id = ${taskId}
+    LIMIT 1
+  `;
+
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0];
+  const cf = (row.custom_fields ?? {}) as Record<string, unknown>;
+
+  const missing: string[] = [];
+  const need = (key: string, value: unknown): unknown => {
+    if (value === null || value === undefined || value === "") {
+      missing.push(key);
+      return null;
+    }
+    return value;
+  };
+
+  // Numeric coercions tolerate string inputs (Vollna writes everything as text).
+  const toNum = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = typeof v === "number" ? v : parseFloat(String(v));
+    return isNaN(n) ? null : n;
+  };
+
+  // Skills can arrive as a JSON-stringified array OR a real array (depending on n8n version).
+  let skills: string[] = [];
+  const rawSkills = cf._skills;
+  if (Array.isArray(rawSkills)) {
+    skills = rawSkills.filter((s): s is string => typeof s === "string");
+  } else if (typeof rawSkills === "string" && rawSkills.trim() !== "") {
+    try {
+      const parsed = JSON.parse(rawSkills);
+      if (Array.isArray(parsed)) skills = parsed.filter((s): s is string => typeof s === "string");
+    } catch { /* leave as empty */ }
+  }
+  if (skills.length === 0) missing.push("_skills");
+
+  const budget = parseBudget((cf._budget as string | null) ?? null);
+  if (budget.budget_type === null) missing.push("_budget");
+
+  const postedAt = parsePostedAt((cf._generated as string | null) ?? null);
+  if (postedAt === null) missing.push("_generated");
+
+  // Fields the §6.2 spec calls for that DON'T exist in our current Vollna→n8n pipeline.
+  // Always missing — flag once each so the classifier knows to treat as "unverified" gates.
+  const proposalsCount = need("_proposals_count", cf._proposals_count);
+  const interviewingCount = need("_interviewing_count", cf._interviewing_count);
+  const invitesSentCount = need("_invites_sent_count", cf._invites_sent_count);
+  const hiresMadeCount = need("_hires_made_count", cf._hires_made_count);
+  const clientPaymentVerified = cf._client_payment_verified;
+  if (clientPaymentVerified === null || clientPaymentVerified === undefined) {
+    missing.push("_client_payment_verified");
+  }
+  const clientMemberSince = need("_client_member_since", cf._client_member_since);
+  const category = need("_category", cf._category);
+  const jobDescription = cf._job_description;
+  if (jobDescription === null || jobDescription === undefined || jobDescription === "") {
+    missing.push("_job_description");
+  }
+
+  const rawTitle = row.title ?? "";
+  const cleanTitle = stripProfilePrefix(rawTitle);
+
+  // card_age_days: integer days since task creation.
+  const createdAt = new Date(row.created_at);
+  const cardAgeDays = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+
+  return {
+    task_id: row.id,
+    task: {
+      title: cleanTitle,
+      raw_title: rawTitle,
+      current_column: row.column_name,
+      current_assignee_name: row.assignee_names?.[0] ?? null,
+      created_at: row.created_at,
+      stage_entered_at: row.stage_entered_at,
+    },
+    job_id: (cf._job_id as string | null) ?? null,
+    url: (cf._job_url as string | null) ?? null,
+    title: cleanTitle,
+    // Fall back to tasks.description (which holds the proposal+job-snapshot blob from
+    // n8n's Format ClickUp Task) when _job_description isn't populated. The classifier
+    // prompt knows to ignore the proposal portion when reading description text.
+    description: (cf._job_description as string | null) ?? row.description ?? null,
+    skills_required: skills,
+    category: category as string | null,
+    budget_type: budget.budget_type,
+    budget_min: budget.budget_min,
+    budget_max: budget.budget_max,
+    fixed_amount: budget.fixed_amount,
+    client: {
+      country: (cf._client_country as string | null) ?? null,
+      total_spent: toNum(cf._client_spent),
+      hires: toNum(cf._client_hires),
+      rating: toNum(cf._client_rating),
+      payment_verified: typeof clientPaymentVerified === "boolean" ? clientPaymentVerified : null,
+      member_since: clientMemberSince as string | null,
+    },
+    proposals_count: toNum(proposalsCount),
+    interviewing_count: toNum(interviewingCount),
+    invites_sent_count: toNum(invitesSentCount),
+    hires_made_count: toNum(hiresMadeCount),
+    posted_at: postedAt,
+    source,
+    card_age_days: cardAgeDays,
+    _proposal_already_drafted: (cf._proposal as string | null) ?? null,
+    _assigned_agent: (cf._assigned_agent as string | null) ?? null,
+    _profile_name: (cf._profile_name as string | null) ?? null,
+    _missing_fields: Array.from(new Set(missing)),
+  };
+}
