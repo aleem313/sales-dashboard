@@ -95,7 +95,7 @@ export function RelevancyClassifierSettings({ initialSettings, initialProfiles }
             r.profile_id === profileId ? { ...r, classifier_enabled: enabled } : r
           )
         );
-        toast.success(`${profileId}: ${enabled ? "Active" : "Shadow"}`);
+        toast.success(`${profileId}: ${enabled ? "Enabled" : "Disabled"}`);
       } catch (e) {
         toast.error((e as Error).message || "Failed to update profile");
       }
@@ -224,6 +224,7 @@ export function RelevancyClassifierSettings({ initialSettings, initialProfiles }
             </TableHeader>
             <TableBody>
               {profiles.map((p) => {
+                const stateLabel = p.classifier_enabled ? "enabled" : "disabled";
                 const effectiveMode = globalIsShadow ? "shadow" : p.classifier_enabled ? "active" : "shadow";
                 const effectiveMin = p.min_score_override ?? settings.min_score;
                 return (
@@ -238,8 +239,13 @@ export function RelevancyClassifierSettings({ initialSettings, initialProfiles }
                           aria-label={`Toggle classifier for ${p.profile_name}`}
                         />
                         <span className={globalIsShadow ? "text-muted-foreground text-xs" : "text-xs"}>
-                          {effectiveMode}
+                          {stateLabel}
                         </span>
+                        {!globalIsShadow && p.classifier_enabled && (
+                          <span className="text-xs text-muted-foreground">
+                            → {effectiveMode}
+                          </span>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
