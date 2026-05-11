@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "migrate-tasks") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "019" && migration !== "migrate-tasks") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
   }
 
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const sourceBoard = request.nextUrl.searchParams.get("from") || "e8442ebd-afd3-4217-99c4-e55ee20d4bfa";
     const destBoard = request.nextUrl.searchParams.get("to") || "351494d8-918e-475e-b16c-2eee3232aefe";
     return runMigrateTasks(sourceBoard, destBoard);
+  }
+
+  if (migration === "019") {
+    return run019();
   }
 
   if (migration === "018") {
@@ -440,6 +444,94 @@ async function run011() {
     return NextResponse.json({
       success: false,
       migration: "011_fix_profile_assignments",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run019() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 019: Seed criteria_versions with PRD v0.2...");
+
+    const insertResult = await sql`
+      INSERT INTO criteria_versions (
+        version,
+        prd_changelog,
+        thresholds,
+        reason_enum,
+        output_schema,
+        prompt_versions,
+        effective_at
+      ) VALUES (
+        '0.2',
+        '2026-05-05 v0.2 — Added §6.7 reject example library, §6.8 proceed example library, and §16 Appendix C LLM-ready JSON example library with gate annotations. Additive only — no edits to v0.1 §1–§13 content.',
+        ${JSON.stringify({
+          "1": { name: "stack_match", type: "qualitative", rule: "Job primary skill must be in assigned profile stack bucket", reason_on_fail: "Out of stack", input: "Vollna pre-filter + agent eyeball check" },
+          "2": { name: "job_freshness", type: "numeric", threshold_hours: 24, comparator: "<=", reason_on_fail: "Old job", input: "_generated (Upwork posting timestamp)" },
+          "3": { name: "proposal_saturation", type: "numeric", threshold_count: 30, comparator: "<", buckets_accepted: ["Less than 5", "5–10", "10–15"], reason_on_fail: "Too many invites", input: "Upwork Proposals indicator" },
+          "4": { name: "hourly_rate_floor", type: "numeric", threshold_usd_per_hour: 25, comparator: ">=", applies_when: "budget_type == 'hourly'", reason_on_fail: "Low Higher rate", input: "_budget (parsed)" },
+          "5": { name: "client_spend_floor", type: "numeric", threshold_usd_lifetime: 1000, comparator: ">=", reason_on_fail: "Client Low spending", input: "_client_spent" },
+          "6": { name: "client_rating_floor", type: "numeric", threshold_rating: 4.0, comparator: ">=", absent_when_new_client_ok: true, reason_on_fail: "Bad rating client", input: "_client_rating" },
+          "7": { name: "job_availability", type: "qualitative", rule: "Posting still open; not filled or closed", reason_on_fail: ["Job unavailable", "Already hired"], input: "Upwork posting status" },
+          "8": { name: "no_location_lockin", type: "qualitative", rule: "Job does not require freelancer to be in US (or any country we cannot field)", reason_on_fail: "Location loc", input: "Job description (Upwork badge U.S. only)" },
+          "9": { name: "no_video_proposal", type: "qualitative", rule: "Job description does not require a recorded video pitch", reason_on_fail: "Video Proposal", input: "Job description scan" },
+          "10": { name: "portfolio_match", type: "qualitative", rule: "Profile has at least one portfolio item that maps to the job stack", reason_on_fail: "Portfolio unavailable", input: "Profile portfolio knowledge" },
+          "11": { name: "no_duplicate", type: "lookup", rule: "_job_id is not already tracked across active boards in the last 30 days", window_days: 30, reason_on_fail: "Duplicate", input: "Internal _job_id lookup against relevancy_scores + tasks history" }
+        })}::jsonb,
+        ARRAY[
+          'Out of stack',
+          'Old job',
+          'Too many invites',
+          'Low Higher rate',
+          'Location loc',
+          'Client Low spending',
+          'Job unavailable',
+          'Already hired',
+          'Language barrier',
+          'Bad rating client',
+          'Video Proposal',
+          'Duplicate',
+          'Portfolio unavailable'
+        ]::TEXT[],
+        NULL,
+        NULL,
+        '2026-05-05 00:00:00+00'::TIMESTAMPTZ
+      )
+      ON CONFLICT (version) DO NOTHING
+      RETURNING version
+    `;
+
+    if (insertResult.rowCount === 0) {
+      results.push("✓ criteria_versions v0.2 already present — no-op (idempotent)");
+    } else {
+      results.push("✓ criteria_versions v0.2 seeded");
+    }
+
+    // Sanity check the row.
+    const verifyResult = await sql`
+      SELECT version, array_length(reason_enum, 1) AS reason_count, jsonb_object_keys(thresholds) AS gate_id
+      FROM criteria_versions
+      WHERE version = '0.2'
+      LIMIT 1
+    `;
+    if (verifyResult.rowCount && verifyResult.rows[0].reason_count === 13) {
+      results.push(`✓ Verified: 13 rejection reasons, 11 hard gates`);
+    } else {
+      results.push(`⚠ Verification surprising — reason_count=${verifyResult.rows[0]?.reason_count}`);
+    }
+
+    return NextResponse.json({
+      success: true,
+      migration: "019_criteria_versions_v0_2_seed",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "019_criteria_versions_v0_2_seed",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });
