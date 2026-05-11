@@ -3521,7 +3521,8 @@ export async function getProfileContext(
       feedback?: { score?: number };
     }>;
     jobCategories?: Array<{ groupName?: string; name?: string }>;
-    identity?: { country?: string };
+    identity?: { location?: { country?: string } };
+    stats?: { topRatedPlusStatus?: string };
     description?: string;
   };
   const data = (snapshot.data ?? {}) as SnapshotData;
@@ -3532,10 +3533,13 @@ export async function getProfileContext(
 
   const portfolioTldr = (data.portfolio ?? []).map((p) => {
     const description = (p?.description ?? "").trim();
+    const title = (p?.title ?? "").trim();
     return {
-      title: (p?.title ?? "").trim(),
+      title,
       description_excerpt: description.length > 280 ? description.slice(0, 280) + "…" : description,
-      tech_stack_inferred: inferTechStack(description, skills),
+      // Match skills against title + description — title often carries the strongest stack signal
+      // (e.g., "Malian Exhausts - PHP | Laravel" body text is marketing copy with no stack keywords).
+      tech_stack_inferred: inferTechStack(title + "\n" + description, skills),
     };
   });
 
@@ -3551,7 +3555,8 @@ export async function getProfileContext(
     .filter((c) => typeof c?.groupName === "string" && typeof c?.name === "string")
     .map((c) => ({ groupName: c.groupName as string, name: c.name as string }));
 
-  const country = data.identity?.country ?? null;
+  // Country lives at data.identity.location.country (NOT data.identity.country directly).
+  const country = data.identity?.location?.country ?? null;
 
   // Snapshot age + warnings (plan §6.1 freshness policy).
   const extractedAt = new Date(snapshot.extracted_at);
@@ -3579,7 +3584,9 @@ export async function getProfileContext(
         rating: snapshot.rating,
         jss: snapshot.job_success_score,
         top_rated_status: snapshot.top_rated_status,
-        top_rated_plus: snapshot.top_rated_status === "top_rated_plus",
+        // top_rated_plus lives at data.stats.topRatedPlusStatus (separate from topRatedStatus).
+        // A freelancer can be both top_rated AND top_rated_plus — distinct flags on Upwork side.
+        top_rated_plus: data.stats?.topRatedPlusStatus === "top_rated_plus",
         hourly_rate_usd: snapshot.hourly_rate,
         total_jobs: snapshot.total_jobs_worked,
         total_hours: snapshot.total_hours,
