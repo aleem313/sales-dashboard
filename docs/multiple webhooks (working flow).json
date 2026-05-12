@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-05-12T16:53:48.194Z",
+  "updatedAt": "2026-05-12T17:55:19.358Z",
   "createdAt": "2026-03-05T17:20:23.376Z",
   "id": "EWnZg3svZWwcIRs4",
   "name": "multiple webhooks",
@@ -707,7 +707,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }), _relevancy_score: ($json.relevancyVerdict && $json.relevancyVerdict.total_score) || null, _relevancy_summary: ($json.relevancyVerdict && $json.relevancyVerdict.summary) || null, _relevancy_decision: ($json.relevancyVerdict && $json.relevancyVerdict.decision) || null, _relevancy_effective: ($json.relevancyVerdict && $json.relevancyVerdict.effective_decision) || null, _relevancy_threshold_flipped: ($json.relevancyVerdict && $json.relevancyVerdict.threshold_flipped) || false, _relevancy_reasons: ($json.relevancyVerdict && $json.relevancyVerdict.rejection_reasons) || [], _relevancy_tier: ($json.relevancyVerdict && $json.relevancyVerdict.tier) || null, _relevancy_confidence: ($json.relevancyVerdict && $json.relevancyVerdict.confidence) || null, _relevancy_score_id: ($json.relevancyVerdict && $json.relevancyVerdict._score_id) || null, _relevancy_dlq_id: ($json.relevancyVerdict && $json.relevancyVerdict._dlq_id) || null, _relevancy_evaluated_at: new Date().toISOString(), _relevancy_mode_at_decision: ($json.relevancyVerdict && $json.relevancyVerdict.request_meta && $json.relevancyVerdict.request_meta.classifier_mode) || 'shadow', _relevancy_model: ($json.relevancyVerdict && $json.relevancyVerdict.model) || null } }) }}",
+        "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }), _relevancy_score: ($json.relevancyVerdict && $json.relevancyVerdict.total_score) || null, _relevancy_summary: ($json.relevancyVerdict && $json.relevancyVerdict.summary) || null, _relevancy_decision: ($json.relevancyVerdict && $json.relevancyVerdict.decision) || null, _relevancy_effective: ($json.relevancyVerdict && $json.relevancyVerdict.effective_decision) || null, _relevancy_threshold_flipped: ($json.relevancyVerdict && $json.relevancyVerdict.threshold_flipped) || false, _relevancy_reasons: ($json.relevancyVerdict && $json.relevancyVerdict.rejection_reasons) || [], _relevancy_tier: ($json.relevancyVerdict && $json.relevancyVerdict.tier) || null, _relevancy_confidence: ($json.relevancyVerdict && $json.relevancyVerdict.confidence) || null, _relevancy_score_id: ($json.relevancyVerdict && $json.relevancyVerdict._score_id) || null, _relevancy_dlq_id: ($json.relevancyVerdict && $json.relevancyVerdict._dlq_id) || null, _relevancy_evaluated_at: new Date().toISOString(), _relevancy_mode_at_decision: ($json.relevancyVerdict && $json.relevancyVerdict.request_meta && $json.relevancyVerdict.request_meta.classifier_mode) || 'shadow', _relevancy_model: ($json.relevancyVerdict && $json.relevancyVerdict.model) || null, _relevancy_gates: ($json.relevancyVerdict && $json.relevancyVerdict.gates) || null, _relevancy_components: ($json.relevancyVerdict && $json.relevancyVerdict.components) || null } }) }}",
         "options": {
           "response": {
             "response": {
@@ -12616,6 +12616,110 @@
         "022054199601082175396": {
           "status": "success",
           "timestamp": 1778605352892
+        },
+        "022054199909603921623": {
+          "status": "success",
+          "timestamp": 1778605467548
+        },
+        "022054200591330574798": {
+          "status": "success",
+          "timestamp": 1778606072755
+        },
+        "022054246360031743703": {
+          "status": "success",
+          "timestamp": 1778605708311
+        },
+        "022054247009683249611": {
+          "status": "success",
+          "timestamp": 1778606270509
+        },
+        "022054247319532091885": {
+          "status": "success",
+          "timestamp": 1778605946790
+        },
+        "022054248150784424429": {
+          "status": "success",
+          "timestamp": 1778606143949
+        },
+        "022054203127981461207": {
+          "status": "success",
+          "timestamp": 1778606186356
+        },
+        "022054248620777159149": {
+          "status": "success",
+          "timestamp": 1778606318526
+        },
+        "022054249133067580656": {
+          "status": "success",
+          "timestamp": 1778606367506
+        },
+        "022054250095987504368": {
+          "status": "success",
+          "timestamp": 1778606610648
+        },
+        "022054250692568528112": {
+          "status": "success",
+          "timestamp": 1778606788414
+        },
+        "022054251052983963351": {
+          "status": "success",
+          "timestamp": 1778606848900
+        },
+        "022054251310305771982": {
+          "status": "success",
+          "timestamp": 1778606908095
+        },
+        "022054251654286446500": {
+          "status": "success",
+          "timestamp": 1778607037350
+        },
+        "022054251978923816176": {
+          "status": "success",
+          "timestamp": 1778607089762
+        },
+        "022054253084070263277": {
+          "status": "success",
+          "timestamp": 1778607822643
+        },
+        "022054254425186275236": {
+          "status": "success",
+          "timestamp": 1778607700215
+        },
+        "022054255655334975947": {
+          "status": "success",
+          "timestamp": 1778608304626
+        },
+        "022054255819713944011": {
+          "status": "success",
+          "timestamp": 1778608059279
+        },
+        "022054211182064503860": {
+          "status": "success",
+          "timestamp": 1778608178070
+        },
+        "022054257801074947312": {
+          "status": "success",
+          "timestamp": 1778608431675
+        },
+        "022054257918356075760": {
+          "status": "success",
+          "timestamp": 1778608469208
+        },
+        "022054213529602505197": {
+          "status": "success",
+          "timestamp": 1778608771326
+        },
+        "022054213916524219444": {
+          "status": "success",
+          "timestamp": 1778608905361
+        },
+        "022054259908430728244": {
+          "status": "success",
+          "timestamp": 1778609025101
+        },
+        "022054260474270224292": {
+          "status": "success",
+          "timestamp": 1778609137908
         }
       },
       "hookRotation": {
@@ -12625,10 +12729,10 @@
         "Laiba": "A",
         "Khansa": "A",
         "Saim": "B",
-        "saim": "B",
-        "shayan": "A",
+        "saim": "A",
+        "shayan": "B",
         "Rebekah": "B",
-        "khansa": "A",
+        "khansa": "B",
         "laiba": "B",
         "craig": "A",
         "sana": "B"
@@ -12639,9 +12743,9 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "dac30898-79bc-495d-a306-3ff26ad71ca9",
-  "activeVersionId": "dac30898-79bc-495d-a306-3ff26ad71ca9",
-  "versionCounter": 3169,
+  "versionId": "220e0bb9-78e0-44bd-ada8-91fe56e73160",
+  "activeVersionId": "220e0bb9-78e0-44bd-ada8-91fe56e73160",
+  "versionCounter": 3227,
   "triggerCount": 8,
   "shared": [
     {
@@ -12664,9 +12768,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-05-12T16:53:48.196Z",
-    "createdAt": "2026-05-12T16:53:48.196Z",
-    "versionId": "dac30898-79bc-495d-a306-3ff26ad71ca9",
+    "updatedAt": "2026-05-12T17:55:19.360Z",
+    "createdAt": "2026-05-12T17:55:19.360Z",
+    "versionId": "220e0bb9-78e0-44bd-ada8-91fe56e73160",
     "workflowId": "EWnZg3svZWwcIRs4",
     "nodes": [
       {
@@ -13369,7 +13473,7 @@
           },
           "sendBody": true,
           "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }), _relevancy_score: ($json.relevancyVerdict && $json.relevancyVerdict.total_score) || null, _relevancy_summary: ($json.relevancyVerdict && $json.relevancyVerdict.summary) || null, _relevancy_decision: ($json.relevancyVerdict && $json.relevancyVerdict.decision) || null, _relevancy_effective: ($json.relevancyVerdict && $json.relevancyVerdict.effective_decision) || null, _relevancy_threshold_flipped: ($json.relevancyVerdict && $json.relevancyVerdict.threshold_flipped) || false, _relevancy_reasons: ($json.relevancyVerdict && $json.relevancyVerdict.rejection_reasons) || [], _relevancy_tier: ($json.relevancyVerdict && $json.relevancyVerdict.tier) || null, _relevancy_confidence: ($json.relevancyVerdict && $json.relevancyVerdict.confidence) || null, _relevancy_score_id: ($json.relevancyVerdict && $json.relevancyVerdict._score_id) || null, _relevancy_dlq_id: ($json.relevancyVerdict && $json.relevancyVerdict._dlq_id) || null, _relevancy_evaluated_at: new Date().toISOString(), _relevancy_mode_at_decision: ($json.relevancyVerdict && $json.relevancyVerdict.request_meta && $json.relevancyVerdict.request_meta.classifier_mode) || 'shadow', _relevancy_model: ($json.relevancyVerdict && $json.relevancyVerdict.model) || null } }) }}",
+          "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }), _relevancy_score: ($json.relevancyVerdict && $json.relevancyVerdict.total_score) || null, _relevancy_summary: ($json.relevancyVerdict && $json.relevancyVerdict.summary) || null, _relevancy_decision: ($json.relevancyVerdict && $json.relevancyVerdict.decision) || null, _relevancy_effective: ($json.relevancyVerdict && $json.relevancyVerdict.effective_decision) || null, _relevancy_threshold_flipped: ($json.relevancyVerdict && $json.relevancyVerdict.threshold_flipped) || false, _relevancy_reasons: ($json.relevancyVerdict && $json.relevancyVerdict.rejection_reasons) || [], _relevancy_tier: ($json.relevancyVerdict && $json.relevancyVerdict.tier) || null, _relevancy_confidence: ($json.relevancyVerdict && $json.relevancyVerdict.confidence) || null, _relevancy_score_id: ($json.relevancyVerdict && $json.relevancyVerdict._score_id) || null, _relevancy_dlq_id: ($json.relevancyVerdict && $json.relevancyVerdict._dlq_id) || null, _relevancy_evaluated_at: new Date().toISOString(), _relevancy_mode_at_decision: ($json.relevancyVerdict && $json.relevancyVerdict.request_meta && $json.relevancyVerdict.request_meta.classifier_mode) || 'shadow', _relevancy_model: ($json.relevancyVerdict && $json.relevancyVerdict.model) || null, _relevancy_gates: ($json.relevancyVerdict && $json.relevancyVerdict.gates) || null, _relevancy_components: ($json.relevancyVerdict && $json.relevancyVerdict.components) || null } }) }}",
           "options": {
             "response": {
               "response": {
@@ -14029,18 +14133,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-05-12T16:53:48.697Z",
-        "id": 326,
+        "createdAt": "2026-05-12T17:55:19.855Z",
+        "id": 330,
         "workflowId": "EWnZg3svZWwcIRs4",
-        "versionId": "dac30898-79bc-495d-a306-3ff26ad71ca9",
+        "versionId": "220e0bb9-78e0-44bd-ada8-91fe56e73160",
         "event": "activated",
         "userId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
       },
       {
-        "createdAt": "2026-05-12T16:53:48.356Z",
-        "id": 325,
+        "createdAt": "2026-05-12T17:55:19.527Z",
+        "id": 329,
         "workflowId": "EWnZg3svZWwcIRs4",
-        "versionId": "dac30898-79bc-495d-a306-3ff26ad71ca9",
+        "versionId": "220e0bb9-78e0-44bd-ada8-91fe56e73160",
         "event": "deactivated",
         "userId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
       }

@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, AlertTriangle, Info } from "lucide-react";
+import { Sparkles, AlertTriangle, Info, Check, X } from "lucide-react";
 import { format } from "date-fns";
 
 type CustomFields = Record<string, unknown>;
@@ -10,6 +10,44 @@ type CustomFields = Record<string, unknown>;
 interface RelevancyPanelProps {
   cf: CustomFields;
 }
+
+type GateStatus = "pass" | "fail" | "skipped_deterministic";
+type GateEntry = { status?: GateStatus; evidence?: string };
+type ComponentEntry = { value?: number; reason?: string };
+
+const GATE_LABELS: Record<string, string> = {
+  "1_stack_match": "Stack",
+  "2_freshness": "Fresh",
+  "3_proposal_saturation": "Competition",
+  "4_hourly_floor": "Rate",
+  "5_client_spend_floor": "Spend",
+  "6_client_rating_floor": "Rating",
+  "7_job_availability": "Available",
+  "8_no_location_lockin": "Location",
+  "9_no_video_proposal": "No Video",
+  "10_portfolio_match": "Portfolio",
+  "11_no_duplicate": "Unique",
+};
+
+const COMPONENT_LABELS: Record<string, string> = {
+  skill_match: "Skill",
+  portfolio_evidence: "Portfolio",
+  client_quality: "Client",
+  competition_position: "Competition",
+  domain_match: "Domain",
+  experience_level_fit: "Experience",
+  red_flags: "Red Flags",
+};
+
+const COMPONENT_MAX: Record<string, number> = {
+  skill_match: 30,
+  portfolio_evidence: 20,
+  client_quality: 15,
+  competition_position: 10,
+  domain_match: 10,
+  experience_level_fit: 10,
+  red_flags: 5,
+};
 
 function scoreColor(score: number | null): string {
   if (score === null) return "text-muted-foreground bg-muted";
@@ -67,6 +105,21 @@ export function RelevancyPanel({ cf }: RelevancyPanelProps) {
   const evaluatedAt = (cf._relevancy_evaluated_at as string | null) ?? null;
   const mode = (cf._relevancy_mode_at_decision as string | null) ?? null;
   const model = (cf._relevancy_model as string | null) ?? null;
+  const gatesRaw = cf._relevancy_gates;
+  const gates: Record<string, GateEntry> =
+    gatesRaw && typeof gatesRaw === "object" && !Array.isArray(gatesRaw)
+      ? (gatesRaw as Record<string, GateEntry>)
+      : {};
+  const componentsRaw = cf._relevancy_components;
+  const components: Record<string, ComponentEntry> =
+    componentsRaw && typeof componentsRaw === "object" && !Array.isArray(componentsRaw)
+      ? (componentsRaw as Record<string, ComponentEntry>)
+      : {};
+  const gateEntries = Object.entries(gates).sort(([a], [b]) => {
+    const na = parseInt(a.split("_")[0], 10);
+    const nb = parseInt(b.split("_")[0], 10);
+    return (Number.isNaN(na) ? 99 : na) - (Number.isNaN(nb) ? 99 : nb);
+  });
 
   const modelDisplay = model
     ? model.includes("deepseek")
@@ -204,6 +257,76 @@ export function RelevancyPanel({ cf }: RelevancyPanelProps) {
                 {r}
               </Badge>
             ))}
+          </div>
+        )}
+
+        {gateEntries.length > 0 && (
+          <div className="flex items-start gap-1.5 flex-wrap">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground pt-1">Gates:</span>
+            {gateEntries.map(([gateId, gate]) => {
+              const label = GATE_LABELS[gateId] ?? gateId.replace(/^\d+_/, "").replace(/_/g, " ");
+              const status = gate.status;
+              const isPass = status === "pass" || status === "skipped_deterministic";
+              const isFail = status === "fail";
+              const evidence = gate.evidence ?? "";
+              return (
+                <Badge
+                  key={gateId}
+                  variant="outline"
+                  title={evidence}
+                  className={cn(
+                    "text-[10px] px-1.5 py-0 h-5 gap-0.5 inline-flex items-center",
+                    isPass &&
+                      "border-emerald-200 text-emerald-700 dark:border-emerald-900 dark:text-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/30",
+                    isFail &&
+                      "border-red-200 text-red-700 dark:border-red-900 dark:text-red-300 bg-red-50/50 dark:bg-red-950/30",
+                    !isPass &&
+                      !isFail &&
+                      "border-muted text-muted-foreground"
+                  )}
+                >
+                  {isPass ? <Check className="h-2.5 w-2.5" /> : isFail ? <X className="h-2.5 w-2.5" /> : null}
+                  {label}
+                </Badge>
+              );
+            })}
+          </div>
+        )}
+
+        {Object.keys(components).length > 0 && (
+          <div className="flex items-start gap-1.5 flex-wrap">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground pt-1">Breakdown:</span>
+            {Object.entries(components).map(([key, comp]) => {
+              const value = typeof comp.value === "number" ? comp.value : 0;
+              const max = COMPONENT_MAX[key] ?? 100;
+              const ratio = max > 0 ? value / max : 0;
+              const label = COMPONENT_LABELS[key] ?? key.replace(/_/g, " ");
+              const reason = comp.reason ?? "";
+              const isStrong = ratio >= 0.7;
+              const isWeak = ratio <= 0.4;
+              return (
+                <Badge
+                  key={key}
+                  variant="outline"
+                  title={reason}
+                  className={cn(
+                    "text-[10px] px-1.5 py-0 h-5 gap-1 inline-flex items-center tabular-nums",
+                    isStrong &&
+                      "border-emerald-200 text-emerald-700 dark:border-emerald-900 dark:text-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/30",
+                    isWeak &&
+                      "border-red-200 text-red-700 dark:border-red-900 dark:text-red-300 bg-red-50/50 dark:bg-red-950/30",
+                    !isStrong &&
+                      !isWeak &&
+                      "border-amber-200 text-amber-700 dark:border-amber-900 dark:text-amber-300"
+                  )}
+                >
+                  {label}
+                  <span className="opacity-70">
+                    {value}/{max}
+                  </span>
+                </Badge>
+              );
+            })}
           </div>
         )}
 
