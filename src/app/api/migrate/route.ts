@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "019" && migration !== "migrate-tasks") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "019" && migration !== "020" && migration !== "migrate-tasks") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
   }
 
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const sourceBoard = request.nextUrl.searchParams.get("from") || "e8442ebd-afd3-4217-99c4-e55ee20d4bfa";
     const destBoard = request.nextUrl.searchParams.get("to") || "351494d8-918e-475e-b16c-2eee3232aefe";
     return runMigrateTasks(sourceBoard, destBoard);
+  }
+
+  if (migration === "020") {
+    return run020();
   }
 
   if (migration === "019") {
@@ -444,6 +448,59 @@ async function run011() {
     return NextResponse.json({
       success: false,
       migration: "011_fix_profile_assignments",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run020() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 020: Extend criteria_versions.reason_enum with 3 soft-signal labels...");
+
+    // Idempotent guard: only append if the new labels are not already present.
+    const updateResult = await sql`
+      UPDATE criteria_versions
+      SET reason_enum = reason_enum || ARRAY[
+        'Client already conducting an interview',
+        'Short term job checks',
+        'Red flag'
+      ]::TEXT[]
+      WHERE version = '0.2'
+        AND NOT (reason_enum @> ARRAY['Client already conducting an interview']::TEXT[])
+      RETURNING version, array_length(reason_enum, 1) AS reason_count
+    `;
+
+    if (updateResult.rowCount === 0) {
+      results.push("✓ Soft-signal labels already present — no-op (idempotent)");
+    } else {
+      results.push(`✓ Appended 3 labels — reason_enum is now ${updateResult.rows[0].reason_count} entries`);
+    }
+
+    // Sanity check.
+    const verifyResult = await sql`
+      SELECT array_length(reason_enum, 1) AS reason_count
+      FROM criteria_versions
+      WHERE version = '0.2'
+      LIMIT 1
+    `;
+    if (verifyResult.rowCount && verifyResult.rows[0].reason_count === 16) {
+      results.push("✓ Verified: 16 rejection reasons");
+    } else {
+      results.push(`⚠ Verification surprising — reason_count=${verifyResult.rows[0]?.reason_count} (expected 16)`);
+    }
+
+    return NextResponse.json({
+      success: true,
+      migration: "020_reason_enum_soft_signals",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "020_reason_enum_soft_signals",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });
