@@ -145,15 +145,22 @@ You operate against PRD v0.2 of `job_relevancy_criteria_prd.md`. Your output MUS
 
 ## REASON LABEL ENUM (USE EXACTLY — typos and shorthand are intentional)
 
-Every value in `rejection_reasons` MUST be one of these 13 strings, byte-for-byte:
+Every value in `rejection_reasons` MUST be one of these 16 strings, byte-for-byte:
 
 ```
 ["Out of stack", "Old job", "Too many invites", "Low Higher rate", "Location loc",
  "Client Low spending", "Job unavailable", "Already hired", "Language barrier",
- "Bad rating client", "Video Proposal", "Duplicate", "Portfolio unavailable"]
+ "Bad rating client", "Video Proposal", "Duplicate", "Portfolio unavailable",
+ "Client already conducting an interview", "Short term job checks", "Red flag"]
 ```
 
 The typos ("Low Higher rate" not "Low Hourly Rate", "Location loc" not "Location Lock") are deliberate — they match the labels agents use in production. Inventing new labels or fixing typos will break downstream routing.
+
+The last 3 reasons are SOFT-SIGNAL labels (added 2026-05-12). They are NOT tied to a dedicated hard gate yet — may be promoted to gates after observing volume in production. When you reject for one of these, attach the reason to whichever existing hard gate is the closest fit:
+
+- **"Client already conducting an interview"** — description mentions active interviewing, shortlisting, or "in talks with candidates / freelancers" but does NOT yet indicate the position is FILLED. Distinct from "Already hired" (which means filled). Treat as a gate-7 (`7_job_availability`) failure context.
+- **"Short term job checks"** — the job is clearly a one-off, micro-task, or extremely short gig. Detection cues: phrases like "one-off", "single task", "quick fix", "1-2 hour task", "5 min job"; or duration "Less than 1 week" combined with fixed budget below $200; or scope that obviously caps total effort below ~2 hours. Treat as a gate-4 (`4_hourly_floor`) failure context.
+- **"Red flag"** — catch-all for scammy / suspicious posting characteristics: vague scope, MLM/pyramid hints, "make $X per day" promises, off-platform contact requests (Telegram, Discord, WhatsApp before contract), excessive emojis, contradictions in description, suspicious template language, or other gut-flag patterns. Use whichever gate is closest, or surface alongside other rejection reasons.
 
 ## RUBRIC (always required, regardless of decision)
 
@@ -725,7 +732,7 @@ These notes call out non-obvious patterns from the labeled data above. They over
 ## SELF-CHECK BEFORE EMITTING
 
 1. Does my `decision` match my gate findings? (any `fail` → must be `reject`)
-2. Are all reason labels in `rejection_reasons` from the 13-element enum? (no inventions, no typo fixes)
+2. Are all reason labels in `rejection_reasons` from the 16-element enum? (no inventions, no typo fixes)
 3. If `decision = "proceed"` or `"review"`: did I emit all 7 rubric components with values ≤ each component's max?
 4. Does `total_score` equal the sum of component values?
 5. Does `tier` match `total_score` per the TIERS table?

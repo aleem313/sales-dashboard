@@ -135,6 +135,11 @@ The data **is biased toward N/A** — 668 of 681 N/A rows are n8n-sourced with f
 | 11 | Video Proposal | 4 | $326,545 | 49 | 4.88 | Job requires a recorded video pitch — out of our process |
 | 12 | Duplicate | 2 | $3,880 | 14 | 4.72 | Same job already tracked elsewhere |
 | 13 | Portfolio unavailable | 2 | $6,711 | 1 | 5.00 | Profile lacks a relevant portfolio piece |
+| 14 | Client already conducting an interview | 0 (NEW 2026-05-12) | — | — | — | Soft-signal label. Client mentions active interviewing / shortlisting / "in talks with candidates" but not yet filled. Distinct from "Already hired". Maps under gate 7. |
+| 15 | Short term job checks | 0 (NEW 2026-05-12) | — | — | — | Soft-signal label. One-off / micro-task / very short gig. Detection: "one-off", "single task", "quick fix", "1-2 hour", or duration <1 week with fixed budget <$200. Maps under gate 4. |
+| 16 | Red flag | 0 (NEW 2026-05-12) | — | — | — | Soft-signal catch-all. Scammy / suspicious posting: vague scope, MLM hints, "make $X per day", off-platform contact requests (Telegram/Discord/WhatsApp), excessive emojis, contradictions. Maps under whichever gate is closest. |
+
+> **Soft-signal labels (rows 14–16, added 2026-05-12):** these are NOT yet tied to dedicated hard gates. The classifier emits them under existing gate contexts so we can observe production volume before deciding whether to promote to gates. Re-audit after ~2 weeks of live data; if volume justifies, formalize as gates 12/13/14 with explicit conditions in §7.
 
 ### 6.3 Comparative profile: rejected vs proceeded (n8n-sourced only)
 
@@ -1121,6 +1126,7 @@ This section is **append-only**. Every edit to this PRD must add a row at the to
 
 | Date | Version | What changed | Why | Evidence | Reviewer |
 |---|---|---|---|---|---|
+| 2026-05-12 | v0.2.1 | Added 3 soft-signal reason labels to §6.2 enum: "Client already conducting an interview", "Short term job checks", "Red flag". No new hard gates — labels are attached to existing gate contexts (7, 4, or closest). Re-audit after 2 weeks of live data to decide gate promotion. Mode A prompt + canonical doc + both AI Agent nodes patched. | User feedback: existing 13-reason enum doesn't capture these common N/A causes. Cheaper to add labels first, observe volume, then decide whether to formalize as gates. | Live classifier reasons enum extended 13 → 16 in `hi71jhPU8tmq7hEp` (Gemini + DeepSeek agents). criteria_versions DB seed unchanged (still v0.2) — these are additive labels, not threshold changes. | Drafted by Claude in collaboration with Waqas |
 | 2026-05-05 | v0.2 | Added §6.7 (concrete reject examples by reason, ~40 jobs across 13 categories), §6.8 (concrete proceed examples, 25 jobs from Won → Proposal Submitted), and §15.5 Appendix C (LLM-ready JSON example library with `gates_failed` / `gates_passed` annotations and gate-ID reference). Additive only — no edits to v0.1 §1–§13 content. | Make the PRD usable as in-context training data for the upcoming n8n AI classifier node, so a single source of truth governs both human review and machine classification. | Contabo `sales_dashboard` snapshot 2026-05-05: 668 n8n-sourced N/A tasks (taxonomy fully populated) + 124 n8n-sourced Proposal Submitted + 9 Proposal Views + 2 In Chat + 1 Won. Live queries in §14 Appendix A. | Drafted by Claude (relevancy-criteria-keeper persona) in collaboration with Waqas |
 | 2026-05-05 | v0.1 | Initial draft | Define a written rule set for job relevancy from observed agent behaviour | Contabo task board snapshot: 681 N/A + 603 Proposal Submitted tasks, 13 distinct rejection reasons, per-profile matrix, comparative numeric profile | Drafted by Claude in collaboration with Waqas |
 
