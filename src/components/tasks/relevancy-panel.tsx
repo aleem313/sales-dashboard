@@ -66,6 +66,18 @@ export function RelevancyPanel({ cf }: RelevancyPanelProps) {
   const confidence = (cf._relevancy_confidence as number | null) ?? null;
   const evaluatedAt = (cf._relevancy_evaluated_at as string | null) ?? null;
   const mode = (cf._relevancy_mode_at_decision as string | null) ?? null;
+  const model = (cf._relevancy_model as string | null) ?? null;
+
+  const modelDisplay = model
+    ? model.includes("deepseek")
+      ? "DeepSeek R1"
+      : model.includes("gemini")
+        ? "Gemini 2.5 Flash"
+        : model
+    : null;
+  const modelBadgeClass = model?.includes("deepseek")
+    ? "border-purple-300 text-purple-700 dark:border-purple-800 dark:text-purple-300"
+    : "border-sky-300 text-sky-700 dark:border-sky-800 dark:text-sky-300";
 
   const isDLQ = dlqId !== null && scoreId === null;
   const confidencePct = confidence !== null ? Math.round(confidence * 100) : null;
@@ -93,6 +105,11 @@ export function RelevancyPanel({ cf }: RelevancyPanelProps) {
           {mode === "active" && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300">
               Active
+            </Badge>
+          )}
+          {modelDisplay && (
+            <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-4", modelBadgeClass)} title={`Evaluated by ${modelDisplay}`}>
+              via {modelDisplay}
             </Badge>
           )}
         </div>

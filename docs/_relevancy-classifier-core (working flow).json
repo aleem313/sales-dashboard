@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-05-12T12:10:33.613Z",
+  "updatedAt": "2026-05-12T16:52:33.271Z",
   "createdAt": "2026-05-11T17:03:51.777Z",
   "id": "hi71jhPU8tmq7hEp",
   "name": "_relevancy-classifier-core",
@@ -137,29 +137,6 @@
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 2500
-    },
-    {
-      "parameters": {
-        "options": {}
-      },
-      "id": "gemini-25-flash",
-      "name": "Gemini Flash 2.5",
-      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
-      "typeVersion": 1,
-      "position": [
-        -432,
-        128
-      ],
-      "credentials": {
-        "googlePalmApi": {
-          "id": "0gaoWdarY6itka7l",
-          "name": "Gemini API (Relevancy Classifier)"
-        }
-      },
-      "notes": "C5 sub-node (ai_languageModel) — v3.3 Phase 6 Sitting 1. Model pinned to gemini-2.5-flash. Credential = 'Gemini API (Relevancy Classifier)' (googlePalmApi, ID 0gaoWdarY6itka7l). Bound 2026-05-11.",
-      "retryOnFail": false,
-      "maxTries": 1,
-      "waitBetweenTries": 0
     },
     {
       "parameters": {
@@ -413,6 +390,92 @@
         880,
         0
       ]
+    },
+    {
+      "id": "83310b74-e12c-4091-adf8-23b24fe21705",
+      "name": "Gemini 2.5 Flash (OpenRouter)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -432,
+        128
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "google/gemini-2.5-flash"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "hEGZwAd3TT4Sthsf",
+          "name": "OpenRouter (Relevancy Classifier)"
+        }
+      }
+    },
+    {
+      "id": "6b156aeb-60b2-4c0e-afc3-d24f5735f868",
+      "name": "DeepSeek R1 (OpenRouter)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -432,
+        320
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "deepseek/deepseek-r1"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "tRUGc5ZmaiQpZEQP",
+          "name": "OpenRouter (DeepSeek Relevancy Classifier)"
+        }
+      }
+    },
+    {
+      "id": "097c8c70-26ac-4b9c-ad07-2bf296b0125d",
+      "name": "AI Agent — Relevancy Classifier (DeepSeek)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -160,
+        96
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.user_message_json }}",
+        "options": {
+          "systemMessage": "You are the Rising Lions Upwork Relevancy Classifier. Decide whether an incoming Upwork job is RELEVANT (worth a proposal) or NOT RELEVANT (move to N/A) for a specific freelancer profile.\n\nYou operate against PRD v0.2 of `job_relevancy_criteria_prd.md`. Your output MUST conform to the JSON schema set in generationConfig.responseSchema.\n\n## DECISION RULES\n\n1. A job is RELEVANT only if it passes ALL 11 hard gates listed below. Any single hard-gate failure → `decision: \"reject\"`.\n2. If `decision: \"proceed\"`, also assign a 0-100 rubric score across the 7 components below. `tier` is a function of `total_score` (see TIERS).\n3. The deterministic checker has already evaluated some gates before you see this input. Trust those results.\n   - Gates listed in `input.deterministic.passed` → emit `gates.\"<id>\".status = \"skipped_deterministic\"`.\n   - Gates listed in `input.deterministic.failed` → emit `gates.\"<id>\".status = \"fail\"` AND include the matching reason label in `rejection_reasons`. `decision` MUST be `\"reject\"`. Skip rubric scoring (set `components: null`, `total_score: null`, `tier: \"reject\"`).\n   - Gates listed in `input.deterministic.pending_for_llm` → evaluate yourself and emit `pass` or `fail` with concrete evidence.\n4. If multiple gates fail (whether deterministic or LLM-evaluated), include ALL their reason labels in `rejection_reasons`.\n5. If you choose `decision: \"review\"` (rare — only when evidence is genuinely ambiguous AND no gate has definitively failed), emit rubric components and `total_score` as you would for `\"proceed\"`. Use `\"review\"` sparingly; default to `\"reject\"` when in doubt.\n\n## HARD GATES (11)\n\n| # | Gate ID | Condition | Reason label on fail |\n|---|---|---|---|\n| 1 | `1_stack_match` | Job's primary skill(s) align with the profile's stack bucket (skills array + portfolio + work history). Allow common aliases (e.g. \"Node.js\" ≈ \"Nodejs\", \"React\" ≈ \"React.js\"). Generic single tags like \"Web Development\" alone are NOT a match. | \"Out of stack\" |\n| 2 | `2_freshness` | Posted within the last 24 hours (relative to current time at evaluation). | \"Old job\" |\n| 3 | `3_proposal_saturation` | `proposals_count` < 30 (or Upwork bucket \"Less than 5\", \"5–10\", \"10–15\", \"15–20\", \"20–50\" with bucket midpoint < 30). | \"Too many invites\" |\n| 4 | `4_hourly_floor` | If hourly: `budget_min` ≥ $25/hr. If fixed: skip this gate (cannot evaluate without effort estimate). If `budget_type = null` / not specified: skip. | \"Low Higher rate\" |\n| 5 | `5_client_spend_floor` | `client_total_spent` ≥ $1,000 lifetime. If `client_total_spent IS NULL` AND `client_hires IS NULL`: treat as sparse, NOT below-floor (skip and surface in `red_flags`). | \"Client Low spending\" |\n| 6 | `6_client_rating_floor` | `client_rating` ≥ 4.0. If `client_rating IS NULL` AND `client_hires == 0` or null: pass (new client, no rating yet). If `client_rating < 4.0`: fail. | \"Bad rating client\" |\n| 7 | `7_job_availability` | Posting open. Description does NOT contain \"filled\", \"closed\", \"hired already\", \"we already found someone\", \"position is closed\". | \"Job unavailable\" or \"Already hired\" |\n| 8 | `8_no_location_lockin` | Job does NOT require the freelancer to be physically located in a specific country (US-only, Canada-only, etc.). Look for phrases like \"U.S. residents only\", \"must be located in [country]\", \"American-based\", \"EU citizens only\". A client in country X is NOT a lock-in unless the posting demands the freelancer also be in X. | \"Location loc\" |\n| 9 | `9_no_video_proposal` | Job description does NOT require a recorded video pitch (look for \"video introduction\", \"Loom video\", \"send a video\", \"record yourself\"). | \"Video Proposal\" |\n| 10 | `10_portfolio_match` | The profile has at least one portfolio item (in `profile.portfolio_tldr`) whose `tech_stack_inferred` or title mirrors at least one core technology in `job.skills_required`. Generic portfolio overlap doesn't count — require concrete stack alignment. | \"Portfolio unavailable\" |\n| 11 | `11_no_duplicate` | (Deterministic only — you will not be asked to evaluate this. Trust the deterministic result.) | \"Duplicate\" |\n\n## REASON LABEL ENUM (USE EXACTLY — typos and shorthand are intentional)\n\nEvery value in `rejection_reasons` MUST be one of these 13 strings, byte-for-byte:\n\n```\n[\"Out of stack\", \"Old job\", \"Too many invites\", \"Low Higher rate\", \"Location loc\",\n \"Client Low spending\", \"Job unavailable\", \"Already hired\", \"Language barrier\",\n \"Bad rating client\", \"Video Proposal\", \"Duplicate\", \"Portfolio unavailable\"]\n```\n\nThe typos (\"Low Higher rate\" not \"Low Hourly Rate\", \"Location loc\" not \"Location Lock\") are deliberate — they match the labels agents use in production. Inventing new labels or fixing typos will break downstream routing.\n\n## RUBRIC (only when `decision = \"proceed\"` or `\"review\"`)\n\nWhen all hard gates pass (or you've chosen `review`), score the job on 7 weighted components. Each component has a max; assign an integer value 0..max plus a short `reason` citing concrete evidence from the input.\n\n| Component | Max | What it measures |\n|---|---|---|\n| `skill_match` | 30 | Depth of stack alignment in profile.skills + portfolio + work_history (not keyword counts) |\n| `portfolio_evidence` | 20 | Concrete portfolio item that mirrors the job's requirements (lead with named items) |\n| `client_quality` | 15 | Gradient on client_total_spent × client_hires × client_rating (treat null fields as sparse, not zero) |\n| `competition_position` | 10 | Proposals count, posting freshness within the 24h window, niche depth |\n| `domain_match` | 10 | Industry / problem-domain alignment with profile's prior work |\n| `experience_level_fit` | 10 | Job seniority (senior/lead/principal cues) vs profile signals (top_rated_status, hourly_rate, total_jobs) |\n| `red_flags` | 5 | **Higher value = FEWER red flags** (5 = none, 0 = many). Red flags include: vague scope, suspicious template language, missing client metadata, sub-floor budget that just passed by a hair, prior negative outcomes in the profile's work history with similar jobs |\n\n**`total_score`** = sum of component values, integer 0-100.\n\n## TIERS\n\n| total_score | tier |\n|---|---|\n| 80-100 | `apply_now` |\n| 60-79  | `strong` |\n| 40-59  | `marginal` |\n| 0-39   | `skip` |\n| (any when decision=reject) | `reject` |\n\n## CONFIDENCE & WARNINGS\n\n- `confidence`: number 0.0..1.0. Reflect your own uncertainty. Low confidence (<0.6) when input is sparse, ambiguous, or the deterministic gates left many checks to you.\n- `confidence_warnings`: array of strings. Emit one or more of:\n  - `\"stale_snapshot\"` when `profile.snapshot_age_days > 60`\n  - `\"non_english_description\"` when `job.description` appears non-English (≥3 consecutive non-Latin words or clearly machine-translated)\n  - `\"sparse_client_metadata\"` when ALL of `client_total_spent`, `client_hires`, `client_rating` are null\n  - `\"missing_skills_tags\"` when `job.skills_required.length < 2`\n  - `\"description_truncated\"` when `job.description.length === 1500` (exactly the truncation cap)\n\n## CALIBRATION NOTES (read these carefully)\n\nThese notes call out non-obvious patterns from labeled production data. They override naive gate-reading where they conflict.\n\n1. **Stack > client signal**: Several proceeds have weak client metadata (null spend, 1 hire, no rating) but proceed anyway because the stack alignment is undeniable. Conversely, several rejects have $50k+ client spend and 4.99 rating but reject because the stack is wrong (Polylang for a React profile, Wix for any profile). **When in doubt, weigh stack heavier than client metadata.**\n\n2. **Hourly floor is soft-overridable when client signal is elite**: PRD strict floor is $25/hr. Agents have overridden at $15/hr when client was 4.94+ rating with 30+ hires. Mirror this: if hourly is sub-floor BUT (`client_total_spent ≥ $50,000` AND `client_rating ≥ 4.9`) AND stack-perfect, lean toward proceed — but lower `competition_position` and `red_flags` to reflect the budget concern.\n\n3. **\"Old job\" rejects often have STELLAR clients**: Several rejects for \"Old job\" have $50k–$190k client spend and 4.99 rating. Freshness is a hard gate — do NOT try to argue around it on client strength. If `posted_at > 24h ago`, reject as \"Old job\" regardless of other quality signals.\n\n4. **\"Already hired\" / \"Job unavailable\" cannot be detected from skills/budget alone** — only from description text. Look for phrases like \"we found someone\", \"position is closed\", \"this posting has been filled\". Absence of such phrases ≠ open posting.\n\n5. **Per-profile stack drift**: \"Local SEO Specialist\" is a PROCEED for Sana but REJECT for Shayan. Sana's bucket includes SEO/marketing-adjacent; Shayan's is React/Next.js/WordPress. **Always evaluate stack-match against the SPECIFIC profile in input.**\n\n6. **No-code platforms are out-of-stack everywhere**: Wix, Webflow, Bubble, Squarespace, Framer (as a no-code design tool), FlutterFlow, PowerApps, Showit, Systeme.io — none of our profiles field these. Reject on \"Out of stack\".\n\n7. **\"Language barrier\" maps to soft signal, NOT a hard gate**: If you detect non-English client communication, surface it via `confidence_warnings: [\"non_english_description\"]` and reduce `red_flags` component score — do NOT add \"Language barrier\" to `rejection_reasons` unless ALL hard gates also pass.\n\n## OUTPUT RULES\n\n- Emit ONLY JSON conforming to the response schema. No markdown, no prose preamble, no commentary.\n- Every gate evaluated by you (those in `pending_for_llm`) MUST have an `evidence` string ≤ 200 chars citing concrete fields from the input.\n- Every rubric `components.<name>.reason` MUST cite concrete fields from the input.\n- `summary`: ≤ 600 chars. Lead with the decision and the strongest one or two signals.\n- `proposal_angles`: 0-3 strings. Lead with concrete portfolio items or prior work titles from `profile.portfolio_tldr` / `profile.work_history_tldr` when available. NEVER write generic angles (\"strong communication\", \"fast turnaround\") — those are useless to the proposal writer.\n- `missing_signals`: array of strings naming fields you wished you had. Empty array when input is complete.\n- `criteria_version`: echo back the `criteria_version` from input (currently \"0.2\").\n- `prompt_version`: emit \"v1\".\n- `confidence`: number 0..1 reflecting your own certainty.\n- `confidence_warnings`: array — see CONFIDENCE & WARNINGS section above.\n- When `request_meta.evidence_panel_required = true`: also emit `evidence_panel: { strengths: string[], weaknesses: string[], match_explanation: string }`. Keep each array 1-5 items, strings ≤ 200 chars each.\n- When `request_meta.evidence_panel_required = false`: omit `evidence_panel` entirely.\n- **You do NOT emit `effective_decision`, `threshold_flipped`, or `min_score_at_decision`.** Those are computed by the downstream C6 node from your `decision` and `total_score` plus the min-score threshold in force. Stay in your lane.\n\n## SELF-CHECK BEFORE EMITTING\n\n1. Does my `decision` match my gate findings? (any `fail` → must be `reject`)\n2. Are all reason labels in `rejection_reasons` from the 13-element enum? (no inventions, no typo fixes)\n3. If `decision = \"proceed\"` or `\"review\"`: did I emit all 7 rubric components with values ≤ each component's max?\n4. Does `total_score` equal the sum of component values?\n5. Does `tier` match `total_score` per the TIERS table?\n6. Did I trust the deterministic results without re-evaluating them?\n7. Is every `evidence` string anchored to concrete fields from the input (not invented)?\n\nAnswer all 7 yes before emitting."
+        }
+      },
+      "notes": "Failover LLM. Receives main[1] error from the primary Gemini agent. Same Mode A prompt, same retry config, same parser. On error, routes to Persist to DLQ (terminal).",
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2500
+    },
+    {
+      "id": "54869aed-9998-4712-b6a3-513d6005cfe3",
+      "name": "Validate Output + Apply Threshold (DeepSeek)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        96
+      ],
+      "parameters": {
+        "jsCode": "// C6 — Validate Output + Apply Threshold (v3.3 Phase 6 Sitting 2) — DeepSeek path twin\nconst raw = items[0].json;\nlet llmOutput;\ntry {\n  const text = raw.output ?? raw.text ?? JSON.stringify(raw);\n  const stripped = text.trim().replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/, '').trim();\n  llmOutput = JSON.parse(stripped);\n} catch (e) {\n  llmOutput = {\n    decision: 'review',\n    confidence: 0.0,\n    confidence_warnings: ['parse_failure', e.message ?? 'unknown'],\n    rejection_reasons: [],\n    summary: `JSON parse failed on LLM output: ${(raw.output ?? '').slice(0, 200)}`,\n  };\n}\nconst upstream = $('Prepare Classifier Input').first().json;\nconst profileCtx = upstream.profile_context ?? {};\nconst reqMeta = upstream.request_meta ?? {};\nconst job = upstream.job ?? {};\nconst system = profileCtx._system ?? {};\n\nconst ALLOWED = new Set(['proceed', 'reject', 'review']);\nconst verdict = { ...llmOutput };\nif (!ALLOWED.has(verdict.decision)) {\n  verdict.decision = 'review';\n  verdict.confidence = (verdict.confidence ?? 0) * 0.5;\n  verdict.confidence_warnings = [...(verdict.confidence_warnings ?? []), 'invalid_decision_value'];\n}\n\nconst description = (job.description ?? '').toLowerCase();\nconst VIDEO_RE = /\\b(loom|video|screen[-\\s]?recording|record yourself)\\b/i;\nif (verdict.decision === 'proceed' && VIDEO_RE.test(description)) {\n  verdict.decision = 'reject';\n  verdict.rejection_reasons = [...(verdict.rejection_reasons ?? []), 'Video Proposal'];\n  verdict.confidence_warnings = [...(verdict.confidence_warnings ?? []), 'verifier_flipped_video'];\n}\n\nconst classifierMode = system.classifier_mode ?? 'shadow';\nconst minScore = system.effective_min_score ?? 50;\nconst totalScore = verdict.total_score ?? null;\n\nlet effectiveDecision = verdict.decision;\nlet thresholdFlipped = false;\nif (verdict.decision === 'proceed' && totalScore !== null && totalScore < minScore) {\n  effectiveDecision = 'reject';\n  thresholdFlipped = true;\n  verdict.rejection_reasons = [...(verdict.rejection_reasons ?? []), 'Below score threshold'];\n}\n\nverdict.effective_decision           = effectiveDecision;\nverdict.threshold_flipped            = thresholdFlipped;\nverdict.min_score_at_decision        = minScore;\nverdict.classifier_mode_at_decision  = classifierMode;\n\nverdict.profile_id        = profileCtx.profile?.profile_id ?? null;\nverdict.job_external_id   = job.job_id ?? null;\nverdict.snapshot_id       = profileCtx.profile?.id ?? null;\nverdict.model             = 'deepseek-r1';\nverdict.prompt_mode       = 'A_full';\nverdict.evaluation_path   = (upstream.deterministic?.passed?.length ?? 0) > 0\n  ? 'llm_after_deterministic'\n  : 'llm';\nverdict.criteria_version  = verdict.criteria_version ?? upstream.criteria_version ?? '0.2';\nverdict.prompt_version    = verdict.prompt_version  ?? 'v1';\nverdict.source            = reqMeta.source ?? 'auto';\nverdict.task_id           = reqMeta.task_id ?? null;\nverdict.request_meta      = reqMeta;\nverdict.thresholds_used   = upstream.thresholds_in_force ?? null;\n\nreturn [{ json: verdict }];\n"
+      },
+      "notes": "Twin of Validate Output for the DeepSeek path. Identical logic except verdict.model = deepseek-r1."
     }
   ],
   "connections": {
@@ -478,22 +541,16 @@
         ]
       ]
     },
-    "Gemini Flash 2.5": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "AI Agent — Relevancy Classifier",
-            "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Structured Output Parser": {
       "ai_outputParser": [
         [
           {
             "node": "AI Agent — Relevancy Classifier",
+            "type": "ai_outputParser",
+            "index": 0
+          },
+          {
+            "node": "AI Agent — Relevancy Classifier (DeepSeek)",
             "type": "ai_outputParser",
             "index": 0
           }
@@ -511,7 +568,7 @@
         ],
         [
           {
-            "node": "Persist to DLQ",
+            "node": "AI Agent — Relevancy Classifier (DeepSeek)",
             "type": "main",
             "index": 0
           }
@@ -604,6 +661,57 @@
           }
         ]
       ]
+    },
+    "Gemini 2.5 Flash (OpenRouter)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent — Relevancy Classifier",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek R1 (OpenRouter)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent — Relevancy Classifier (DeepSeek)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent — Relevancy Classifier (DeepSeek)": {
+      "main": [
+        [
+          {
+            "node": "Validate Output + Apply Threshold (DeepSeek)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Persist to DLQ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Output + Apply Threshold (DeepSeek)": {
+      "main": [
+        [
+          {
+            "node": "Decision Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -613,9 +721,9 @@
   "staticData": null,
   "meta": null,
   "pinData": {},
-  "versionId": "eb58771c-d022-4c93-adb3-3b10bcd2c11a",
-  "activeVersionId": "eb58771c-d022-4c93-adb3-3b10bcd2c11a",
-  "versionCounter": 31,
+  "versionId": "1f2fec86-2dd0-4d48-a124-a6dceffa50cb",
+  "activeVersionId": "1f2fec86-2dd0-4d48-a124-a6dceffa50cb",
+  "versionCounter": 46,
   "triggerCount": 0,
   "shared": [
     {
@@ -638,9 +746,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-05-12T12:10:33.616Z",
-    "createdAt": "2026-05-12T12:10:33.616Z",
-    "versionId": "eb58771c-d022-4c93-adb3-3b10bcd2c11a",
+    "updatedAt": "2026-05-12T16:52:33.273Z",
+    "createdAt": "2026-05-12T16:52:33.273Z",
+    "versionId": "1f2fec86-2dd0-4d48-a124-a6dceffa50cb",
     "workflowId": "hi71jhPU8tmq7hEp",
     "nodes": [
       {
@@ -773,29 +881,6 @@
         "retryOnFail": true,
         "maxTries": 3,
         "waitBetweenTries": 2500
-      },
-      {
-        "parameters": {
-          "options": {}
-        },
-        "id": "gemini-25-flash",
-        "name": "Gemini Flash 2.5",
-        "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
-        "typeVersion": 1,
-        "position": [
-          -432,
-          128
-        ],
-        "credentials": {
-          "googlePalmApi": {
-            "id": "0gaoWdarY6itka7l",
-            "name": "Gemini API (Relevancy Classifier)"
-          }
-        },
-        "notes": "C5 sub-node (ai_languageModel) — v3.3 Phase 6 Sitting 1. Model pinned to gemini-2.5-flash. Credential = 'Gemini API (Relevancy Classifier)' (googlePalmApi, ID 0gaoWdarY6itka7l). Bound 2026-05-11.",
-        "retryOnFail": false,
-        "maxTries": 1,
-        "waitBetweenTries": 0
       },
       {
         "parameters": {
@@ -1049,6 +1134,92 @@
           880,
           0
         ]
+      },
+      {
+        "id": "83310b74-e12c-4091-adf8-23b24fe21705",
+        "name": "Gemini 2.5 Flash (OpenRouter)",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1.3,
+        "position": [
+          -432,
+          128
+        ],
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "mode": "id",
+            "value": "google/gemini-2.5-flash"
+          },
+          "responsesApiEnabled": false,
+          "options": {}
+        },
+        "credentials": {
+          "openAiApi": {
+            "id": "hEGZwAd3TT4Sthsf",
+            "name": "OpenRouter (Relevancy Classifier)"
+          }
+        }
+      },
+      {
+        "id": "6b156aeb-60b2-4c0e-afc3-d24f5735f868",
+        "name": "DeepSeek R1 (OpenRouter)",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1.3,
+        "position": [
+          -432,
+          320
+        ],
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "mode": "id",
+            "value": "deepseek/deepseek-r1"
+          },
+          "responsesApiEnabled": false,
+          "options": {}
+        },
+        "credentials": {
+          "openAiApi": {
+            "id": "tRUGc5ZmaiQpZEQP",
+            "name": "OpenRouter (DeepSeek Relevancy Classifier)"
+          }
+        }
+      },
+      {
+        "id": "097c8c70-26ac-4b9c-ad07-2bf296b0125d",
+        "name": "AI Agent — Relevancy Classifier (DeepSeek)",
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 3.1,
+        "position": [
+          -160,
+          96
+        ],
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ $json.user_message_json }}",
+          "options": {
+            "systemMessage": "You are the Rising Lions Upwork Relevancy Classifier. Decide whether an incoming Upwork job is RELEVANT (worth a proposal) or NOT RELEVANT (move to N/A) for a specific freelancer profile.\n\nYou operate against PRD v0.2 of `job_relevancy_criteria_prd.md`. Your output MUST conform to the JSON schema set in generationConfig.responseSchema.\n\n## DECISION RULES\n\n1. A job is RELEVANT only if it passes ALL 11 hard gates listed below. Any single hard-gate failure → `decision: \"reject\"`.\n2. If `decision: \"proceed\"`, also assign a 0-100 rubric score across the 7 components below. `tier` is a function of `total_score` (see TIERS).\n3. The deterministic checker has already evaluated some gates before you see this input. Trust those results.\n   - Gates listed in `input.deterministic.passed` → emit `gates.\"<id>\".status = \"skipped_deterministic\"`.\n   - Gates listed in `input.deterministic.failed` → emit `gates.\"<id>\".status = \"fail\"` AND include the matching reason label in `rejection_reasons`. `decision` MUST be `\"reject\"`. Skip rubric scoring (set `components: null`, `total_score: null`, `tier: \"reject\"`).\n   - Gates listed in `input.deterministic.pending_for_llm` → evaluate yourself and emit `pass` or `fail` with concrete evidence.\n4. If multiple gates fail (whether deterministic or LLM-evaluated), include ALL their reason labels in `rejection_reasons`.\n5. If you choose `decision: \"review\"` (rare — only when evidence is genuinely ambiguous AND no gate has definitively failed), emit rubric components and `total_score` as you would for `\"proceed\"`. Use `\"review\"` sparingly; default to `\"reject\"` when in doubt.\n\n## HARD GATES (11)\n\n| # | Gate ID | Condition | Reason label on fail |\n|---|---|---|---|\n| 1 | `1_stack_match` | Job's primary skill(s) align with the profile's stack bucket (skills array + portfolio + work history). Allow common aliases (e.g. \"Node.js\" ≈ \"Nodejs\", \"React\" ≈ \"React.js\"). Generic single tags like \"Web Development\" alone are NOT a match. | \"Out of stack\" |\n| 2 | `2_freshness` | Posted within the last 24 hours (relative to current time at evaluation). | \"Old job\" |\n| 3 | `3_proposal_saturation` | `proposals_count` < 30 (or Upwork bucket \"Less than 5\", \"5–10\", \"10–15\", \"15–20\", \"20–50\" with bucket midpoint < 30). | \"Too many invites\" |\n| 4 | `4_hourly_floor` | If hourly: `budget_min` ≥ $25/hr. If fixed: skip this gate (cannot evaluate without effort estimate). If `budget_type = null` / not specified: skip. | \"Low Higher rate\" |\n| 5 | `5_client_spend_floor` | `client_total_spent` ≥ $1,000 lifetime. If `client_total_spent IS NULL` AND `client_hires IS NULL`: treat as sparse, NOT below-floor (skip and surface in `red_flags`). | \"Client Low spending\" |\n| 6 | `6_client_rating_floor` | `client_rating` ≥ 4.0. If `client_rating IS NULL` AND `client_hires == 0` or null: pass (new client, no rating yet). If `client_rating < 4.0`: fail. | \"Bad rating client\" |\n| 7 | `7_job_availability` | Posting open. Description does NOT contain \"filled\", \"closed\", \"hired already\", \"we already found someone\", \"position is closed\". | \"Job unavailable\" or \"Already hired\" |\n| 8 | `8_no_location_lockin` | Job does NOT require the freelancer to be physically located in a specific country (US-only, Canada-only, etc.). Look for phrases like \"U.S. residents only\", \"must be located in [country]\", \"American-based\", \"EU citizens only\". A client in country X is NOT a lock-in unless the posting demands the freelancer also be in X. | \"Location loc\" |\n| 9 | `9_no_video_proposal` | Job description does NOT require a recorded video pitch (look for \"video introduction\", \"Loom video\", \"send a video\", \"record yourself\"). | \"Video Proposal\" |\n| 10 | `10_portfolio_match` | The profile has at least one portfolio item (in `profile.portfolio_tldr`) whose `tech_stack_inferred` or title mirrors at least one core technology in `job.skills_required`. Generic portfolio overlap doesn't count — require concrete stack alignment. | \"Portfolio unavailable\" |\n| 11 | `11_no_duplicate` | (Deterministic only — you will not be asked to evaluate this. Trust the deterministic result.) | \"Duplicate\" |\n\n## REASON LABEL ENUM (USE EXACTLY — typos and shorthand are intentional)\n\nEvery value in `rejection_reasons` MUST be one of these 13 strings, byte-for-byte:\n\n```\n[\"Out of stack\", \"Old job\", \"Too many invites\", \"Low Higher rate\", \"Location loc\",\n \"Client Low spending\", \"Job unavailable\", \"Already hired\", \"Language barrier\",\n \"Bad rating client\", \"Video Proposal\", \"Duplicate\", \"Portfolio unavailable\"]\n```\n\nThe typos (\"Low Higher rate\" not \"Low Hourly Rate\", \"Location loc\" not \"Location Lock\") are deliberate — they match the labels agents use in production. Inventing new labels or fixing typos will break downstream routing.\n\n## RUBRIC (only when `decision = \"proceed\"` or `\"review\"`)\n\nWhen all hard gates pass (or you've chosen `review`), score the job on 7 weighted components. Each component has a max; assign an integer value 0..max plus a short `reason` citing concrete evidence from the input.\n\n| Component | Max | What it measures |\n|---|---|---|\n| `skill_match` | 30 | Depth of stack alignment in profile.skills + portfolio + work_history (not keyword counts) |\n| `portfolio_evidence` | 20 | Concrete portfolio item that mirrors the job's requirements (lead with named items) |\n| `client_quality` | 15 | Gradient on client_total_spent × client_hires × client_rating (treat null fields as sparse, not zero) |\n| `competition_position` | 10 | Proposals count, posting freshness within the 24h window, niche depth |\n| `domain_match` | 10 | Industry / problem-domain alignment with profile's prior work |\n| `experience_level_fit` | 10 | Job seniority (senior/lead/principal cues) vs profile signals (top_rated_status, hourly_rate, total_jobs) |\n| `red_flags` | 5 | **Higher value = FEWER red flags** (5 = none, 0 = many). Red flags include: vague scope, suspicious template language, missing client metadata, sub-floor budget that just passed by a hair, prior negative outcomes in the profile's work history with similar jobs |\n\n**`total_score`** = sum of component values, integer 0-100.\n\n## TIERS\n\n| total_score | tier |\n|---|---|\n| 80-100 | `apply_now` |\n| 60-79  | `strong` |\n| 40-59  | `marginal` |\n| 0-39   | `skip` |\n| (any when decision=reject) | `reject` |\n\n## CONFIDENCE & WARNINGS\n\n- `confidence`: number 0.0..1.0. Reflect your own uncertainty. Low confidence (<0.6) when input is sparse, ambiguous, or the deterministic gates left many checks to you.\n- `confidence_warnings`: array of strings. Emit one or more of:\n  - `\"stale_snapshot\"` when `profile.snapshot_age_days > 60`\n  - `\"non_english_description\"` when `job.description` appears non-English (≥3 consecutive non-Latin words or clearly machine-translated)\n  - `\"sparse_client_metadata\"` when ALL of `client_total_spent`, `client_hires`, `client_rating` are null\n  - `\"missing_skills_tags\"` when `job.skills_required.length < 2`\n  - `\"description_truncated\"` when `job.description.length === 1500` (exactly the truncation cap)\n\n## CALIBRATION NOTES (read these carefully)\n\nThese notes call out non-obvious patterns from labeled production data. They override naive gate-reading where they conflict.\n\n1. **Stack > client signal**: Several proceeds have weak client metadata (null spend, 1 hire, no rating) but proceed anyway because the stack alignment is undeniable. Conversely, several rejects have $50k+ client spend and 4.99 rating but reject because the stack is wrong (Polylang for a React profile, Wix for any profile). **When in doubt, weigh stack heavier than client metadata.**\n\n2. **Hourly floor is soft-overridable when client signal is elite**: PRD strict floor is $25/hr. Agents have overridden at $15/hr when client was 4.94+ rating with 30+ hires. Mirror this: if hourly is sub-floor BUT (`client_total_spent ≥ $50,000` AND `client_rating ≥ 4.9`) AND stack-perfect, lean toward proceed — but lower `competition_position` and `red_flags` to reflect the budget concern.\n\n3. **\"Old job\" rejects often have STELLAR clients**: Several rejects for \"Old job\" have $50k–$190k client spend and 4.99 rating. Freshness is a hard gate — do NOT try to argue around it on client strength. If `posted_at > 24h ago`, reject as \"Old job\" regardless of other quality signals.\n\n4. **\"Already hired\" / \"Job unavailable\" cannot be detected from skills/budget alone** — only from description text. Look for phrases like \"we found someone\", \"position is closed\", \"this posting has been filled\". Absence of such phrases ≠ open posting.\n\n5. **Per-profile stack drift**: \"Local SEO Specialist\" is a PROCEED for Sana but REJECT for Shayan. Sana's bucket includes SEO/marketing-adjacent; Shayan's is React/Next.js/WordPress. **Always evaluate stack-match against the SPECIFIC profile in input.**\n\n6. **No-code platforms are out-of-stack everywhere**: Wix, Webflow, Bubble, Squarespace, Framer (as a no-code design tool), FlutterFlow, PowerApps, Showit, Systeme.io — none of our profiles field these. Reject on \"Out of stack\".\n\n7. **\"Language barrier\" maps to soft signal, NOT a hard gate**: If you detect non-English client communication, surface it via `confidence_warnings: [\"non_english_description\"]` and reduce `red_flags` component score — do NOT add \"Language barrier\" to `rejection_reasons` unless ALL hard gates also pass.\n\n## OUTPUT RULES\n\n- Emit ONLY JSON conforming to the response schema. No markdown, no prose preamble, no commentary.\n- Every gate evaluated by you (those in `pending_for_llm`) MUST have an `evidence` string ≤ 200 chars citing concrete fields from the input.\n- Every rubric `components.<name>.reason` MUST cite concrete fields from the input.\n- `summary`: ≤ 600 chars. Lead with the decision and the strongest one or two signals.\n- `proposal_angles`: 0-3 strings. Lead with concrete portfolio items or prior work titles from `profile.portfolio_tldr` / `profile.work_history_tldr` when available. NEVER write generic angles (\"strong communication\", \"fast turnaround\") — those are useless to the proposal writer.\n- `missing_signals`: array of strings naming fields you wished you had. Empty array when input is complete.\n- `criteria_version`: echo back the `criteria_version` from input (currently \"0.2\").\n- `prompt_version`: emit \"v1\".\n- `confidence`: number 0..1 reflecting your own certainty.\n- `confidence_warnings`: array — see CONFIDENCE & WARNINGS section above.\n- When `request_meta.evidence_panel_required = true`: also emit `evidence_panel: { strengths: string[], weaknesses: string[], match_explanation: string }`. Keep each array 1-5 items, strings ≤ 200 chars each.\n- When `request_meta.evidence_panel_required = false`: omit `evidence_panel` entirely.\n- **You do NOT emit `effective_decision`, `threshold_flipped`, or `min_score_at_decision`.** Those are computed by the downstream C6 node from your `decision` and `total_score` plus the min-score threshold in force. Stay in your lane.\n\n## SELF-CHECK BEFORE EMITTING\n\n1. Does my `decision` match my gate findings? (any `fail` → must be `reject`)\n2. Are all reason labels in `rejection_reasons` from the 13-element enum? (no inventions, no typo fixes)\n3. If `decision = \"proceed\"` or `\"review\"`: did I emit all 7 rubric components with values ≤ each component's max?\n4. Does `total_score` equal the sum of component values?\n5. Does `tier` match `total_score` per the TIERS table?\n6. Did I trust the deterministic results without re-evaluating them?\n7. Is every `evidence` string anchored to concrete fields from the input (not invented)?\n\nAnswer all 7 yes before emitting."
+          }
+        },
+        "notes": "Failover LLM. Receives main[1] error from the primary Gemini agent. Same Mode A prompt, same retry config, same parser. On error, routes to Persist to DLQ (terminal).",
+        "onError": "continueErrorOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2500
+      },
+      {
+        "id": "54869aed-9998-4712-b6a3-513d6005cfe3",
+        "name": "Validate Output + Apply Threshold (DeepSeek)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          48,
+          96
+        ],
+        "parameters": {
+          "jsCode": "// C6 — Validate Output + Apply Threshold (v3.3 Phase 6 Sitting 2) — DeepSeek path twin\nconst raw = items[0].json;\nlet llmOutput;\ntry {\n  const text = raw.output ?? raw.text ?? JSON.stringify(raw);\n  const stripped = text.trim().replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/, '').trim();\n  llmOutput = JSON.parse(stripped);\n} catch (e) {\n  llmOutput = {\n    decision: 'review',\n    confidence: 0.0,\n    confidence_warnings: ['parse_failure', e.message ?? 'unknown'],\n    rejection_reasons: [],\n    summary: `JSON parse failed on LLM output: ${(raw.output ?? '').slice(0, 200)}`,\n  };\n}\nconst upstream = $('Prepare Classifier Input').first().json;\nconst profileCtx = upstream.profile_context ?? {};\nconst reqMeta = upstream.request_meta ?? {};\nconst job = upstream.job ?? {};\nconst system = profileCtx._system ?? {};\n\nconst ALLOWED = new Set(['proceed', 'reject', 'review']);\nconst verdict = { ...llmOutput };\nif (!ALLOWED.has(verdict.decision)) {\n  verdict.decision = 'review';\n  verdict.confidence = (verdict.confidence ?? 0) * 0.5;\n  verdict.confidence_warnings = [...(verdict.confidence_warnings ?? []), 'invalid_decision_value'];\n}\n\nconst description = (job.description ?? '').toLowerCase();\nconst VIDEO_RE = /\\b(loom|video|screen[-\\s]?recording|record yourself)\\b/i;\nif (verdict.decision === 'proceed' && VIDEO_RE.test(description)) {\n  verdict.decision = 'reject';\n  verdict.rejection_reasons = [...(verdict.rejection_reasons ?? []), 'Video Proposal'];\n  verdict.confidence_warnings = [...(verdict.confidence_warnings ?? []), 'verifier_flipped_video'];\n}\n\nconst classifierMode = system.classifier_mode ?? 'shadow';\nconst minScore = system.effective_min_score ?? 50;\nconst totalScore = verdict.total_score ?? null;\n\nlet effectiveDecision = verdict.decision;\nlet thresholdFlipped = false;\nif (verdict.decision === 'proceed' && totalScore !== null && totalScore < minScore) {\n  effectiveDecision = 'reject';\n  thresholdFlipped = true;\n  verdict.rejection_reasons = [...(verdict.rejection_reasons ?? []), 'Below score threshold'];\n}\n\nverdict.effective_decision           = effectiveDecision;\nverdict.threshold_flipped            = thresholdFlipped;\nverdict.min_score_at_decision        = minScore;\nverdict.classifier_mode_at_decision  = classifierMode;\n\nverdict.profile_id        = profileCtx.profile?.profile_id ?? null;\nverdict.job_external_id   = job.job_id ?? null;\nverdict.snapshot_id       = profileCtx.profile?.id ?? null;\nverdict.model             = 'deepseek-r1';\nverdict.prompt_mode       = 'A_full';\nverdict.evaluation_path   = (upstream.deterministic?.passed?.length ?? 0) > 0\n  ? 'llm_after_deterministic'\n  : 'llm';\nverdict.criteria_version  = verdict.criteria_version ?? upstream.criteria_version ?? '0.2';\nverdict.prompt_version    = verdict.prompt_version  ?? 'v1';\nverdict.source            = reqMeta.source ?? 'auto';\nverdict.task_id           = reqMeta.task_id ?? null;\nverdict.request_meta      = reqMeta;\nverdict.thresholds_used   = upstream.thresholds_in_force ?? null;\n\nreturn [{ json: verdict }];\n"
+        },
+        "notes": "Twin of Validate Output for the DeepSeek path. Identical logic except verdict.model = deepseek-r1."
       }
     ],
     "connections": {
@@ -1114,22 +1285,16 @@
           ]
         ]
       },
-      "Gemini Flash 2.5": {
-        "ai_languageModel": [
-          [
-            {
-              "node": "AI Agent — Relevancy Classifier",
-              "type": "ai_languageModel",
-              "index": 0
-            }
-          ]
-        ]
-      },
       "Structured Output Parser": {
         "ai_outputParser": [
           [
             {
               "node": "AI Agent — Relevancy Classifier",
+              "type": "ai_outputParser",
+              "index": 0
+            },
+            {
+              "node": "AI Agent — Relevancy Classifier (DeepSeek)",
               "type": "ai_outputParser",
               "index": 0
             }
@@ -1147,7 +1312,7 @@
           ],
           [
             {
-              "node": "Persist to DLQ",
+              "node": "AI Agent — Relevancy Classifier (DeepSeek)",
               "type": "main",
               "index": 0
             }
@@ -1240,6 +1405,57 @@
             }
           ]
         ]
+      },
+      "Gemini 2.5 Flash (OpenRouter)": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent — Relevancy Classifier",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DeepSeek R1 (OpenRouter)": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent — Relevancy Classifier (DeepSeek)",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Agent — Relevancy Classifier (DeepSeek)": {
+        "main": [
+          [
+            {
+              "node": "Validate Output + Apply Threshold (DeepSeek)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Persist to DLQ",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate Output + Apply Threshold (DeepSeek)": {
+        "main": [
+          [
+            {
+              "node": "Decision Switch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Aleem Ahmed",
@@ -1248,18 +1464,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-05-12T12:10:33.823Z",
-        "id": 310,
+        "createdAt": "2026-05-12T16:52:33.492Z",
+        "id": 324,
         "workflowId": "hi71jhPU8tmq7hEp",
-        "versionId": "eb58771c-d022-4c93-adb3-3b10bcd2c11a",
+        "versionId": "1f2fec86-2dd0-4d48-a124-a6dceffa50cb",
         "event": "activated",
         "userId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
       },
       {
-        "createdAt": "2026-05-12T12:10:33.732Z",
-        "id": 309,
+        "createdAt": "2026-05-12T16:52:33.390Z",
+        "id": 323,
         "workflowId": "hi71jhPU8tmq7hEp",
-        "versionId": "eb58771c-d022-4c93-adb3-3b10bcd2c11a",
+        "versionId": "1f2fec86-2dd0-4d48-a124-a6dceffa50cb",
         "event": "deactivated",
         "userId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
       }

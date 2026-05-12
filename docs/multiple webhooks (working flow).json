@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-05-12T14:17:39.990Z",
+  "updatedAt": "2026-05-12T16:53:48.194Z",
   "createdAt": "2026-03-05T17:20:23.376Z",
   "id": "EWnZg3svZWwcIRs4",
   "name": "multiple webhooks",
@@ -707,7 +707,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }), _relevancy_score: ($json.relevancyVerdict && $json.relevancyVerdict.total_score) || null, _relevancy_summary: ($json.relevancyVerdict && $json.relevancyVerdict.summary) || null, _relevancy_decision: ($json.relevancyVerdict && $json.relevancyVerdict.decision) || null, _relevancy_effective: ($json.relevancyVerdict && $json.relevancyVerdict.effective_decision) || null, _relevancy_threshold_flipped: ($json.relevancyVerdict && $json.relevancyVerdict.threshold_flipped) || false, _relevancy_reasons: ($json.relevancyVerdict && $json.relevancyVerdict.rejection_reasons) || [], _relevancy_tier: ($json.relevancyVerdict && $json.relevancyVerdict.tier) || null, _relevancy_confidence: ($json.relevancyVerdict && $json.relevancyVerdict.confidence) || null, _relevancy_score_id: ($json.relevancyVerdict && $json.relevancyVerdict._score_id) || null, _relevancy_dlq_id: ($json.relevancyVerdict && $json.relevancyVerdict._dlq_id) || null, _relevancy_evaluated_at: new Date().toISOString(), _relevancy_mode_at_decision: ($json.relevancyVerdict && $json.relevancyVerdict.request_meta && $json.relevancyVerdict.request_meta.classifier_mode) || 'shadow' } }) }}",
+        "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }), _relevancy_score: ($json.relevancyVerdict && $json.relevancyVerdict.total_score) || null, _relevancy_summary: ($json.relevancyVerdict && $json.relevancyVerdict.summary) || null, _relevancy_decision: ($json.relevancyVerdict && $json.relevancyVerdict.decision) || null, _relevancy_effective: ($json.relevancyVerdict && $json.relevancyVerdict.effective_decision) || null, _relevancy_threshold_flipped: ($json.relevancyVerdict && $json.relevancyVerdict.threshold_flipped) || false, _relevancy_reasons: ($json.relevancyVerdict && $json.relevancyVerdict.rejection_reasons) || [], _relevancy_tier: ($json.relevancyVerdict && $json.relevancyVerdict.tier) || null, _relevancy_confidence: ($json.relevancyVerdict && $json.relevancyVerdict.confidence) || null, _relevancy_score_id: ($json.relevancyVerdict && $json.relevancyVerdict._score_id) || null, _relevancy_dlq_id: ($json.relevancyVerdict && $json.relevancyVerdict._dlq_id) || null, _relevancy_evaluated_at: new Date().toISOString(), _relevancy_mode_at_decision: ($json.relevancyVerdict && $json.relevancyVerdict.request_meta && $json.relevancyVerdict.request_meta.classifier_mode) || 'shadow', _relevancy_model: ($json.relevancyVerdict && $json.relevancyVerdict.model) || null } }) }}",
         "options": {
           "response": {
             "response": {
@@ -12520,6 +12520,102 @@
         "022054193146521853557": {
           "status": "success",
           "timestamp": 1778593426367
+        },
+        "022054181397525569141": {
+          "status": "success",
+          "timestamp": 1778600932980
+        },
+        "022054225661770796084": {
+          "status": "success",
+          "timestamp": 1778600970231
+        },
+        "022054230950829936343": {
+          "status": "success",
+          "timestamp": 1778602092277
+        },
+        "022054233152559776206": {
+          "status": "success",
+          "timestamp": 1778602558109
+        },
+        "022054231563079662061": {
+          "status": "success",
+          "timestamp": 1778602649675
+        },
+        "022054189827018457550": {
+          "status": "success",
+          "timestamp": 1778602978658
+        },
+        "022054233955534111182": {
+          "status": "success",
+          "timestamp": 1778603074157
+        },
+        "022054234755681334512": {
+          "status": "success",
+          "timestamp": 1778603220724
+        },
+        "022054236025730506357": {
+          "status": "success",
+          "timestamp": 1778603309118
+        },
+        "022054234746722301168": {
+          "status": "success",
+          "timestamp": 1778603463343
+        },
+        "022054192065978571211": {
+          "status": "success",
+          "timestamp": 1778603549560
+        },
+        "022054238034990866037": {
+          "status": "success",
+          "timestamp": 1778603726397
+        },
+        "022054239594967518935": {
+          "status": "success",
+          "timestamp": 1778604061530
+        },
+        "022054217305209999268": {
+          "status": "success",
+          "timestamp": 1778604569481
+        },
+        "022054194875239697460": {
+          "status": "success",
+          "timestamp": 1778604168507
+        },
+        "022054240161874949360": {
+          "status": "success",
+          "timestamp": 1778604267199
+        },
+        "022054241012806956272": {
+          "status": "success",
+          "timestamp": 1778604450132
+        },
+        "022054196318235462708": {
+          "status": "success",
+          "timestamp": 1778604511770
+        },
+        "022054240335968076238": {
+          "status": "success",
+          "timestamp": 1778605055518
+        },
+        "022054242025630708976": {
+          "status": "success",
+          "timestamp": 1778604763127
+        },
+        "022054241307433406372": {
+          "status": "success",
+          "timestamp": 1778604933723
+        },
+        "022054243425148318960": {
+          "status": "success",
+          "timestamp": 1778604987698
+        },
+        "022054242332690356683": {
+          "status": "success",
+          "timestamp": 1778605176367
+        },
+        "022054199601082175396": {
+          "status": "success",
+          "timestamp": 1778605352892
         }
       },
       "hookRotation": {
@@ -12531,8 +12627,8 @@
         "Saim": "B",
         "saim": "B",
         "shayan": "A",
-        "Rebekah": "A",
-        "khansa": "B",
+        "Rebekah": "B",
+        "khansa": "A",
         "laiba": "B",
         "craig": "A",
         "sana": "B"
@@ -12543,9 +12639,9 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "0641d349-6df5-4bc4-90db-314d5507f183",
-  "activeVersionId": "0641d349-6df5-4bc4-90db-314d5507f183",
-  "versionCounter": 3121,
+  "versionId": "dac30898-79bc-495d-a306-3ff26ad71ca9",
+  "activeVersionId": "dac30898-79bc-495d-a306-3ff26ad71ca9",
+  "versionCounter": 3169,
   "triggerCount": 8,
   "shared": [
     {
@@ -12568,9 +12664,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-05-12T14:17:39.991Z",
-    "createdAt": "2026-05-12T14:17:39.991Z",
-    "versionId": "0641d349-6df5-4bc4-90db-314d5507f183",
+    "updatedAt": "2026-05-12T16:53:48.196Z",
+    "createdAt": "2026-05-12T16:53:48.196Z",
+    "versionId": "dac30898-79bc-495d-a306-3ff26ad71ca9",
     "workflowId": "EWnZg3svZWwcIRs4",
     "nodes": [
       {
@@ -13273,7 +13369,7 @@
           },
           "sendBody": true,
           "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }), _relevancy_score: ($json.relevancyVerdict && $json.relevancyVerdict.total_score) || null, _relevancy_summary: ($json.relevancyVerdict && $json.relevancyVerdict.summary) || null, _relevancy_decision: ($json.relevancyVerdict && $json.relevancyVerdict.decision) || null, _relevancy_effective: ($json.relevancyVerdict && $json.relevancyVerdict.effective_decision) || null, _relevancy_threshold_flipped: ($json.relevancyVerdict && $json.relevancyVerdict.threshold_flipped) || false, _relevancy_reasons: ($json.relevancyVerdict && $json.relevancyVerdict.rejection_reasons) || [], _relevancy_tier: ($json.relevancyVerdict && $json.relevancyVerdict.tier) || null, _relevancy_confidence: ($json.relevancyVerdict && $json.relevancyVerdict.confidence) || null, _relevancy_score_id: ($json.relevancyVerdict && $json.relevancyVerdict._score_id) || null, _relevancy_dlq_id: ($json.relevancyVerdict && $json.relevancyVerdict._dlq_id) || null, _relevancy_evaluated_at: new Date().toISOString(), _relevancy_mode_at_decision: ($json.relevancyVerdict && $json.relevancyVerdict.request_meta && $json.relevancyVerdict.request_meta.classifier_mode) || 'shadow' } }) }}",
+          "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }), _relevancy_score: ($json.relevancyVerdict && $json.relevancyVerdict.total_score) || null, _relevancy_summary: ($json.relevancyVerdict && $json.relevancyVerdict.summary) || null, _relevancy_decision: ($json.relevancyVerdict && $json.relevancyVerdict.decision) || null, _relevancy_effective: ($json.relevancyVerdict && $json.relevancyVerdict.effective_decision) || null, _relevancy_threshold_flipped: ($json.relevancyVerdict && $json.relevancyVerdict.threshold_flipped) || false, _relevancy_reasons: ($json.relevancyVerdict && $json.relevancyVerdict.rejection_reasons) || [], _relevancy_tier: ($json.relevancyVerdict && $json.relevancyVerdict.tier) || null, _relevancy_confidence: ($json.relevancyVerdict && $json.relevancyVerdict.confidence) || null, _relevancy_score_id: ($json.relevancyVerdict && $json.relevancyVerdict._score_id) || null, _relevancy_dlq_id: ($json.relevancyVerdict && $json.relevancyVerdict._dlq_id) || null, _relevancy_evaluated_at: new Date().toISOString(), _relevancy_mode_at_decision: ($json.relevancyVerdict && $json.relevancyVerdict.request_meta && $json.relevancyVerdict.request_meta.classifier_mode) || 'shadow', _relevancy_model: ($json.relevancyVerdict && $json.relevancyVerdict.model) || null } }) }}",
           "options": {
             "response": {
               "response": {
@@ -13933,18 +14029,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-05-12T14:17:40.745Z",
-        "id": 318,
+        "createdAt": "2026-05-12T16:53:48.697Z",
+        "id": 326,
         "workflowId": "EWnZg3svZWwcIRs4",
-        "versionId": "0641d349-6df5-4bc4-90db-314d5507f183",
+        "versionId": "dac30898-79bc-495d-a306-3ff26ad71ca9",
         "event": "activated",
         "userId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
       },
       {
-        "createdAt": "2026-05-12T14:17:40.203Z",
-        "id": 317,
+        "createdAt": "2026-05-12T16:53:48.356Z",
+        "id": 325,
         "workflowId": "EWnZg3svZWwcIRs4",
-        "versionId": "0641d349-6df5-4bc4-90db-314d5507f183",
+        "versionId": "dac30898-79bc-495d-a306-3ff26ad71ca9",
         "event": "deactivated",
         "userId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
       }
