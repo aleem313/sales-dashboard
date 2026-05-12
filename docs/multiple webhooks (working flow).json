@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-29T17:19:17.858Z",
+  "updatedAt": "2026-05-12T11:01:34.358Z",
   "createdAt": "2026-03-05T17:20:23.376Z",
   "id": "EWnZg3svZWwcIRs4",
   "name": "multiple webhooks",
@@ -16,8 +16,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -192,
-        272
+        -240,
+        288
       ]
     },
     {
@@ -173,7 +173,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n// NODE 10: BUILD GPT INPUT\n// Construct the input string for the stored prompt\n// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nconst item = $input.item.json; \nconst job = item.job;\n\n// Budget display\nconst budgetRaw = String(job.budget || '');\nconst budgetDisplay = budgetRaw || 'Not specified';\n\n// Skills display\nconst skillsDisplay = Array.isArray(job.skills) ? job.skills.join(', ') : String(job.skills || 'N/A');\n\n\n// Hook rotation per profile (A → B → A → B...)\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.hookRotation) staticData.hookRotation = {};\nconst profileId = item.profile_id || 'default';\nconst lastHook = staticData.hookRotation[profileId] || 'B';\nconst useHook = lastHook === 'A' ? 'B' : 'A';\nstaticData.hookRotation[profileId] = useHook;\n\nconst gptInput = [\n  `PROFILE: ${item.profile_name}`,\n  `TECH STACK: ${item.stack}`,\n  `AGENT: ${item.assigned_agent}`,\n  '',\n  `USE HOOK: ${useHook}`,\n  '',\n  'PROFILE-SPECIFIC INSTRUCTIONS:',\n  item.custom_gpt_instructions || 'No additional instructions.',\n  '',\n  '=== JOB TITLE ===',\n  job.title,\n  '',\n  '=== JOB DESCRIPTION ===',\n  job.description.substring(0, 2000),\n  '',\n  '=== BUDGET ===',\n  budgetDisplay,\n  '',\n  '=== REQUIRED SKILLS ===',\n  skillsDisplay,\n  '',\n  '=== CLIENT CONTEXT ===',\n  `- Location: ${job.clientCountry || 'Not specified'}`,\n  `- Rating: ${job.clientRating || 'N/A'}/5`,\n  `- Total Spent: $${job.clientSpent || '0'}`,\n  `- Total Hires: ${job.clientHires || '0'}`,\n  '',\n  'Write the proposal now.'\n].join('\\n');\n\nreturn [{ json: { ...item, gptInput } }];"
+        "jsCode": "// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n// NODE 10: BUILD GPT INPUT\n// Construct the input string for the stored prompt\n// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nconst item = $('Route Job').item.json; \nconst job = item.job;\n\n// Budget display\nconst budgetRaw = String(job.budget || '');\nconst budgetDisplay = budgetRaw || 'Not specified';\n\n// Skills display\nconst skillsDisplay = Array.isArray(job.skills) ? job.skills.join(', ') : String(job.skills || 'N/A');\n\n\n// Hook rotation per profile (A → B → A → B...)\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.hookRotation) staticData.hookRotation = {};\nconst profileId = item.profile_id || 'default';\nconst lastHook = staticData.hookRotation[profileId] || 'B';\nconst useHook = lastHook === 'A' ? 'B' : 'A';\nstaticData.hookRotation[profileId] = useHook;\n\nconst gptInput = [\n  `PROFILE: ${item.profile_name}`,\n  `TECH STACK: ${item.stack}`,\n  `AGENT: ${item.assigned_agent}`,\n  '',\n  `USE HOOK: ${useHook}`,\n  '',\n  'PROFILE-SPECIFIC INSTRUCTIONS:',\n  item.custom_gpt_instructions || 'No additional instructions.',\n  '',\n  '=== JOB TITLE ===',\n  job.title,\n  '',\n  '=== JOB DESCRIPTION ===',\n  job.description.substring(0, 2000),\n  '',\n  '=== BUDGET ===',\n  budgetDisplay,\n  '',\n  '=== REQUIRED SKILLS ===',\n  skillsDisplay,\n  '',\n  '=== CLIENT CONTEXT ===',\n  `- Location: ${job.clientCountry || 'Not specified'}`,\n  `- Rating: ${job.clientRating || 'N/A'}/5`,\n  `- Total Spent: $${job.clientSpent || '0'}`,\n  `- Total Hires: ${job.clientHires || '0'}`,\n  '',\n  'Write the proposal now.'\n].join('\\n');\n\nreturn [{ json: { ...item, gptInput } }];"
       },
       "id": "e21fa42e-9d56-43fe-a253-8c83849d4d07",
       "name": "Build GPT Input",
@@ -219,7 +219,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n// NODE 14: FORMAT CLICKUP TASK\n// Rich emoji template from CLICKUP_TASK.md\n// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nconst item = $input.item.json;\nconst job = item.job;\nconst ai = item.aiEval || {};\nconst divider = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';\n\n// Formatting helpers\nconst fmt = n => {\n  const num = parseFloat(n) || 0;\n  return num >= 1000 ? `$${(num/1000).toFixed(0)}k` : `$${num}`;\n};\n\n// Budget display\nconst budgetDisplay = String(job.budget || 'Not specified');\n\n// Client spend\nconst spentRaw = parseFloat(String(job.clientSpent || '0').replace(/[^0-9.]/g, '')) || 0;\nconst spent = spentRaw >= 1000 ? `$${(spentRaw/1000).toFixed(0)}k+` : spentRaw > 0 ? `$${spentRaw}` : 'New client';\n\n// Star rating\nconst rating = parseFloat(job.clientRating);\nconst stars = !isNaN(rating) && rating > 0\n  ? `${'\\u2605'.repeat(Math.round(rating))}${'\\u2606'.repeat(5 - Math.round(rating))} (${rating}/5)`\n  : 'No rating yet';\n\n// Skills display\nconst skillsDisplay = Array.isArray(job.skills) ? job.skills.join(', ') : String(job.skills || 'N/A');\n\n// Dates\nconst posted = job.postedDate\n  ? new Date(job.postedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })\n  : 'Unknown';\nconst generated = new Date().toLocaleString('en-US', {\n  month: 'short', day: 'numeric', year: 'numeric',\n  hour: '2-digit', minute: '2-digit',\n  timeZone: 'UTC', timeZoneName: 'short'\n});\n\n// Hires\nconst hires = job.clientHires ? `${job.clientHires}` : 'No hires yet';\n\n// Build task body\nconst lines = [\n  divider,\n  '\\ud83e\\udd16  PROPOSAL  *(copy and send as-is)*',\n  divider,\n  '',\n  item.proposal,\n  '',\n  '',\n  divider,\n  '\\ud83d\\udccc  JOB SNAPSHOT',\n  divider,\n  '',\n  `\\ud83d\\udd17  **Job Link**      \\u2192  [View on Upwork](${job.url})`,\n  `\\ud83d\\udcb0  **Budget**        \\u2192  ${budgetDisplay}`,\n  `\\ud83d\\udee0  **Skills**        \\u2192  ${skillsDisplay}`,\n  `\\ud83d\\udcc5  **Posted**        \\u2192  ${posted}`,\n  '',\n  '',\n  divider,\n  '\\ud83d\\udc64  CLIENT INTEL',\n  divider,\n  '',\n  `\\ud83c\\udf0d  **Location**      \\u2192  ${job.clientCountry || 'Not specified'}`,\n  `\\u2b50  **Rating**        \\u2192  ${stars}`,\n  `\\ud83d\\udcb5  **Total Spent**   \\u2192  ${spent}`,\n  `\\u2705  **Past Hires**    \\u2192  ${hires}`,\n  '',\n  '',\n  divider,\n  '\\ud83c\\udfaf  ROUTING INFO',\n  divider,\n  '',\n  `\\ud83d\\udc64  **Agent**         \\u2192  ${item.assigned_agent}`,\n  `\\ud83d\\udcc1  **Profile**       \\u2192  ${item.profile_name}`,\n  `\\ud83c\\udff7  **Stack**         \\u2192  ${item.stack}`,\n  `\\ud83c\\udd94  **Job ID**        \\u2192  ~${job.id}`,\n  `\\ud83e\\udd16  **Generated**     \\u2192  ${generated}`,\n  ''\n];\n\nconst taskDescription = lines.join('\\n');\nconst taskName = `[${item.profile_name}] ${job.title}`.substring(0, 100);\n\n// Update static data to mark success\nconst staticData = $getWorkflowStaticData('global');\nif (staticData.seenJobs && job.id) {\n  staticData.seenJobs[job.id] = { status: 'success', timestamp: Date.now() };\n}\n\nreturn [{ json: {\n  ...item,\n  taskName,\n  taskDescription,\n  taskBody: {\n    name: taskName,\n    markdown_description: taskDescription,\n    assignees: [Number(item.agent_clickup_id)],\n    priority: 2,\n    due_date: Date.now() + (24 * 60 * 60 * 1000),\n    due_date_time: true,\n    tags: [item.profile_name, 'vollna-auto']\n  }\n} }];"
+        "jsCode": "// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n// NODE 14: FORMAT CLICKUP TASK\n// Rich emoji template from CLICKUP_TASK.md\n// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nconst item = $input.item.json;\nconst job = item.job;\nconst ai = item.aiEval || {};\nconst divider = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';\n\n// Formatting helpers\nconst fmt = n => {\n  const num = parseFloat(n) || 0;\n  return num >= 1000 ? `$${(num/1000).toFixed(0)}k` : `$${num}`;\n};\n\n// Budget display\nconst budgetDisplay = String(job.budget || 'Not specified');\n\n// Client spend\nconst spentRaw = parseFloat(String(job.clientSpent || '0').replace(/[^0-9.]/g, '')) || 0;\nconst spent = spentRaw >= 1000 ? `$${(spentRaw/1000).toFixed(0)}k+` : spentRaw > 0 ? `$${spentRaw}` : 'New client';\n\n// Star rating\nconst rating = parseFloat(job.clientRating);\nconst stars = !isNaN(rating) && rating > 0\n  ? `${'\\u2605'.repeat(Math.round(rating))}${'\\u2606'.repeat(5 - Math.round(rating))} (${rating}/5)`\n  : 'No rating yet';\n\n// Skills display\nconst skillsDisplay = Array.isArray(job.skills) ? job.skills.join(', ') : String(job.skills || 'N/A');\n\n// Dates\nconst posted = job.postedDate\n  ? new Date(job.postedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })\n  : 'Unknown';\nconst generated = new Date().toLocaleString('en-US', {\n  month: 'short', day: 'numeric', year: 'numeric',\n  hour: '2-digit', minute: '2-digit',\n  timeZone: 'UTC', timeZoneName: 'short'\n});\n\n// Hires\nconst hires = job.clientHires ? `${job.clientHires}` : 'No hires yet';\n\n// Build task body\nconst lines = [\n  divider,\n  '\\ud83e\\udd16  PROPOSAL  *(copy and send as-is)*',\n  divider,\n  '',\n  item.proposal,\n  '',\n  '',\n  divider,\n  '\\ud83d\\udccc  JOB SNAPSHOT',\n  divider,\n  '',\n  `\\ud83d\\udd17  **Job Link**      \\u2192  [View on Upwork](${job.url})`,\n  `\\ud83d\\udcb0  **Budget**        \\u2192  ${budgetDisplay}`,\n  `\\ud83d\\udee0  **Skills**        \\u2192  ${skillsDisplay}`,\n  `\\ud83d\\udcc5  **Posted**        \\u2192  ${posted}`,\n  '',\n  '',\n  divider,\n  '\\ud83d\\udc64  CLIENT INTEL',\n  divider,\n  '',\n  `\\ud83c\\udf0d  **Location**      \\u2192  ${job.clientCountry || 'Not specified'}`,\n  `\\u2b50  **Rating**        \\u2192  ${stars}`,\n  `\\ud83d\\udcb5  **Total Spent**   \\u2192  ${spent}`,\n  `\\u2705  **Past Hires**    \\u2192  ${hires}`,\n  '',\n  '',\n  divider,\n  '\\ud83c\\udfaf  ROUTING INFO',\n  divider,\n  '',\n  `\\ud83d\\udc64  **Agent**         \\u2192  ${item.assigned_agent}`,\n  `\\ud83d\\udcc1  **Profile**       \\u2192  ${item.profile_name}`,\n  `\\ud83c\\udff7  **Stack**         \\u2192  ${item.stack}`,\n  `\\ud83c\\udd94  **Job ID**        \\u2192  ~${job.id}`,\n  `\\ud83e\\udd16  **Generated**     \\u2192  ${generated}`,\n  ''\n];\n\nconst taskDescription = lines.join('\\n');\nconst taskName = `[${item.profile_name}] ${job.title}`.substring(0, 100);\n\n// Phase 7: relevancy classifier verdict (Shadow mode = audit only, no routing change)\nlet relevancyVerdict = null;\ntry {\n  const ref = $('Score Relevancy');\n  if (ref && ref.isExecuted) {\n    relevancyVerdict = ref.first().json || null;\n  }\n} catch (e) { /* Score Relevancy didn't execute (K1 bypass path) */ }\n\n// Update static data to mark success\nconst staticData = $getWorkflowStaticData('global');\nif (staticData.seenJobs && job.id) {\n  staticData.seenJobs[job.id] = { status: 'success', timestamp: Date.now() };\n}\n\nreturn [{ json: {\n  ...item,\n  taskName,\n  taskDescription,\n  relevancyVerdict,\n  taskBody: {\n    name: taskName,\n    markdown_description: taskDescription,\n    assignees: [Number(item.agent_clickup_id)],\n    priority: 2,\n    due_date: Date.now() + (24 * 60 * 60 * 1000),\n    due_date_time: true,\n    tags: [item.profile_name, 'vollna-auto']\n  }\n} }];"
       },
       "id": "6963d485-b2c9-4360-a26f-0c901c8dafa5",
       "name": "Format ClickUp Task",
@@ -689,14 +689,6 @@
       ]
     },
     {
-      "id": "a55e6692-843c-4ef6-ba9b-e62a3ddab7b6",
-      "name": "Create Board Task - Self-Hosted",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        1504,
-        -320
-      ],
       "parameters": {
         "method": "POST",
         "url": "http://157.173.110.62/api/v1/webhooks/tasks",
@@ -715,7 +707,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }) } }) }}",
+        "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }), _relevancy_score: ($json.relevancyVerdict && $json.relevancyVerdict.total_score) || null, _relevancy_summary: ($json.relevancyVerdict && $json.relevancyVerdict.summary) || null, _relevancy_decision: ($json.relevancyVerdict && $json.relevancyVerdict.decision) || null, _relevancy_effective: ($json.relevancyVerdict && $json.relevancyVerdict.effective_decision) || null, _relevancy_threshold_flipped: ($json.relevancyVerdict && $json.relevancyVerdict.threshold_flipped) || false, _relevancy_reasons: ($json.relevancyVerdict && $json.relevancyVerdict.rejection_reasons) || [], _relevancy_tier: ($json.relevancyVerdict && $json.relevancyVerdict.tier) || null, _relevancy_confidence: ($json.relevancyVerdict && $json.relevancyVerdict.confidence) || null, _relevancy_score_id: ($json.relevancyVerdict && $json.relevancyVerdict._score_id) || null, _relevancy_dlq_id: ($json.relevancyVerdict && $json.relevancyVerdict._dlq_id) || null, _relevancy_evaluated_at: new Date().toISOString(), _relevancy_mode_at_decision: ($json.relevancyVerdict && $json.relevancyVerdict.request_meta && $json.relevancyVerdict.request_meta.classifier_mode) || 'shadow' } }) }}",
         "options": {
           "response": {
             "response": {
@@ -724,7 +716,201 @@
           }
         }
       },
+      "id": "a55e6692-843c-4ef6-ba9b-e62a3ddab7b6",
+      "name": "Create Board Task - Self-Hosted",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1504,
+        -320
+      ],
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "classifier-enabled-1",
+              "leftValue": "enabled",
+              "rightValue": "disabled",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f95daa14-6a69-49ab-a8c1-f4428c785685",
+      "name": "IF - Classifier Enabled",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -688,
+        112
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": "hi71jhPU8tmq7hEp",
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "04bcc0ca-7a0a-48fb-9377-6a47148cf599",
+      "name": "Score Relevancy",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        48
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "active-reject",
+                    "leftValue": "={{ $json.request_meta.classifier_mode === 'active' && $json.effective_decision === 'reject' }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "active_reject"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "active-proceed",
+                    "leftValue": "={{ $json.request_meta.classifier_mode === 'active' && $json.effective_decision === 'proceed' }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "active_proceed"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "active-review",
+                    "leftValue": "={{ $json.request_meta.classifier_mode === 'active' && $json.effective_decision === 'review' }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "active_review"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "shadow-any",
+                    "leftValue": "={{ $json.request_meta.classifier_mode === 'shadow' }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "shadow_any"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 0
+        }
+      },
+      "id": "10a25a93-544c-4853-b4a5-ac8c5ca7a2d5",
+      "name": "Route Verdict",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -272,
+        -16
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "id": "928424ce-b56d-4fb9-a86e-fa6a07420065",
+      "name": "End (Audit Only)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -112,
+        -416
+      ]
     }
   ],
   "connections": {
@@ -743,7 +929,7 @@
       "main": [
         [
           {
-            "node": "Build GPT Input",
+            "node": "IF - Classifier Enabled",
             "type": "main",
             "index": 0
           }
@@ -1075,6 +1261,74 @@
         [
           {
             "node": "Process Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Classifier Enabled": {
+      "main": [
+        [
+          {
+            "node": "Score Relevancy",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build GPT Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Relevancy": {
+      "main": [
+        [
+          {
+            "node": "Route Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "End (Audit Only)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Verdict": {
+      "main": [
+        [
+          {
+            "node": "End (Audit Only)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build GPT Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build GPT Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build GPT Input",
             "type": "main",
             "index": 0
           }
@@ -10785,6 +11039,1386 @@
         "022049536184878963560": {
           "status": "success",
           "timestamp": 1777482861405
+        },
+        "022049538750855382396": {
+          "status": "success",
+          "timestamp": 1777483339751
+        },
+        "022049496696672690133": {
+          "status": "success",
+          "timestamp": 1777484070524
+        },
+        "022049497531759276401": {
+          "status": "gpt_failed",
+          "timestamp": 1777484361109
+        },
+        "022049544262626345664": {
+          "status": "success",
+          "timestamp": 1777484662625
+        },
+        "022049499665803844456": {
+          "status": "success",
+          "timestamp": 1777484782982
+        },
+        "022049545493369727746": {
+          "status": "success",
+          "timestamp": 1777484903041
+        },
+        "022049545463927014780": {
+          "status": "success",
+          "timestamp": 1777485081270
+        },
+        "022049546434661331153": {
+          "status": "success",
+          "timestamp": 1777485140054
+        },
+        "022049547583722697073": {
+          "status": "gpt_failed",
+          "timestamp": 1777485503717
+        },
+        "022049548464895635825": {
+          "status": "gpt_failed",
+          "timestamp": 1777485633770
+        },
+        "022049548756837190609": {
+          "status": "success",
+          "timestamp": 1777485741867
+        },
+        "022049549386318334929": {
+          "status": "gpt_failed",
+          "timestamp": 1777485862336
+        },
+        "022049504021429034965": {
+          "status": "gpt_failed",
+          "timestamp": 1777485915780
+        },
+        "022049550838973582289": {
+          "status": "success",
+          "timestamp": 1777486224775
+        },
+        "022049888045771555520": {
+          "status": "success",
+          "timestamp": 1777566561905
+        },
+        "022049895793844302033": {
+          "status": "success",
+          "timestamp": 1777568540297
+        },
+        "022049897112546062545": {
+          "status": "success",
+          "timestamp": 1777568660029
+        },
+        "022049899007203377856": {
+          "status": "success",
+          "timestamp": 1777569197900
+        },
+        "022049899176183804273": {
+          "status": "success",
+          "timestamp": 1777569320908
+        },
+        "022049900036357088211": {
+          "status": "success",
+          "timestamp": 1777569439155
+        },
+        "022049855005888158568": {
+          "status": "success",
+          "timestamp": 1777569562364
+        },
+        "022049901350502057159": {
+          "status": "success",
+          "timestamp": 1777569801668
+        },
+        "022049901971143386067": {
+          "status": "success",
+          "timestamp": 1777569919768
+        },
+        "022049902778381572968": {
+          "status": "success",
+          "timestamp": 1777570099950
+        },
+        "022049902679492997489": {
+          "status": "success",
+          "timestamp": 1777570236352
+        },
+        "022049891244641387200": {
+          "status": "success",
+          "timestamp": 1777570640548
+        },
+        "022049894761659642065": {
+          "status": "gpt_failed",
+          "timestamp": 1777570758194
+        },
+        "022049910204470003068": {
+          "status": "success",
+          "timestamp": 1777571965717
+        },
+        "022049911132051243712": {
+          "status": "success",
+          "timestamp": 1777572204213
+        },
+        "022049870318080438641": {
+          "status": "gpt_failed",
+          "timestamp": 1777573099933
+        },
+        "022049918240100790641": {
+          "status": "success",
+          "timestamp": 1777573835572
+        },
+        "022049914583352739196": {
+          "status": "success",
+          "timestamp": 1777573941168
+        },
+        "022049919703371269319": {
+          "status": "success",
+          "timestamp": 1777574058528
+        },
+        "022049919537973637489": {
+          "status": "gpt_failed",
+          "timestamp": 1777574176206
+        },
+        "022049921079711177576": {
+          "status": "gpt_failed",
+          "timestamp": 1777574962468
+        },
+        "022049923734642695016": {
+          "status": "gpt_failed",
+          "timestamp": 1777575079190
+        },
+        "022049923490752283847": {
+          "status": "success",
+          "timestamp": 1777575262838
+        },
+        "022049923169841912680": {
+          "status": "success",
+          "timestamp": 1777575378289
+        },
+        "022049929236728787153": {
+          "status": "success",
+          "timestamp": 1777576462295
+        },
+        "022049930058596140231": {
+          "status": "success",
+          "timestamp": 1777576577771
+        },
+        "022049930886618880872": {
+          "status": "gpt_failed",
+          "timestamp": 1777576819310
+        },
+        "022049931503112160636": {
+          "status": "gpt_failed",
+          "timestamp": 1777576937959
+        },
+        "022049931171682313171": {
+          "status": "success",
+          "timestamp": 1777577059340
+        },
+        "022049932268684585730": {
+          "status": "success",
+          "timestamp": 1777577182242
+        },
+        "022049937210476409201": {
+          "status": "gpt_failed",
+          "timestamp": 1777578441757
+        },
+        "022049943189091549888": {
+          "status": "success",
+          "timestamp": 1777579696463
+        },
+        "022049964045461127872": {
+          "status": "success",
+          "timestamp": 1777584803401
+        },
+        "022049965970722161344": {
+          "status": "success",
+          "timestamp": 1777585161335
+        },
+        "022049920330551518163": {
+          "status": "success",
+          "timestamp": 1777585937401
+        },
+        "022049972584788779987": {
+          "status": "success",
+          "timestamp": 1777586723549
+        },
+        "022049973843556598464": {
+          "status": "success",
+          "timestamp": 1777587020342
+        },
+        "022049976792181670592": {
+          "status": "success",
+          "timestamp": 1777587739589
+        },
+        "022049933608802462466": {
+          "status": "success",
+          "timestamp": 1777588758431
+        },
+        "022049980886321867522": {
+          "status": "success",
+          "timestamp": 1777588640396
+        },
+        "022049937668267913585": {
+          "status": "success",
+          "timestamp": 1777589246117
+        },
+        "022049984992458704252": {
+          "status": "gpt_failed",
+          "timestamp": 1777590138780
+        },
+        "022049940045955384519": {
+          "status": "success",
+          "timestamp": 1777589777115
+        },
+        "022049986331254074114": {
+          "status": "gpt_failed",
+          "timestamp": 1777590026901
+        },
+        "022049987047577688936": {
+          "status": "success",
+          "timestamp": 1777590257031
+        },
+        "022049984293337635688": {
+          "status": "success",
+          "timestamp": 1777590377823
+        },
+        "022049944254345774460": {
+          "status": "success",
+          "timestamp": 1777590680004
+        },
+        "022049944181705027793": {
+          "status": "success",
+          "timestamp": 1777590799319
+        },
+        "022049991976083776467": {
+          "status": "success",
+          "timestamp": 1777591338944
+        },
+        "022049934939036070097": {
+          "status": "gpt_failed",
+          "timestamp": 1777592597756
+        },
+        "022050269632926835667": {
+          "status": "success",
+          "timestamp": 1777657460865
+        },
+        "022050227602314506449": {
+          "status": "success",
+          "timestamp": 1777658365496
+        },
+        "022050273761752023744": {
+          "status": "success",
+          "timestamp": 1777658486179
+        },
+        "022050276886459147159": {
+          "status": "gpt_failed",
+          "timestamp": 1777659321257
+        },
+        "022050278351395316631": {
+          "status": "gpt_failed",
+          "timestamp": 1777659676129
+        },
+        "022050278842952069329": {
+          "status": "success",
+          "timestamp": 1777660230628
+        },
+        "022050277583890990279": {
+          "status": "gpt_failed",
+          "timestamp": 1777659915906
+        },
+        "022050280361210425553": {
+          "status": "success",
+          "timestamp": 1777660097787
+        },
+        "022050282041077209960": {
+          "status": "success",
+          "timestamp": 1777660458568
+        },
+        "022050280447439045312": {
+          "status": "gpt_failed",
+          "timestamp": 1777660576504
+        },
+        "022050290289332970451": {
+          "status": "gpt_failed",
+          "timestamp": 1777662499630
+        },
+        "022050293572309425000": {
+          "status": "gpt_failed",
+          "timestamp": 1777663280358
+        },
+        "022050294069948706478": {
+          "status": "success",
+          "timestamp": 1777663398421
+        },
+        "022050294375969326460": {
+          "status": "gpt_failed",
+          "timestamp": 1777663516012
+        },
+        "022050315397278014312": {
+          "status": "success",
+          "timestamp": 1777668918575
+        },
+        "022050316558963699374": {
+          "status": "success",
+          "timestamp": 1777668799031
+        },
+        "022050272563080192979": {
+          "status": "gpt_failed",
+          "timestamp": 1777669038840
+        },
+        "022050319159673537735": {
+          "status": "success",
+          "timestamp": 1777669339301
+        },
+        "022050322264265581523": {
+          "status": "gpt_failed",
+          "timestamp": 1777670117346
+        },
+        "022050277964268470976": {
+          "status": "success",
+          "timestamp": 1777670361326
+        },
+        "022050282311716564654": {
+          "status": "gpt_failed",
+          "timestamp": 1777671374811
+        },
+        "022050330073957434048": {
+          "status": "success",
+          "timestamp": 1777671920765
+        },
+        "022050330207183188177": {
+          "status": "gpt_failed",
+          "timestamp": 1777672574474
+        },
+        "022050332033483408764": {
+          "status": "success",
+          "timestamp": 1777672461528
+        },
+        "022050332986738959255": {
+          "status": "gpt_failed",
+          "timestamp": 1777672698593
+        },
+        "022050288916302390227": {
+          "status": "success",
+          "timestamp": 1777672936792
+        },
+        "022050289304141426350": {
+          "status": "gpt_failed",
+          "timestamp": 1777673054600
+        },
+        "022050290595236277934": {
+          "status": "success",
+          "timestamp": 1777673238723
+        },
+        "022051339978803375790": {
+          "status": "success",
+          "timestamp": 1777912761291
+        },
+        "022051330641462893416": {
+          "status": "gpt_failed",
+          "timestamp": 1777912881187
+        },
+        "022051295667949154513": {
+          "status": "gpt_failed",
+          "timestamp": 1777913005617
+        },
+        "022051297646412634984": {
+          "status": "success",
+          "timestamp": 1777913424484
+        },
+        "022051343531160765820": {
+          "status": "success",
+          "timestamp": 1777913599420
+        },
+        "022051342315775378631": {
+          "status": "gpt_failed",
+          "timestamp": 1777913838803
+        },
+        "022051346156795474129": {
+          "status": "success",
+          "timestamp": 1777914262388
+        },
+        "022051336785134347219": {
+          "status": "success",
+          "timestamp": 1777914921271
+        },
+        "022051346446896383175": {
+          "status": "gpt_failed",
+          "timestamp": 1777914634366
+        },
+        "022051348702544659836": {
+          "status": "gpt_failed",
+          "timestamp": 1777914795822
+        },
+        "022051349938182284243": {
+          "status": "success",
+          "timestamp": 1777915102835
+        },
+        "022051359640079637352": {
+          "status": "success",
+          "timestamp": 1777917378171
+        },
+        "022051367197775021255": {
+          "status": "success",
+          "timestamp": 1777919361204
+        },
+        "022051365807855895932": {
+          "status": "success",
+          "timestamp": 1777919479277
+        },
+        "022051367833385351877": {
+          "status": "success",
+          "timestamp": 1777919602802
+        },
+        "022051368311174154511": {
+          "status": "success",
+          "timestamp": 1777919722793
+        },
+        "022051370918806362984": {
+          "status": "gpt_failed",
+          "timestamp": 1777920679164
+        },
+        "022051325819969125061": {
+          "status": "gpt_failed",
+          "timestamp": 1777920324196
+        },
+        "022051371241379455955": {
+          "status": "gpt_failed",
+          "timestamp": 1777920376254
+        },
+        "022051371996933129596": {
+          "status": "success",
+          "timestamp": 1777920441209
+        },
+        "022051366559332566396": {
+          "status": "success",
+          "timestamp": 1777920559745
+        },
+        "022051373477367112659": {
+          "status": "success",
+          "timestamp": 1777920799194
+        },
+        "022051374329402355374": {
+          "status": "success",
+          "timestamp": 1777920980811
+        },
+        "022051374573450381583": {
+          "status": "success",
+          "timestamp": 1777921098293
+        },
+        "022051377727950283731": {
+          "status": "success",
+          "timestamp": 1777921939483
+        },
+        "022051384487782598927": {
+          "status": "success",
+          "timestamp": 1777923382023
+        },
+        "022051340707589271761": {
+          "status": "success",
+          "timestamp": 1777924579377
+        },
+        "022051394318400702735": {
+          "status": "success",
+          "timestamp": 1777926260885
+        },
+        "022051384291084480721": {
+          "status": "success",
+          "timestamp": 1777926138130
+        },
+        "022051396983031197358": {
+          "status": "success",
+          "timestamp": 1777926323149
+        },
+        "022051399381794994885": {
+          "status": "success",
+          "timestamp": 1777926979341
+        },
+        "022051403372760150225": {
+          "status": "gpt_failed",
+          "timestamp": 1777927936289
+        },
+        "022051404609647272915": {
+          "status": "success",
+          "timestamp": 1777928240990
+        },
+        "022051405866978116988": {
+          "status": "success",
+          "timestamp": 1777928540302
+        },
+        "022051408140347688135": {
+          "status": "success",
+          "timestamp": 1777929027678
+        },
+        "022051408508521416060": {
+          "status": "success",
+          "timestamp": 1777929141602
+        },
+        "022051408891062772691": {
+          "status": "success",
+          "timestamp": 1777929261046
+        },
+        "022051412005287489198": {
+          "status": "gpt_failed",
+          "timestamp": 1777929916056
+        },
+        "022051412486486801093": {
+          "status": "success",
+          "timestamp": 1777930039877
+        },
+        "022051367962052707527": {
+          "status": "success",
+          "timestamp": 1777930158461
+        },
+        "022051415288114570195": {
+          "status": "success",
+          "timestamp": 1777930702376
+        },
+        "022051415743719064775": {
+          "status": "success",
+          "timestamp": 1777930824787
+        },
+        "022051416045189024015": {
+          "status": "success",
+          "timestamp": 1777930940416
+        },
+        "022051418095696004295": {
+          "status": "gpt_failed",
+          "timestamp": 1777931782185
+        },
+        "022051418573390789317": {
+          "status": "success",
+          "timestamp": 1777931536096
+        },
+        "022051419543969512133": {
+          "status": "success",
+          "timestamp": 1777931661544
+        },
+        "022051375103222493393": {
+          "status": "gpt_failed",
+          "timestamp": 1777931959577
+        },
+        "022051421353185593615": {
+          "status": "success",
+          "timestamp": 1777932079220
+        },
+        "022051421471533218501": {
+          "status": "success",
+          "timestamp": 1777932199042
+        },
+        "022051377323120395644": {
+          "status": "success",
+          "timestamp": 1777932381589
+        },
+        "022051419377005566824": {
+          "status": "success",
+          "timestamp": 1777932981472
+        },
+        "022051433822235966149": {
+          "status": "success",
+          "timestamp": 1777935139872
+        },
+        "022051436035078145223": {
+          "status": "success",
+          "timestamp": 1777935626446
+        },
+        "022051437405602853073": {
+          "status": "success",
+          "timestamp": 1777935983672
+        },
+        "022051439105858291983": {
+          "status": "success",
+          "timestamp": 1777936341963
+        },
+        "022051437525113029831": {
+          "status": "gpt_failed",
+          "timestamp": 1777936456934
+        },
+        "022051440213999215571": {
+          "status": "success",
+          "timestamp": 1777936639764
+        },
+        "022051680165867887464": {
+          "status": "gpt_failed",
+          "timestamp": 1777994477771
+        },
+        "022051683975818586546": {
+          "status": "success",
+          "timestamp": 1777994842439
+        },
+        "022051685121263188677": {
+          "status": "gpt_failed",
+          "timestamp": 1777995077445
+        },
+        "022051685933547735311": {
+          "status": "gpt_failed",
+          "timestamp": 1777995258064
+        },
+        "022051686782136738771": {
+          "status": "gpt_failed",
+          "timestamp": 1777995385296
+        },
+        "022051687531413816519": {
+          "status": "success",
+          "timestamp": 1777995801650
+        },
+        "022051689608567531954": {
+          "status": "success",
+          "timestamp": 1777996103481
+        },
+        "022051689190068110535": {
+          "status": "gpt_failed",
+          "timestamp": 1777996700847
+        },
+        "022051691464068909327": {
+          "status": "success",
+          "timestamp": 1777996580032
+        },
+        "022051646480159652549": {
+          "status": "gpt_failed",
+          "timestamp": 1777996639601
+        },
+        "022051685831915547058": {
+          "status": "success",
+          "timestamp": 1777996833032
+        },
+        "022051691108303841714": {
+          "status": "success",
+          "timestamp": 1777996881254
+        },
+        "022051694083992183763": {
+          "status": "success",
+          "timestamp": 1777997183886
+        },
+        "022051693680425039980": {
+          "status": "success",
+          "timestamp": 1777997311682
+        },
+        "022051695114065353576": {
+          "status": "success",
+          "timestamp": 1777997425442
+        },
+        "022051696185623840124": {
+          "status": "gpt_failed",
+          "timestamp": 1777997897101
+        },
+        "022051662080264063247": {
+          "status": "gpt_failed",
+          "timestamp": 1778000362099
+        },
+        "022051708278865708231": {
+          "status": "success",
+          "timestamp": 1778000542460
+        },
+        "022051663595272977093": {
+          "status": "success",
+          "timestamp": 1778001078118
+        },
+        "022051709255829469893": {
+          "status": "success",
+          "timestamp": 1778000840749
+        },
+        "022051709518500808975": {
+          "status": "success",
+          "timestamp": 1778000964671
+        },
+        "022051709804797223891": {
+          "status": "success",
+          "timestamp": 1778001032180
+        },
+        "022051712672428530536": {
+          "status": "success",
+          "timestamp": 1778001626922
+        },
+        "022051713588990965868": {
+          "status": "success",
+          "timestamp": 1778001798045
+        },
+        "022051714416344770994": {
+          "status": "success",
+          "timestamp": 1778002227751
+        },
+        "022051715638814041043": {
+          "status": "success",
+          "timestamp": 1778002523105
+        },
+        "022051716902388443570": {
+          "status": "success",
+          "timestamp": 1778002641592
+        },
+        "022051718834739611004": {
+          "status": "success",
+          "timestamp": 1778003302676
+        },
+        "022051718035330294739": {
+          "status": "success",
+          "timestamp": 1778003482252
+        },
+        "022051720013316168552": {
+          "status": "success",
+          "timestamp": 1778003546117
+        },
+        "022051720111666103676": {
+          "status": "gpt_failed",
+          "timestamp": 1778003655862
+        },
+        "022051721246288250236": {
+          "status": "success",
+          "timestamp": 1778003899984
+        },
+        "022051720588510414023": {
+          "status": "success",
+          "timestamp": 1778004030787
+        },
+        "022051722789426608837": {
+          "status": "success",
+          "timestamp": 1778004265172
+        },
+        "022051724311736662725": {
+          "status": "gpt_failed",
+          "timestamp": 1778004384414
+        },
+        "022051723477467474354": {
+          "status": "gpt_failed",
+          "timestamp": 1778004504869
+        },
+        "022051724778349397372": {
+          "status": "success",
+          "timestamp": 1778004982177
+        },
+        "022051724459217388924": {
+          "status": "gpt_failed",
+          "timestamp": 1778004679277
+        },
+        "022051725460087235539": {
+          "status": "success",
+          "timestamp": 1778004862570
+        },
+        "022051681773806552444": {
+          "status": "gpt_failed",
+          "timestamp": 1778005102575
+        },
+        "022051682684421610344": {
+          "status": "gpt_failed",
+          "timestamp": 1778005226024
+        },
+        "022051726481551394172": {
+          "status": "gpt_failed",
+          "timestamp": 1778005342851
+        },
+        "022051729086591924332": {
+          "status": "success",
+          "timestamp": 1778005522777
+        },
+        "022051684176717359538": {
+          "status": "success",
+          "timestamp": 1778005705887
+        },
+        "022051731183554921852": {
+          "status": "success",
+          "timestamp": 1778006059864
+        },
+        "022051729739139721650": {
+          "status": "success",
+          "timestamp": 1778006180258
+        },
+        "022051732587916813267": {
+          "status": "gpt_failed",
+          "timestamp": 1778006240351
+        },
+        "022051731908458924303": {
+          "status": "success",
+          "timestamp": 1778006299939
+        },
+        "022051687225879741639": {
+          "status": "success",
+          "timestamp": 1778006362783
+        },
+        "022051688139625802162": {
+          "status": "gpt_failed",
+          "timestamp": 1778006600369
+        },
+        "022051733654308461416": {
+          "status": "success",
+          "timestamp": 1778007081026
+        },
+        "022051734351205939909": {
+          "status": "success",
+          "timestamp": 1778006779639
+        },
+        "022051689929507293455": {
+          "status": "gpt_failed",
+          "timestamp": 1778007445730
+        },
+        "022051727367780903346": {
+          "status": "success",
+          "timestamp": 1778007569582
+        },
+        "022051689084293875068": {
+          "status": "success",
+          "timestamp": 1778007323919
+        },
+        "022051729571124292018": {
+          "status": "gpt_failed",
+          "timestamp": 1778007677290
+        },
+        "022051746273922376659": {
+          "status": "gpt_failed",
+          "timestamp": 1778009716869
+        },
+        "022051701864941533893": {
+          "status": "success",
+          "timestamp": 1778009841199
+        },
+        "022051737480312780908": {
+          "status": "success",
+          "timestamp": 1778009961115
+        },
+        "022051742522157636456": {
+          "status": "gpt_failed",
+          "timestamp": 1778010142633
+        },
+        "022051704681033680071": {
+          "status": "success",
+          "timestamp": 1778010441131
+        },
+        "022051751537274914172": {
+          "status": "success",
+          "timestamp": 1778010923881
+        },
+        "022051752785654973820": {
+          "status": "success",
+          "timestamp": 1778011238889
+        },
+        "022050851280901184360": {
+          "status": "success",
+          "timestamp": 1778015958637
+        },
+        "022051773194454825068": {
+          "status": "success",
+          "timestamp": 1778016078637
+        },
+        "022051775264175678419": {
+          "status": "success",
+          "timestamp": 1778016558945
+        },
+        "022051776345251584872": {
+          "status": "success",
+          "timestamp": 1778016799442
+        },
+        "022051777266861808488": {
+          "status": "success",
+          "timestamp": 1778017038932
+        },
+        "022051733312686737679": {
+          "status": "success",
+          "timestamp": 1778017222932
+        },
+        "022051734977468767080": {
+          "status": "gpt_failed",
+          "timestamp": 1778017640714
+        },
+        "022051776461429746098": {
+          "status": "success",
+          "timestamp": 1778017759277
+        },
+        "022051780738002584956": {
+          "status": "success",
+          "timestamp": 1778017880395
+        },
+        "022051735660332972140": {
+          "status": "success",
+          "timestamp": 1778017999547
+        },
+        "022051780005580028613": {
+          "status": "success",
+          "timestamp": 1778018180591
+        },
+        "022051780955569780844": {
+          "status": "success",
+          "timestamp": 1778018300150
+        },
+        "022051739123854599123": {
+          "status": "success",
+          "timestamp": 1778018719290
+        },
+        "022051798806655609266": {
+          "status": "success",
+          "timestamp": 1778022198816
+        },
+        "022051797416786917484": {
+          "status": "gpt_failed",
+          "timestamp": 1778022318627
+        },
+        "022051796128040477651": {
+          "status": "gpt_failed",
+          "timestamp": 1778022440249
+        },
+        "022051799885791173480": {
+          "status": "success",
+          "timestamp": 1778022561617
+        },
+        "022051801530207560659": {
+          "status": "success",
+          "timestamp": 1778022858133
+        },
+        "022051754960408069319": {
+          "status": "success",
+          "timestamp": 1778022977660
+        },
+        "022051802384443066639": {
+          "status": "gpt_failed",
+          "timestamp": 1778023100058
+        },
+        "022051802935364754280": {
+          "status": "gpt_failed",
+          "timestamp": 1778023218769
+        },
+        "022051805046718810383": {
+          "status": "success",
+          "timestamp": 1778023701652
+        },
+        "022051760382640702663": {
+          "status": "success",
+          "timestamp": 1778023825547
+        },
+        "022051760464589179151": {
+          "status": "success",
+          "timestamp": 1778023939158
+        },
+        "022052015100564795006": {
+          "status": "gpt_failed",
+          "timestamp": 1778084660153
+        },
+        "022052079012420303557": {
+          "status": "success",
+          "timestamp": 1778089162685
+        },
+        "022052081792200341612": {
+          "status": "success",
+          "timestamp": 1778089523306
+        },
+        "022052130223274582995": {
+          "status": "gpt_failed",
+          "timestamp": 1778101158759
+        },
+        "022052132465836461665": {
+          "status": "success",
+          "timestamp": 1778101701691
+        },
+        "022052133146402942590": {
+          "status": "gpt_failed",
+          "timestamp": 1778101877140
+        },
+        "022052133591447957118": {
+          "status": "success",
+          "timestamp": 1778102002986
+        },
+        "022052136281706023183": {
+          "status": "success",
+          "timestamp": 1778102603470
+        },
+        "022052140466027532942": {
+          "status": "success",
+          "timestamp": 1778103740665
+        },
+        "022052141188789210721": {
+          "status": "success",
+          "timestamp": 1778104524034
+        },
+        "022052143219377606241": {
+          "status": "success",
+          "timestamp": 1778104832568
+        },
+        "022052144412209137935": {
+          "status": "success",
+          "timestamp": 1778104697688
+        },
+        "022052102793076275308": {
+          "status": "success",
+          "timestamp": 1778105361746
+        },
+        "022052149518428204670": {
+          "status": "success",
+          "timestamp": 1778105778075
+        },
+        "022052149994131499442": {
+          "status": "success",
+          "timestamp": 1778105896082
+        },
+        "022052154950756464748": {
+          "status": "success",
+          "timestamp": 1778107579798
+        },
+        "022052110156490652357": {
+          "status": "gpt_failed",
+          "timestamp": 1778107227044
+        },
+        "022052110623629282913": {
+          "status": "gpt_failed",
+          "timestamp": 1778107341350
+        },
+        "022052156361934239852": {
+          "status": "success",
+          "timestamp": 1778107456835
+        },
+        "022052157896931195589": {
+          "status": "gpt_failed",
+          "timestamp": 1778108241580
+        },
+        "022052100681313456782": {
+          "status": "success",
+          "timestamp": 1778108121826
+        },
+        "022052159958152810081": {
+          "status": "success",
+          "timestamp": 1778108599322
+        },
+        "022052162374097079905": {
+          "status": "success",
+          "timestamp": 1778109320861
+        },
+        "022052117194063002309": {
+          "status": "gpt_failed",
+          "timestamp": 1778108955794
+        },
+        "022052163920017705231": {
+          "status": "success",
+          "timestamp": 1778109202235
+        },
+        "022052420481090713708": {
+          "status": "success",
+          "timestamp": 1778170402120
+        },
+        "022052375583657584292": {
+          "status": "success",
+          "timestamp": 1778170523109
+        },
+        "022052374010391883390": {
+          "status": "success",
+          "timestamp": 1778170640633
+        },
+        "022052422979979528463": {
+          "status": "success",
+          "timestamp": 1778170940978
+        },
+        "022052429281178888626": {
+          "status": "success",
+          "timestamp": 1778172440978
+        },
+        "022052429818886486124": {
+          "status": "success",
+          "timestamp": 1778172559846
+        },
+        "022052431754274744754": {
+          "status": "gpt_failed",
+          "timestamp": 1778173159792
+        },
+        "022052387731973853131": {
+          "status": "gpt_failed",
+          "timestamp": 1778173339182
+        },
+        "022052428715085434465": {
+          "status": "success",
+          "timestamp": 1778173464880
+        },
+        "022052433749064716942": {
+          "status": "success",
+          "timestamp": 1778173582297
+        },
+        "022052434453605371851": {
+          "status": "success",
+          "timestamp": 1778173699587
+        },
+        "022052436626064828068": {
+          "status": "success",
+          "timestamp": 1778174180623
+        },
+        "022052437011568775115": {
+          "status": "success",
+          "timestamp": 1778174779277
+        },
+        "022052438282308669387": {
+          "status": "gpt_failed",
+          "timestamp": 1778174660248
+        },
+        "022052439546358328958": {
+          "status": "success",
+          "timestamp": 1778174961613
+        },
+        "022052439988690914913": {
+          "status": "success",
+          "timestamp": 1778175080606
+        },
+        "022052438742857585294": {
+          "status": "success",
+          "timestamp": 1778175199193
+        },
+        "022052441944000729742": {
+          "status": "gpt_failed",
+          "timestamp": 1778175497991
+        },
+        "022052397407885053899": {
+          "status": "gpt_failed",
+          "timestamp": 1778175626349
+        },
+        "022052442948817556110": {
+          "status": "success",
+          "timestamp": 1778175739094
+        },
+        "022052443229582129260": {
+          "status": "success",
+          "timestamp": 1778175858096
+        },
+        "022052399911403989426": {
+          "status": "success",
+          "timestamp": 1778176159054
+        },
+        "022052445176986242657": {
+          "status": "success",
+          "timestamp": 1778176697916
+        },
+        "022052445944232147052": {
+          "status": "success",
+          "timestamp": 1778176460925
+        },
+        "022052401391463026635": {
+          "status": "success",
+          "timestamp": 1778176579449
+        },
+        "022052402888939572833": {
+          "status": "success",
+          "timestamp": 1778176941122
+        },
+        "022052402860596422308": {
+          "status": "success",
+          "timestamp": 1778177059976
+        },
+        "022052448821737711268": {
+          "status": "success",
+          "timestamp": 1778177181313
+        },
+        "022052408015761832044": {
+          "status": "success",
+          "timestamp": 1778178680504
+        },
+        "022052453922483375713": {
+          "status": "gpt_failed",
+          "timestamp": 1778178798280
+        },
+        "022052453794620805774": {
+          "status": "success",
+          "timestamp": 1778178445707
+        },
+        "022052454808419694700": {
+          "status": "success",
+          "timestamp": 1778178558004
+        },
+        "022052454258359879951": {
+          "status": "success",
+          "timestamp": 1778178928358
+        },
+        "022052456305716268641": {
+          "status": "success",
+          "timestamp": 1778179037716
+        },
+        "022052461544845594571": {
+          "status": "gpt_failed",
+          "timestamp": 1778180179596
+        },
+        "022052462555045466766": {
+          "status": "success",
+          "timestamp": 1778180604978
+        },
+        "022052464055018778238": {
+          "status": "success",
+          "timestamp": 1778180782372
+        },
+        "022052464386370080353": {
+          "status": "gpt_failed",
+          "timestamp": 1778181318913
+        },
+        "022052464791656001150": {
+          "status": "success",
+          "timestamp": 1778181027548
+        },
+        "022052450736533956260": {
+          "status": "success",
+          "timestamp": 1778181201242
+        },
+        "022052531927292243582": {
+          "status": "success",
+          "timestamp": 1778196918151
+        },
+        "022052742402158016479": {
+          "status": "success",
+          "timestamp": 1778247079518
+        },
+        "022052743054904965087": {
+          "status": "success",
+          "timestamp": 1778247259810
+        },
+        "022052747198831471026": {
+          "status": "success",
+          "timestamp": 1778248225452
+        },
+        "022052704851552548831": {
+          "status": "success",
+          "timestamp": 1778248830959
+        },
+        "022052820825468440295": {
+          "status": "success",
+          "timestamp": 1778265863272
+        },
+        "022052821305986371531": {
+          "status": "success",
+          "timestamp": 1778266097991
+        },
+        "022052823687874646670": {
+          "status": "success",
+          "timestamp": 1778266518343
+        },
+        "022052824379936864364": {
+          "status": "success",
+          "timestamp": 1778266641386
+        },
+        "022052781542950258959": {
+          "status": "success",
+          "timestamp": 1778267121197
+        },
+        "022052826400494668047": {
+          "status": "success",
+          "timestamp": 1778267238004
+        },
+        "022052826563569207567": {
+          "status": "gpt_failed",
+          "timestamp": 1778267362372
+        },
+        "022052827910552860639": {
+          "status": "gpt_failed",
+          "timestamp": 1778267597268
+        },
+        "022052828780405625486": {
+          "status": "gpt_failed",
+          "timestamp": 1778268261072
+        },
+        "022052830437399021839": {
+          "status": "success",
+          "timestamp": 1778268141782
+        },
+        "022052786427663874156": {
+          "status": "success",
+          "timestamp": 1778268379696
+        },
+        "022052830675541031020": {
+          "status": "gpt_failed",
+          "timestamp": 1778268495972
+        },
+        "022053884521419765868": {
+          "status": "success",
+          "timestamp": 1778519599318
+        },
+        "022053840144879327598": {
+          "status": "success",
+          "timestamp": 1778519720915
+        },
+        "022053879106494798190": {
+          "status": "success",
+          "timestamp": 1778519838034
+        },
+        "022053887639449770350": {
+          "status": "success",
+          "timestamp": 1778520089875
+        },
+        "022053842362754791532": {
+          "status": "success",
+          "timestamp": 1778520326973
+        },
+        "022053888181454510446": {
+          "status": "success",
+          "timestamp": 1778520382132
+        },
+        "022053884297406183532": {
+          "status": "gpt_failed",
+          "timestamp": 1778520977214
+        },
+        "022053889168289167468": {
+          "status": "gpt_failed",
+          "timestamp": 1778520680359
+        },
+        "022053889641366599647": {
+          "status": "success",
+          "timestamp": 1778520864603
+        },
+        "022053891829697343536": {
+          "status": "success",
+          "timestamp": 1778521342176
+        },
+        "022053891948401824398": {
+          "status": "success",
+          "timestamp": 1778521461596
+        },
+        "022053910478680223792": {
+          "status": "success",
+          "timestamp": 1778525845878
+        },
+        "022053866913528942311": {
+          "status": "success",
+          "timestamp": 1778525960976
+        },
+        "022053920816019929196": {
+          "status": "gpt_failed",
+          "timestamp": 1778528362833
+        },
+        "022053874330287345383": {
+          "status": "success",
+          "timestamp": 1778528481318
+        },
+        "022053914335497287788": {
+          "status": "success",
+          "timestamp": 1778528601715
+        },
+        "022053958439362464225": {
+          "status": "success",
+          "timestamp": 1778538499047
+        },
+        "022053962309300516972": {
+          "status": "gpt_failed",
+          "timestamp": 1778538140484
+        },
+        "022053962889589739223": {
+          "status": "success",
+          "timestamp": 1778538259111
+        },
+        "022053963630905389104": {
+          "status": "success",
+          "timestamp": 1778538379064
+        },
+        "022053964689258311728": {
+          "status": "gpt_failed",
+          "timestamp": 1778538623261
+        },
+        "022053963292296516238": {
+          "status": "success",
+          "timestamp": 1778538739005
+        },
+        "022053965427545379470": {
+          "status": "success",
+          "timestamp": 1778538857563
+        },
+        "022053966005697384167": {
+          "status": "gpt_failed",
+          "timestamp": 1778538975525
+        },
+        "022053981884726112304": {
+          "status": "success",
+          "timestamp": 1778542647138
+        },
+        "022054101594493163979": {
+          "status": "success",
+          "timestamp": 1778582239910
+        },
+        "022054150592613692656": {
+          "status": "success",
+          "timestamp": 1778582907426
         }
       },
       "hookRotation": {
@@ -10794,12 +12428,12 @@
         "Laiba": "A",
         "Khansa": "A",
         "Saim": "B",
-        "saim": "A",
+        "saim": "B",
         "shayan": "A",
         "Rebekah": "A",
         "khansa": "A",
-        "laiba": "A",
-        "craig": "B",
+        "laiba": "B",
+        "craig": "A",
         "sana": "B"
       }
     }
@@ -10808,9 +12442,9 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "e251bf20-e3bf-4dfd-b8d0-00ba4e156f39",
-  "activeVersionId": "e251bf20-e3bf-4dfd-b8d0-00ba4e156f39",
-  "versionCounter": 2633,
+  "versionId": "ebad5490-55cd-4af9-b0b1-21362b78c3e3",
+  "activeVersionId": "ebad5490-55cd-4af9-b0b1-21362b78c3e3",
+  "versionCounter": 3079,
   "triggerCount": 8,
   "shared": [
     {
@@ -10833,9 +12467,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-04-29T17:19:17.861Z",
-    "createdAt": "2026-04-29T17:19:17.861Z",
-    "versionId": "e251bf20-e3bf-4dfd-b8d0-00ba4e156f39",
+    "updatedAt": "2026-05-12T11:01:34.360Z",
+    "createdAt": "2026-05-12T11:01:34.360Z",
+    "versionId": "ebad5490-55cd-4af9-b0b1-21362b78c3e3",
     "workflowId": "EWnZg3svZWwcIRs4",
     "nodes": [
       {
@@ -10847,8 +12481,8 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          -192,
-          272
+          -240,
+          288
         ]
       },
       {
@@ -11004,7 +12638,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n// NODE 10: BUILD GPT INPUT\n// Construct the input string for the stored prompt\n// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nconst item = $input.item.json; \nconst job = item.job;\n\n// Budget display\nconst budgetRaw = String(job.budget || '');\nconst budgetDisplay = budgetRaw || 'Not specified';\n\n// Skills display\nconst skillsDisplay = Array.isArray(job.skills) ? job.skills.join(', ') : String(job.skills || 'N/A');\n\n\n// Hook rotation per profile (A → B → A → B...)\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.hookRotation) staticData.hookRotation = {};\nconst profileId = item.profile_id || 'default';\nconst lastHook = staticData.hookRotation[profileId] || 'B';\nconst useHook = lastHook === 'A' ? 'B' : 'A';\nstaticData.hookRotation[profileId] = useHook;\n\nconst gptInput = [\n  `PROFILE: ${item.profile_name}`,\n  `TECH STACK: ${item.stack}`,\n  `AGENT: ${item.assigned_agent}`,\n  '',\n  `USE HOOK: ${useHook}`,\n  '',\n  'PROFILE-SPECIFIC INSTRUCTIONS:',\n  item.custom_gpt_instructions || 'No additional instructions.',\n  '',\n  '=== JOB TITLE ===',\n  job.title,\n  '',\n  '=== JOB DESCRIPTION ===',\n  job.description.substring(0, 2000),\n  '',\n  '=== BUDGET ===',\n  budgetDisplay,\n  '',\n  '=== REQUIRED SKILLS ===',\n  skillsDisplay,\n  '',\n  '=== CLIENT CONTEXT ===',\n  `- Location: ${job.clientCountry || 'Not specified'}`,\n  `- Rating: ${job.clientRating || 'N/A'}/5`,\n  `- Total Spent: $${job.clientSpent || '0'}`,\n  `- Total Hires: ${job.clientHires || '0'}`,\n  '',\n  'Write the proposal now.'\n].join('\\n');\n\nreturn [{ json: { ...item, gptInput } }];"
+          "jsCode": "// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n// NODE 10: BUILD GPT INPUT\n// Construct the input string for the stored prompt\n// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nconst item = $('Route Job').item.json; \nconst job = item.job;\n\n// Budget display\nconst budgetRaw = String(job.budget || '');\nconst budgetDisplay = budgetRaw || 'Not specified';\n\n// Skills display\nconst skillsDisplay = Array.isArray(job.skills) ? job.skills.join(', ') : String(job.skills || 'N/A');\n\n\n// Hook rotation per profile (A → B → A → B...)\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.hookRotation) staticData.hookRotation = {};\nconst profileId = item.profile_id || 'default';\nconst lastHook = staticData.hookRotation[profileId] || 'B';\nconst useHook = lastHook === 'A' ? 'B' : 'A';\nstaticData.hookRotation[profileId] = useHook;\n\nconst gptInput = [\n  `PROFILE: ${item.profile_name}`,\n  `TECH STACK: ${item.stack}`,\n  `AGENT: ${item.assigned_agent}`,\n  '',\n  `USE HOOK: ${useHook}`,\n  '',\n  'PROFILE-SPECIFIC INSTRUCTIONS:',\n  item.custom_gpt_instructions || 'No additional instructions.',\n  '',\n  '=== JOB TITLE ===',\n  job.title,\n  '',\n  '=== JOB DESCRIPTION ===',\n  job.description.substring(0, 2000),\n  '',\n  '=== BUDGET ===',\n  budgetDisplay,\n  '',\n  '=== REQUIRED SKILLS ===',\n  skillsDisplay,\n  '',\n  '=== CLIENT CONTEXT ===',\n  `- Location: ${job.clientCountry || 'Not specified'}`,\n  `- Rating: ${job.clientRating || 'N/A'}/5`,\n  `- Total Spent: $${job.clientSpent || '0'}`,\n  `- Total Hires: ${job.clientHires || '0'}`,\n  '',\n  'Write the proposal now.'\n].join('\\n');\n\nreturn [{ json: { ...item, gptInput } }];"
         },
         "id": "e21fa42e-9d56-43fe-a253-8c83849d4d07",
         "name": "Build GPT Input",
@@ -11050,7 +12684,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n// NODE 14: FORMAT CLICKUP TASK\n// Rich emoji template from CLICKUP_TASK.md\n// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nconst item = $input.item.json;\nconst job = item.job;\nconst ai = item.aiEval || {};\nconst divider = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';\n\n// Formatting helpers\nconst fmt = n => {\n  const num = parseFloat(n) || 0;\n  return num >= 1000 ? `$${(num/1000).toFixed(0)}k` : `$${num}`;\n};\n\n// Budget display\nconst budgetDisplay = String(job.budget || 'Not specified');\n\n// Client spend\nconst spentRaw = parseFloat(String(job.clientSpent || '0').replace(/[^0-9.]/g, '')) || 0;\nconst spent = spentRaw >= 1000 ? `$${(spentRaw/1000).toFixed(0)}k+` : spentRaw > 0 ? `$${spentRaw}` : 'New client';\n\n// Star rating\nconst rating = parseFloat(job.clientRating);\nconst stars = !isNaN(rating) && rating > 0\n  ? `${'\\u2605'.repeat(Math.round(rating))}${'\\u2606'.repeat(5 - Math.round(rating))} (${rating}/5)`\n  : 'No rating yet';\n\n// Skills display\nconst skillsDisplay = Array.isArray(job.skills) ? job.skills.join(', ') : String(job.skills || 'N/A');\n\n// Dates\nconst posted = job.postedDate\n  ? new Date(job.postedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })\n  : 'Unknown';\nconst generated = new Date().toLocaleString('en-US', {\n  month: 'short', day: 'numeric', year: 'numeric',\n  hour: '2-digit', minute: '2-digit',\n  timeZone: 'UTC', timeZoneName: 'short'\n});\n\n// Hires\nconst hires = job.clientHires ? `${job.clientHires}` : 'No hires yet';\n\n// Build task body\nconst lines = [\n  divider,\n  '\\ud83e\\udd16  PROPOSAL  *(copy and send as-is)*',\n  divider,\n  '',\n  item.proposal,\n  '',\n  '',\n  divider,\n  '\\ud83d\\udccc  JOB SNAPSHOT',\n  divider,\n  '',\n  `\\ud83d\\udd17  **Job Link**      \\u2192  [View on Upwork](${job.url})`,\n  `\\ud83d\\udcb0  **Budget**        \\u2192  ${budgetDisplay}`,\n  `\\ud83d\\udee0  **Skills**        \\u2192  ${skillsDisplay}`,\n  `\\ud83d\\udcc5  **Posted**        \\u2192  ${posted}`,\n  '',\n  '',\n  divider,\n  '\\ud83d\\udc64  CLIENT INTEL',\n  divider,\n  '',\n  `\\ud83c\\udf0d  **Location**      \\u2192  ${job.clientCountry || 'Not specified'}`,\n  `\\u2b50  **Rating**        \\u2192  ${stars}`,\n  `\\ud83d\\udcb5  **Total Spent**   \\u2192  ${spent}`,\n  `\\u2705  **Past Hires**    \\u2192  ${hires}`,\n  '',\n  '',\n  divider,\n  '\\ud83c\\udfaf  ROUTING INFO',\n  divider,\n  '',\n  `\\ud83d\\udc64  **Agent**         \\u2192  ${item.assigned_agent}`,\n  `\\ud83d\\udcc1  **Profile**       \\u2192  ${item.profile_name}`,\n  `\\ud83c\\udff7  **Stack**         \\u2192  ${item.stack}`,\n  `\\ud83c\\udd94  **Job ID**        \\u2192  ~${job.id}`,\n  `\\ud83e\\udd16  **Generated**     \\u2192  ${generated}`,\n  ''\n];\n\nconst taskDescription = lines.join('\\n');\nconst taskName = `[${item.profile_name}] ${job.title}`.substring(0, 100);\n\n// Update static data to mark success\nconst staticData = $getWorkflowStaticData('global');\nif (staticData.seenJobs && job.id) {\n  staticData.seenJobs[job.id] = { status: 'success', timestamp: Date.now() };\n}\n\nreturn [{ json: {\n  ...item,\n  taskName,\n  taskDescription,\n  taskBody: {\n    name: taskName,\n    markdown_description: taskDescription,\n    assignees: [Number(item.agent_clickup_id)],\n    priority: 2,\n    due_date: Date.now() + (24 * 60 * 60 * 1000),\n    due_date_time: true,\n    tags: [item.profile_name, 'vollna-auto']\n  }\n} }];"
+          "jsCode": "// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n// NODE 14: FORMAT CLICKUP TASK\n// Rich emoji template from CLICKUP_TASK.md\n// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nconst item = $input.item.json;\nconst job = item.job;\nconst ai = item.aiEval || {};\nconst divider = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';\n\n// Formatting helpers\nconst fmt = n => {\n  const num = parseFloat(n) || 0;\n  return num >= 1000 ? `$${(num/1000).toFixed(0)}k` : `$${num}`;\n};\n\n// Budget display\nconst budgetDisplay = String(job.budget || 'Not specified');\n\n// Client spend\nconst spentRaw = parseFloat(String(job.clientSpent || '0').replace(/[^0-9.]/g, '')) || 0;\nconst spent = spentRaw >= 1000 ? `$${(spentRaw/1000).toFixed(0)}k+` : spentRaw > 0 ? `$${spentRaw}` : 'New client';\n\n// Star rating\nconst rating = parseFloat(job.clientRating);\nconst stars = !isNaN(rating) && rating > 0\n  ? `${'\\u2605'.repeat(Math.round(rating))}${'\\u2606'.repeat(5 - Math.round(rating))} (${rating}/5)`\n  : 'No rating yet';\n\n// Skills display\nconst skillsDisplay = Array.isArray(job.skills) ? job.skills.join(', ') : String(job.skills || 'N/A');\n\n// Dates\nconst posted = job.postedDate\n  ? new Date(job.postedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })\n  : 'Unknown';\nconst generated = new Date().toLocaleString('en-US', {\n  month: 'short', day: 'numeric', year: 'numeric',\n  hour: '2-digit', minute: '2-digit',\n  timeZone: 'UTC', timeZoneName: 'short'\n});\n\n// Hires\nconst hires = job.clientHires ? `${job.clientHires}` : 'No hires yet';\n\n// Build task body\nconst lines = [\n  divider,\n  '\\ud83e\\udd16  PROPOSAL  *(copy and send as-is)*',\n  divider,\n  '',\n  item.proposal,\n  '',\n  '',\n  divider,\n  '\\ud83d\\udccc  JOB SNAPSHOT',\n  divider,\n  '',\n  `\\ud83d\\udd17  **Job Link**      \\u2192  [View on Upwork](${job.url})`,\n  `\\ud83d\\udcb0  **Budget**        \\u2192  ${budgetDisplay}`,\n  `\\ud83d\\udee0  **Skills**        \\u2192  ${skillsDisplay}`,\n  `\\ud83d\\udcc5  **Posted**        \\u2192  ${posted}`,\n  '',\n  '',\n  divider,\n  '\\ud83d\\udc64  CLIENT INTEL',\n  divider,\n  '',\n  `\\ud83c\\udf0d  **Location**      \\u2192  ${job.clientCountry || 'Not specified'}`,\n  `\\u2b50  **Rating**        \\u2192  ${stars}`,\n  `\\ud83d\\udcb5  **Total Spent**   \\u2192  ${spent}`,\n  `\\u2705  **Past Hires**    \\u2192  ${hires}`,\n  '',\n  '',\n  divider,\n  '\\ud83c\\udfaf  ROUTING INFO',\n  divider,\n  '',\n  `\\ud83d\\udc64  **Agent**         \\u2192  ${item.assigned_agent}`,\n  `\\ud83d\\udcc1  **Profile**       \\u2192  ${item.profile_name}`,\n  `\\ud83c\\udff7  **Stack**         \\u2192  ${item.stack}`,\n  `\\ud83c\\udd94  **Job ID**        \\u2192  ~${job.id}`,\n  `\\ud83e\\udd16  **Generated**     \\u2192  ${generated}`,\n  ''\n];\n\nconst taskDescription = lines.join('\\n');\nconst taskName = `[${item.profile_name}] ${job.title}`.substring(0, 100);\n\n// Phase 7: relevancy classifier verdict (Shadow mode = audit only, no routing change)\nlet relevancyVerdict = null;\ntry {\n  const ref = $('Score Relevancy');\n  if (ref && ref.isExecuted) {\n    relevancyVerdict = ref.first().json || null;\n  }\n} catch (e) { /* Score Relevancy didn't execute (K1 bypass path) */ }\n\n// Update static data to mark success\nconst staticData = $getWorkflowStaticData('global');\nif (staticData.seenJobs && job.id) {\n  staticData.seenJobs[job.id] = { status: 'success', timestamp: Date.now() };\n}\n\nreturn [{ json: {\n  ...item,\n  taskName,\n  taskDescription,\n  relevancyVerdict,\n  taskBody: {\n    name: taskName,\n    markdown_description: taskDescription,\n    assignees: [Number(item.agent_clickup_id)],\n    priority: 2,\n    due_date: Date.now() + (24 * 60 * 60 * 1000),\n    due_date_time: true,\n    tags: [item.profile_name, 'vollna-auto']\n  }\n} }];"
         },
         "id": "6963d485-b2c9-4360-a26f-0c901c8dafa5",
         "name": "Format ClickUp Task",
@@ -11520,14 +13154,6 @@
         ]
       },
       {
-        "id": "a55e6692-843c-4ef6-ba9b-e62a3ddab7b6",
-        "name": "Create Board Task - Self-Hosted",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.4,
-        "position": [
-          1504,
-          -320
-        ],
         "parameters": {
           "method": "POST",
           "url": "http://157.173.110.62/api/v1/webhooks/tasks",
@@ -11546,7 +13172,7 @@
           },
           "sendBody": true,
           "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }) } }) }}",
+          "jsonBody": "={{ JSON.stringify({ title: $json.taskName, description: ($json.job && $json.job.description) || '', priority: 'medium', due_date: new Date(Date.now() + 24*60*60*1000).toISOString(), custom_fields: { _job_id: String($json.job.id || ''), _job_url: $json.job.url || '', _budget: String($json.job.budget || ''), _skills: Array.isArray($json.job.skills) ? $json.job.skills : [], _proposal: $json.proposal || '', _assigned_agent: $json.assigned_agent || '', _profile_name: $json.profile_name || '', _source: 'n8n', _client_country: $json.job.clientCountry || '', _client_rating: $json.job.clientRating || '', _client_spent: String($json.job.clientSpent || ''), _client_hires: String($json.job.clientHires || ''), _stack: $json.stack || '', _generated: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }), _relevancy_score: ($json.relevancyVerdict && $json.relevancyVerdict.total_score) || null, _relevancy_summary: ($json.relevancyVerdict && $json.relevancyVerdict.summary) || null, _relevancy_decision: ($json.relevancyVerdict && $json.relevancyVerdict.decision) || null, _relevancy_effective: ($json.relevancyVerdict && $json.relevancyVerdict.effective_decision) || null, _relevancy_threshold_flipped: ($json.relevancyVerdict && $json.relevancyVerdict.threshold_flipped) || false, _relevancy_reasons: ($json.relevancyVerdict && $json.relevancyVerdict.rejection_reasons) || [], _relevancy_tier: ($json.relevancyVerdict && $json.relevancyVerdict.tier) || null, _relevancy_confidence: ($json.relevancyVerdict && $json.relevancyVerdict.confidence) || null, _relevancy_score_id: ($json.relevancyVerdict && $json.relevancyVerdict._score_id) || null, _relevancy_dlq_id: ($json.relevancyVerdict && $json.relevancyVerdict._dlq_id) || null, _relevancy_evaluated_at: new Date().toISOString(), _relevancy_mode_at_decision: ($json.relevancyVerdict && $json.relevancyVerdict.request_meta && $json.relevancyVerdict.request_meta.classifier_mode) || 'shadow' } }) }}",
           "options": {
             "response": {
               "response": {
@@ -11555,7 +13181,201 @@
             }
           }
         },
+        "id": "a55e6692-843c-4ef6-ba9b-e62a3ddab7b6",
+        "name": "Create Board Task - Self-Hosted",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1504,
+          -320
+        ],
         "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "classifier-enabled-1",
+                "leftValue": "enabled",
+                "rightValue": "disabled",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEquals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "f95daa14-6a69-49ab-a8c1-f4428c785685",
+        "name": "IF - Classifier Enabled",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          -688,
+          112
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "workflowId": "hi71jhPU8tmq7hEp",
+          "mode": "each",
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "id": "04bcc0ca-7a0a-48fb-9377-6a47148cf599",
+        "name": "Score Relevancy",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1,
+        "position": [
+          -480,
+          48
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 1500,
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "active-reject",
+                      "leftValue": "={{ $json.request_meta.classifier_mode === 'active' && $json.effective_decision === 'reject' }}",
+                      "rightValue": true,
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "true",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "active_reject"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "active-proceed",
+                      "leftValue": "={{ $json.request_meta.classifier_mode === 'active' && $json.effective_decision === 'proceed' }}",
+                      "rightValue": true,
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "true",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "active_proceed"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "active-review",
+                      "leftValue": "={{ $json.request_meta.classifier_mode === 'active' && $json.effective_decision === 'review' }}",
+                      "rightValue": true,
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "true",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "active_review"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "shadow-any",
+                      "leftValue": "={{ $json.request_meta.classifier_mode === 'shadow' }}",
+                      "rightValue": true,
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "true",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "shadow_any"
+              }
+            ]
+          },
+          "options": {
+            "fallbackOutput": 0
+          }
+        },
+        "id": "10a25a93-544c-4853-b4a5-ac8c5ca7a2d5",
+        "name": "Route Verdict",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": [
+          -272,
+          -16
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {},
+        "id": "928424ce-b56d-4fb9-a86e-fa6a07420065",
+        "name": "End (Audit Only)",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          -112,
+          -416
+        ]
       }
     ],
     "connections": {
@@ -11574,7 +13394,7 @@
         "main": [
           [
             {
-              "node": "Build GPT Input",
+              "node": "IF - Classifier Enabled",
               "type": "main",
               "index": 0
             }
@@ -11911,6 +13731,74 @@
             }
           ]
         ]
+      },
+      "IF - Classifier Enabled": {
+        "main": [
+          [
+            {
+              "node": "Score Relevancy",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build GPT Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Score Relevancy": {
+        "main": [
+          [
+            {
+              "node": "Route Verdict",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "End (Audit Only)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route Verdict": {
+        "main": [
+          [
+            {
+              "node": "End (Audit Only)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build GPT Input",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build GPT Input",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build GPT Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Aleem Ahmed",
@@ -11919,18 +13807,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-04-29T17:19:18.399Z",
-        "id": 289,
+        "createdAt": "2026-05-12T11:01:34.880Z",
+        "id": 302,
         "workflowId": "EWnZg3svZWwcIRs4",
-        "versionId": "e251bf20-e3bf-4dfd-b8d0-00ba4e156f39",
+        "versionId": "ebad5490-55cd-4af9-b0b1-21362b78c3e3",
         "event": "activated",
         "userId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
       },
       {
-        "createdAt": "2026-04-29T17:19:18.038Z",
-        "id": 288,
+        "createdAt": "2026-05-12T11:01:34.539Z",
+        "id": 301,
         "workflowId": "EWnZg3svZWwcIRs4",
-        "versionId": "e251bf20-e3bf-4dfd-b8d0-00ba4e156f39",
+        "versionId": "ebad5490-55cd-4af9-b0b1-21362b78c3e3",
         "event": "deactivated",
         "userId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
       }

@@ -314,6 +314,7 @@ Specifically:
   - C9 Build Review Payload (Set)
   - C10 Persist Relevancy Score (httpRequest)
   - C11 Persist to DLQ (httpRequest)
+  - C12 Return Verdict (Code) — terminal converge node for executeWorkflow callers; reshapes the C10/C11 leaf into a verdict object stamped with `_score_id` / `_dlq_id` and `request_meta.classifier_mode`. Added 2026-05-12 as a Phase 7 prereq.
   - Workflow settings: executionOrder
   - n8n credentials BOUND to nodes in this workflow:
       - `Gemini API (Relevancy Classifier)` (id 0gaoWdarY6itka7l, googlePalmApi)

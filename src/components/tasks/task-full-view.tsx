@@ -63,6 +63,7 @@ import { RichTextEditor } from "./rich-text-editor";
 import { CustomFieldRenderer } from "./custom-field-renderer";
 import { JobDetails } from "./job-details";
 import { ProposalBox } from "./proposal-box";
+import { RelevancyPanel } from "./relevancy-panel";
 import type { Task, BoardColumn, ProjectMember, ChecklistItem, Comment, ActivityLogEntry, CustomFieldDefinition } from "@/lib/task-data";
 import type { Job } from "@/lib/types";
 
@@ -1320,6 +1321,7 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
               onChange={(text) => updateCustomField("_proposal", text)}
               readOnly={false}
             />
+            <RelevancyPanel cf={cf} />
           </div>
         </div>
       </div>

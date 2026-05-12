@@ -84,14 +84,17 @@ caller(s) ─►    │ Execute Workflow Trigger (passthrough)               │
                 │   └─proceed ─► Persist Relevancy Score               │
                 ├──────────────────────────────────────────────────────┤
                 │ Persist Relevancy Score (HTTP POST)                  │  ← /api/relevancy-scores, Bearer auth
-                │   ├─success ─► (return verdict to caller)            │
+                │   ├─success ─► Return Verdict                        │
                 │   └─error   ─► Persist to DLQ                        │
                 ├──────────────────────────────────────────────────────┤
                 │ Persist to DLQ (HTTP POST, ?dlq=1)                   │  ← also receives AI Agent error output
+                │   └─► Return Verdict                                 │
+                ├──────────────────────────────────────────────────────┤
+                │ Return Verdict (Code, terminal)                      │  ← reshapes leaf into verdict for executeWorkflow caller
                 └──────────────────────────────────────────────────────┘
 ```
 
-### 4.2 Node inventory (14 nodes)
+### 4.2 Node inventory (15 nodes)
 
 | ID | Name | Type | typeVersion | Position |
 |---|---|---|---|---|
@@ -109,8 +112,9 @@ caller(s) ─►    │ Execute Workflow Trigger (passthrough)               │
 | C9 | Build Review Payload | `n8n-nodes-base.set` | 3.4 | `[256, -192]` |
 | C10 | Persist Relevancy Score | `n8n-nodes-base.httpRequest` | 4.4 | `[464, -96]` |
 | C11 | Persist to DLQ | `n8n-nodes-base.httpRequest` | 4.4 | `[672, 96]` |
+| **C12** | **Return Verdict** | `n8n-nodes-base.code` | 2 | `[880, 0]` |
 
-### 4.3 Connections (17 total)
+### 4.3 Connections (19 total)
 
 | From | Output | To | Notes |
 |---|---|---|---|
@@ -130,7 +134,9 @@ caller(s) ─►    │ Execute Workflow Trigger (passthrough)               │
 | Decision Switch | main[2] (proceed) | Persist Relevancy Score | |
 | Build Reject Payload | main[0] | Persist Relevancy Score | |
 | Build Review Payload | main[0] | Persist Relevancy Score | |
+| Persist Relevancy Score | main[0] (success) | **Return Verdict** | Terminal verdict shape for `executeWorkflow` caller |
 | Persist Relevancy Score | main[1] (error) | Persist to DLQ | `onError: continueErrorOutput` |
+| Persist to DLQ | main[0] | **Return Verdict** | DLQ leaf also funnels to terminal so caller still receives a verdict |
 
 ### 4.4 Workflow settings
 
@@ -353,6 +359,32 @@ Currently a near-passthrough. Reserved for future review-specific enrichment (e.
 - C10 (Persist Relevancy Score) error output — when the ingest endpoint returns non-2xx
 
 **Returns:** `{ ok: true, dlq_id: <bigserial> }`
+
+**Downstream:** main[0] → C12 Return Verdict (so the DLQ leaf still funnels into a uniform verdict shape for the caller).
+
+### 5.15 Return Verdict (C12)
+
+**Type:** `n8n-nodes-base.code` v2
+**Mode:** `runOnceForAllItems`
+
+**Purpose:** Single converge point. Reshapes whatever arrives from C10 main[0] (`{ok: true, id: <scoreId>}`) or C11 main[0] (`{ok: true, dlq_id: N}`) back into the verdict object so `executeWorkflow` callers (parent `multiple webhooks` after Phase 7; manual `job-evaluate-manual` after Phase 8) receive a parent-routable verdict on the sub-workflow's main output instead of the raw HTTP response.
+
+**Logic:**
+1. **Recover verdict from upstream branch.** Priority order (only one of these ran on any given execution):
+   - `$('Build Reject Payload').first().json` — deterministic-reject path OR LLM/threshold-flipped reject
+   - `$('Build Review Payload').first().json` — LLM review branch
+   - `$('Validate Output + Apply Threshold').first().json` — LLM proceed branch (no rebuilder between C6 and C10)
+   - Each lookup is guarded by `.isExecuted` + try/catch.
+2. **Fallback synthesis (C5 → C11 with no verdict).** If C5 (AI Agent) errored directly to C11 without C6 ever running, no verdict exists upstream. Synthesize a `decision: 'review', confidence: 0.0, confidence_warnings: ['classifier_error_no_verdict']` fallback from the inbound `Execute Workflow Trigger` payload so the parent can still route (review → human inspection).
+3. **Stamp `_score_id` / `_dlq_id`.** Read `items[0].json` (the inbound leaf): `inbound.id != null && inbound.dlq_id == null` → `_score_id = inbound.id`, else `_score_id = null`. Mirror `_dlq_id` similarly. Both fields make it explicit to the caller whether the audit-log write succeeded.
+4. **Mirror classifier_mode into `request_meta`.** The verdict has `classifier_mode_at_decision` at the top level. The parent's K3 Route Verdict switch reads `request_meta.classifier_mode` for convenience (plan v3.3 §4.4.1). Both shapes are emitted to support either access path — but parents should prefer `request_meta.classifier_mode` (this node's contract), not `classifier_mode_at_decision` (the audit-log shape).
+
+**Output shape:** the full verdict from §6.2 PLUS:
+- `_score_id`: `<int>` on success, `null` on DLQ leaf
+- `_dlq_id`: `<int>` on DLQ leaf, `null` on success
+- `request_meta.classifier_mode`: `"shadow" | "active"` (mirrored from `classifier_mode_at_decision`)
+
+**Why a Code node, not a Set node:** Set node assignments can't gracefully handle "use whichever upstream ran" because `$('NodeName').item.json` throws when that node wasn't in the execution path. Code lets us try/catch + isExecuted-check each source.
 
 ---
 
@@ -593,6 +625,35 @@ The pipeline is **proven** end-to-end. Production readiness blocked only on Phas
 ---
 
 ## 12. Recent changes
+
+### 2026-05-12 — Gemini Flash 2.5 sub-node: add node-level retry config to absorb transient 503s (SHIPPED)
+
+- **Why:** Two consecutive post-Phase-7 parent runs (executions 13379 and 13382, both Khansa profile, 2026-05-12) hit Gemini "Service unavailable - try again later" 503s. The C5 main[1] error path correctly routed to C11 DLQ → C12 fallback (`decision: "review", confidence_warnings: ["classifier_error_no_verdict"]`), but the classifier never produced a real verdict on those calls. n8n's own error message recommends node-level retry; this is the structural fix. Earlier today's smoke (execution 13356, Shayan synthetic SaaS, `proceed/91/apply_now` in 18.2s) succeeded, so happy-path is fine — these 503s are transient Google API blips, not consistent failures.
+- **What:** One-op `updateNode` on `Gemini Flash 2.5` (sub-node id `gemini-25-flash`, typeVersion 1 preserved per CLAUDE.md gotcha) adding three top-level fields: `retryOnFail: true`, `maxTries: 3`, `waitBetweenTries: 2500`. Initial attempt + 2 retries; 2.5s back-off. Worst-case adds ~5s latency on top of the classifier's existing 8–20s budget. Chose 2500ms (not higher) to keep total worst-case latency under the parent K2 `executeWorkflow` node's compounded budget.
+- **Op shape applied:**
+  ```json
+  { "type": "updateNode", "nodeName": "Gemini Flash 2.5",
+    "updates": { "retryOnFail": true, "maxTries": 3, "waitBetweenTries": 2500 } }
+  ```
+  Top-level retry fields landed via `updateNode` (no `parameters.` prefix needed — n8n's partial-update API accepts retry config as sibling fields of `position`/`typeVersion`/`onError`).
+- **Verification:** `n8n_validate_workflow profile=runtime` returns `valid: true`, 0 errors, 25 warnings (unchanged from the post-C12-add baseline of 2026-05-12 morning). Re-fetched sub-node confirms all three retry keys present at the top level. Node count still 15. typeVersion still 1. Credentials intact.
+- **Smoke-test:** Skipped — `executeWorkflowTrigger` requires manual UI click. Real validation comes from the next Vollna fire; if Gemini returns 200 first try, the retry config is dormant. If a 503 occurs, the agent retries up to 2 more times.
+- **Rollback baseline:** `updateNode "Gemini Flash 2.5"` with `{ "retryOnFail": false, "maxTries": 1, "waitBetweenTries": 0 }` OR omit the three fields entirely (n8n treats absence as no-retry).
+
+### 2026-05-12 — Phase 7 prereq: add terminal `Return Verdict` node so `executeWorkflow` returns the verdict, not C10's HTTP response (SHIPPED)
+
+- **Why:** Phase 7 will wire the classifier into parent `EWnZg3svZWwcIRs4` via an `executeWorkflow` node (K2). `executeWorkflow` returns whatever the LAST node emits. Pre-this-change, every terminal path ended at C10 (`Persist Relevancy Score`), which emits `{ok: true, id: <scoreId>}` — NOT the verdict. The parent's K3 Route Verdict switch keys on `$json.effective_decision` / `$json.request_meta.classifier_mode`; both fields were missing on the executeWorkflow output, so K3 would have fallen through to safe-default `active_reject` and silently dropped every Shadow-mode card.
+- **What:**
+  - Added C12 `Return Verdict` (Code v2) at position `[880, 0]` downstream of BOTH `Persist Relevancy Score` main[0] (success) AND `Persist to DLQ` main[0] (DLQ leaf). Pattern A — single converge point.
+  - Recovers the verdict from whichever upstream rebuilder ran (`Build Reject Payload` / `Build Review Payload` / `Validate Output + Apply Threshold`) via `.isExecuted` + try/catch guarded `$('NodeName').first().json`.
+  - Synthesizes a `decision: 'review', confidence: 0.0, confidence_warnings: ['classifier_error_no_verdict']` fallback for the C5 → C11 direct-error path (no verdict was ever produced).
+  - Stamps `_score_id` (from C10 success) and `_dlq_id` (from C11 leaf); whichever is `null` indicates the other path was taken. Both `null` indicates the synthetic fallback above.
+  - Mirrors `classifier_mode_at_decision` into `request_meta.classifier_mode` so parents can read it via either access path (`$json.request_meta.classifier_mode` is the contract; `$json.classifier_mode_at_decision` still works).
+  - Two new connections: `Persist Relevancy Score → main[0] → Return Verdict`, `Persist to DLQ → main[0] → Return Verdict`. Net change: +1 node, +2 connections (14 → 15 nodes, 17 → 19 connections).
+- **Verification:** `n8n_validate_workflow profile=runtime` returns `valid: true`, 0 errors, 25 warnings (baseline was 17; deltas are all the same false-positive class — 3 are Return Verdict's own "Code nodes can throw / fs access / $json mode" noise; the remaining +5 are pre-existing Decision Switch / typeVersion / Code-node warnings that the validator reports more granularly post-2026-05-11). No NEW error classes.
+- **Smoke test:** PRD §10.5 fixture still pinned on the Execute Workflow Trigger (Shayan + synthetic SaaS job, same as execution 13356). Re-run pending — must be triggered from the n8n UI (`executeWorkflowTrigger` cannot be invoked via `n8n_test_workflow`). Acceptance criterion: the workflow's last node (now Return Verdict, not C10) emits an object whose top-level keys include at minimum `decision`, `effective_decision`, `threshold_flipped`, `total_score`, `rejection_reasons`, `tier`, `confidence`, `_score_id`, `request_meta.classifier_mode`.
+- **Phase 7 hand-off note (for `n8n-workflow-keeper`):** parent K3 should key on `$json.effective_decision` (top-level) and `$json.request_meta.classifier_mode` (mirrored by C12). Both shapes are emitted. K2's executeWorkflow node now receives a verdict object, not `{ok, id}`.
+- **Rollback baseline:** workflow versions in n8n cloud history. To revert: `removeNode "Return Verdict"` + `removeConnection` × 2 to restore the C10/C11 terminals.
 
 ### 2026-05-11 — Sitting 2: complete C6–C11 wiring + first successful Gemini smoke test (SHIPPED)
 
