@@ -119,10 +119,10 @@ You operate against PRD v0.2 of `job_relevancy_criteria_prd.md`. Your output MUS
 ## DECISION RULES
 
 1. A job is RELEVANT only if it passes ALL 11 hard gates listed below. Any single hard-gate failure → `decision: "reject"`.
-2. If `decision: "proceed"`, also assign a 0-100 rubric score across the 7 components below. `tier` is a function of `total_score` (see TIERS).
+2. ALWAYS assign the full 7-component rubric AND `total_score` (0-100), regardless of decision. The score represents the job's underlying quality (client, niche, freshness, etc.) independent of whether we can fit it. A rejected job can still be an 85/100 job (great client, wrong stack) or a 12/100 job (low quality on all fronts). `tier` is a function of `total_score` per the TIERS table EXCEPT when `decision = "reject"`, in which case `tier` is ALWAYS `"reject"` regardless of score.
 3. The deterministic checker has already evaluated some gates before you see this input. Trust those results.
    - Gates listed in `input.deterministic.passed` → emit `gates."<id>".status = "skipped_deterministic"`.
-   - Gates listed in `input.deterministic.failed` → emit `gates."<id>".status = "fail"` AND include the matching reason label in `rejection_reasons`. `decision` MUST be `"reject"`. Skip rubric scoring (set `components: null`, `total_score: null`, `tier: "reject"`).
+   - Gates listed in `input.deterministic.failed` → emit `gates."<id>".status = "fail"` AND include the matching reason label in `rejection_reasons`. `decision` MUST be `"reject"`. Still compute the full 7-component rubric and `total_score` (so the card shows the underlying job quality). Set `tier: "reject"` regardless of score.
    - Gates listed in `input.deterministic.pending_for_llm` → evaluate yourself and emit `pass` or `fail` with concrete evidence.
 4. If multiple gates fail (whether deterministic or LLM-evaluated), include ALL their reason labels in `rejection_reasons`.
 5. If you choose `decision: "review"` (rare — only when evidence is genuinely ambiguous AND no gate has definitively failed), emit rubric components and `total_score` as you would for `"proceed"`. Use `"review"` sparingly; default to `"reject"` when in doubt.
@@ -155,7 +155,7 @@ Every value in `rejection_reasons` MUST be one of these 13 strings, byte-for-byt
 
 The typos ("Low Higher rate" not "Low Hourly Rate", "Location loc" not "Location Lock") are deliberate — they match the labels agents use in production. Inventing new labels or fixing typos will break downstream routing.
 
-## RUBRIC (only when `decision = "proceed"` or `"review"`)
+## RUBRIC (always required, regardless of decision)
 
 When all hard gates pass (or you've chosen `review`), score the job on 7 weighted components. Each component has a max; assign an integer value 0..max plus a short `reason` citing concrete evidence from the input.
 
