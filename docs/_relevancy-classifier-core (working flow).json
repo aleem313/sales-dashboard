@@ -1,0 +1,1268 @@
+{
+  "updatedAt": "2026-05-12T12:10:33.613Z",
+  "createdAt": "2026-05-11T17:03:51.777Z",
+  "id": "hi71jhPU8tmq7hEp",
+  "name": "_relevancy-classifier-core",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "c0-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1408,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=http://157.173.110.62/api/profiles/{{ $json.profile_id }}/context",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "c1-load-profile",
+      "name": "Load Profile Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1200,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "C1 — v3.3 Phase 6 Sitting 1. GET /api/profiles/:id/context (Contabo). Returns the snapshot-derived classifier-ready profile shape. Auth: NONE — endpoint is open per Phase 3 implementation (Phase 5a HMAC middleware deferred). Re-add auth in Phase 5a / Sitting 2 if the route gets locked down."
+    },
+    {
+      "parameters": {
+        "jsCode": "// C2 — Deterministic Pre-check (v3.3 Phase 6 Sitting 1)\n// Runs gates 2, 3, 4, 5, 6 in pure JS. Gates 1, 7, 8, 9, 10, 11 are deferred:\n// 1, 7, 8, 9, 10 → LLM (in pending_for_llm). 11 → wired in Sitting 2 (Postgres lookup).\n//\n// Input:\n//   $json                                  = Load Profile Context output (profile context API response)\n//   $('Execute Workflow Trigger').first().json = { profile_id, job, request_meta } from caller\n//\n// Output: merged shape that C4 consumes to build the LLM user message.\n\nconst profileContext = $input.first().json;\nconst triggerInput = $('Execute Workflow Trigger').first().json;\nconst job = triggerInput.job ?? {};\n\nconst passed = [];\nconst failed = [];\nconst failedReasons = [];\nconst pending = [];\n\n// Gate 2 — freshness (posted within 24h)\nif (job.posted_at) {\n  const ageHours = (Date.now() - new Date(job.posted_at).getTime()) / 3600000;\n  if (ageHours <= 24) passed.push('2_freshness');\n  else { failed.push('2_freshness'); failedReasons.push('Old job'); }\n} else {\n  pending.push('2_freshness');\n}\n\n// Gate 3 — proposal saturation (<30)\nif (typeof job.proposals_count === 'number') {\n  if (job.proposals_count < 30) passed.push('3_proposal_saturation');\n  else { failed.push('3_proposal_saturation'); failedReasons.push('Too many invites'); }\n} else {\n  pending.push('3_proposal_saturation');\n}\n\n// Gate 4 — hourly floor ($25/hr min when hourly; n/a when fixed or unspecified)\nif (job.budget_type === 'hourly' && typeof job.budget_min === 'number') {\n  if (job.budget_min >= 25) passed.push('4_hourly_floor');\n  else { failed.push('4_hourly_floor'); failedReasons.push('Low Higher rate'); }\n} else {\n  passed.push('4_hourly_floor');\n}\n\n// Gate 5 — client spend floor ($1000 lifetime). Sparse → pending (LLM weighs in red_flags).\nif (typeof job.client_total_spent === 'number') {\n  if (job.client_total_spent >= 1000) passed.push('5_client_spend_floor');\n  else { failed.push('5_client_spend_floor'); failedReasons.push('Client Low spending'); }\n} else {\n  pending.push('5_client_spend_floor');\n}\n\n// Gate 6 — client rating floor (≥4.0). New clients with 0/null hires → pass.\nif (typeof job.client_rating === 'number') {\n  if (job.client_rating >= 4.0) passed.push('6_client_rating_floor');\n  else { failed.push('6_client_rating_floor'); failedReasons.push('Bad rating client'); }\n} else if (job.client_rating === null && (job.client_hires === null || job.client_hires === 0)) {\n  passed.push('6_client_rating_floor');\n} else {\n  pending.push('6_client_rating_floor');\n}\n\n// LLM-only gates\npending.push('1_stack_match', '7_job_availability', '8_no_location_lockin', '9_no_video_proposal', '10_portfolio_match');\n\n// Gate 11 — duplicate (Postgres lookup wired in Sitting 2; pending for now)\npending.push('11_no_duplicate');\n\nreturn [{\n  json: {\n    profile_context: profileContext,\n    job,\n    request_meta: triggerInput.request_meta ?? {},\n    deterministic: {\n      passed,\n      failed,\n      failed_reasons: failedReasons,\n      pending_for_llm: pending\n    },\n    criteria_version: profileContext.criteria_version ?? '0.2',\n    thresholds_in_force: {\n      freshness_hours: 24,\n      max_proposals: 30,\n      hourly_floor_usd: 25,\n      client_spend_floor_usd: 1000,\n      client_rating_floor: 4.0\n    }\n  }\n}];\n"
+      },
+      "id": "c2-deterministic",
+      "name": "Deterministic Pre-check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -992,
+        0
+      ],
+      "notes": "C2 — v3.3 Phase 6 Sitting 1. Runs hard gates 2-6 deterministically. Trusted-result pattern: any failure here → decision MUST be reject downstream. Gates 1, 7-10 marked pending_for_llm (LLM evaluates). Gate 11 (duplicate) is deterministic but needs DB call — wired in Sitting 2."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "deterministic-failed",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              },
+              "leftValue": "={{ $json.deterministic.failed.length }}",
+              "rightValue": 0
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c3-gate-switch",
+      "name": "Gate Switch",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -784,
+        0
+      ],
+      "notes": "C3 — v3.3 Phase 6 Sitting 1. If ANY deterministic gate failed → route to C7 Build Reject Payload (Sitting 2 wires this). Else continue to C4 → C5 (LLM). True output (failed > 0) is currently disconnected; will be wired in Sitting 2."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "user-message-json",
+              "name": "user_message_json",
+              "value": "={{ JSON.stringify({ request_meta: $json.request_meta, profile: $json.profile_context.profile, job: $json.job, deterministic: $json.deterministic, criteria_version: $json.criteria_version, thresholds_in_force: $json.thresholds_in_force }) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "c4-prepare-input",
+      "name": "Prepare Classifier Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -576,
+        -96
+      ],
+      "notes": "C4 — v3.3 Phase 6 Sitting 1. Assembles the user message JSON per docs/relevancy/mode_a_prompt.md 'User message contract'. AI Agent reads this from $json.user_message_json. includeOtherFields: true so the merged shape propagates to C6 (Sitting 2)."
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.user_message_json }}",
+        "options": {
+          "systemMessage": "You are the Rising Lions Upwork Relevancy Classifier. Decide whether an incoming Upwork job is RELEVANT (worth a proposal) or NOT RELEVANT (move to N/A) for a specific freelancer profile.\n\nYou operate against PRD v0.2 of `job_relevancy_criteria_prd.md`. Your output MUST conform to the JSON schema set in generationConfig.responseSchema.\n\n## DECISION RULES\n\n1. A job is RELEVANT only if it passes ALL 11 hard gates listed below. Any single hard-gate failure → `decision: \"reject\"`.\n2. If `decision: \"proceed\"`, also assign a 0-100 rubric score across the 7 components below. `tier` is a function of `total_score` (see TIERS).\n3. The deterministic checker has already evaluated some gates before you see this input. Trust those results.\n   - Gates listed in `input.deterministic.passed` → emit `gates.\"<id>\".status = \"skipped_deterministic\"`.\n   - Gates listed in `input.deterministic.failed` → emit `gates.\"<id>\".status = \"fail\"` AND include the matching reason label in `rejection_reasons`. `decision` MUST be `\"reject\"`. Skip rubric scoring (set `components: null`, `total_score: null`, `tier: \"reject\"`).\n   - Gates listed in `input.deterministic.pending_for_llm` → evaluate yourself and emit `pass` or `fail` with concrete evidence.\n4. If multiple gates fail (whether deterministic or LLM-evaluated), include ALL their reason labels in `rejection_reasons`.\n5. If you choose `decision: \"review\"` (rare — only when evidence is genuinely ambiguous AND no gate has definitively failed), emit rubric components and `total_score` as you would for `\"proceed\"`. Use `\"review\"` sparingly; default to `\"reject\"` when in doubt.\n\n## HARD GATES (11)\n\n| # | Gate ID | Condition | Reason label on fail |\n|---|---|---|---|\n| 1 | `1_stack_match` | Job's primary skill(s) align with the profile's stack bucket (skills array + portfolio + work history). Allow common aliases (e.g. \"Node.js\" ≈ \"Nodejs\", \"React\" ≈ \"React.js\"). Generic single tags like \"Web Development\" alone are NOT a match. | \"Out of stack\" |\n| 2 | `2_freshness` | Posted within the last 24 hours (relative to current time at evaluation). | \"Old job\" |\n| 3 | `3_proposal_saturation` | `proposals_count` < 30 (or Upwork bucket \"Less than 5\", \"5–10\", \"10–15\", \"15–20\", \"20–50\" with bucket midpoint < 30). | \"Too many invites\" |\n| 4 | `4_hourly_floor` | If hourly: `budget_min` ≥ $25/hr. If fixed: skip this gate (cannot evaluate without effort estimate). If `budget_type = null` / not specified: skip. | \"Low Higher rate\" |\n| 5 | `5_client_spend_floor` | `client_total_spent` ≥ $1,000 lifetime. If `client_total_spent IS NULL` AND `client_hires IS NULL`: treat as sparse, NOT below-floor (skip and surface in `red_flags`). | \"Client Low spending\" |\n| 6 | `6_client_rating_floor` | `client_rating` ≥ 4.0. If `client_rating IS NULL` AND `client_hires == 0` or null: pass (new client, no rating yet). If `client_rating < 4.0`: fail. | \"Bad rating client\" |\n| 7 | `7_job_availability` | Posting open. Description does NOT contain \"filled\", \"closed\", \"hired already\", \"we already found someone\", \"position is closed\". | \"Job unavailable\" or \"Already hired\" |\n| 8 | `8_no_location_lockin` | Job does NOT require the freelancer to be physically located in a specific country (US-only, Canada-only, etc.). Look for phrases like \"U.S. residents only\", \"must be located in [country]\", \"American-based\", \"EU citizens only\". A client in country X is NOT a lock-in unless the posting demands the freelancer also be in X. | \"Location loc\" |\n| 9 | `9_no_video_proposal` | Job description does NOT require a recorded video pitch (look for \"video introduction\", \"Loom video\", \"send a video\", \"record yourself\"). | \"Video Proposal\" |\n| 10 | `10_portfolio_match` | The profile has at least one portfolio item (in `profile.portfolio_tldr`) whose `tech_stack_inferred` or title mirrors at least one core technology in `job.skills_required`. Generic portfolio overlap doesn't count — require concrete stack alignment. | \"Portfolio unavailable\" |\n| 11 | `11_no_duplicate` | (Deterministic only — you will not be asked to evaluate this. Trust the deterministic result.) | \"Duplicate\" |\n\n## REASON LABEL ENUM (USE EXACTLY — typos and shorthand are intentional)\n\nEvery value in `rejection_reasons` MUST be one of these 13 strings, byte-for-byte:\n\n```\n[\"Out of stack\", \"Old job\", \"Too many invites\", \"Low Higher rate\", \"Location loc\",\n \"Client Low spending\", \"Job unavailable\", \"Already hired\", \"Language barrier\",\n \"Bad rating client\", \"Video Proposal\", \"Duplicate\", \"Portfolio unavailable\"]\n```\n\nThe typos (\"Low Higher rate\" not \"Low Hourly Rate\", \"Location loc\" not \"Location Lock\") are deliberate — they match the labels agents use in production. Inventing new labels or fixing typos will break downstream routing.\n\n## RUBRIC (only when `decision = \"proceed\"` or `\"review\"`)\n\nWhen all hard gates pass (or you've chosen `review`), score the job on 7 weighted components. Each component has a max; assign an integer value 0..max plus a short `reason` citing concrete evidence from the input.\n\n| Component | Max | What it measures |\n|---|---|---|\n| `skill_match` | 30 | Depth of stack alignment in profile.skills + portfolio + work_history (not keyword counts) |\n| `portfolio_evidence` | 20 | Concrete portfolio item that mirrors the job's requirements (lead with named items) |\n| `client_quality` | 15 | Gradient on client_total_spent × client_hires × client_rating (treat null fields as sparse, not zero) |\n| `competition_position` | 10 | Proposals count, posting freshness within the 24h window, niche depth |\n| `domain_match` | 10 | Industry / problem-domain alignment with profile's prior work |\n| `experience_level_fit` | 10 | Job seniority (senior/lead/principal cues) vs profile signals (top_rated_status, hourly_rate, total_jobs) |\n| `red_flags` | 5 | **Higher value = FEWER red flags** (5 = none, 0 = many). Red flags include: vague scope, suspicious template language, missing client metadata, sub-floor budget that just passed by a hair, prior negative outcomes in the profile's work history with similar jobs |\n\n**`total_score`** = sum of component values, integer 0-100.\n\n## TIERS\n\n| total_score | tier |\n|---|---|\n| 80-100 | `apply_now` |\n| 60-79  | `strong` |\n| 40-59  | `marginal` |\n| 0-39   | `skip` |\n| (any when decision=reject) | `reject` |\n\n## CONFIDENCE & WARNINGS\n\n- `confidence`: number 0.0..1.0. Reflect your own uncertainty. Low confidence (<0.6) when input is sparse, ambiguous, or the deterministic gates left many checks to you.\n- `confidence_warnings`: array of strings. Emit one or more of:\n  - `\"stale_snapshot\"` when `profile.snapshot_age_days > 60`\n  - `\"non_english_description\"` when `job.description` appears non-English (≥3 consecutive non-Latin words or clearly machine-translated)\n  - `\"sparse_client_metadata\"` when ALL of `client_total_spent`, `client_hires`, `client_rating` are null\n  - `\"missing_skills_tags\"` when `job.skills_required.length < 2`\n  - `\"description_truncated\"` when `job.description.length === 1500` (exactly the truncation cap)\n\n## EVIDENCE LIBRARY (anchored — calibrate against these)\n\nThe following examples are real labeled jobs from the production board (Contabo snapshot, 2026-05-05). They define what `reject` and `proceed` look like for this team. When the input resembles one of these, use it as anchor — when it doesn't, fall back to first-principles gate evaluation.\n\n```json\n{\n  \"version\": \"0.2\",\n  \"generated_at\": \"2026-05-05\",\n  \"source\": \"Contabo sales_dashboard, n8n-sourced tasks (_source = 'n8n')\",\n  \"reject_examples\": [\n    {\n      \"title\": \"Web Developer\",\n      \"profile\": \"Craig\",\n      \"skills\": [\"Web Development\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Out of stack\"],\n      \"gates_failed\": [\"1_stack_match\"],\n      \"explanation\": \"Single generic skill tag with no concrete stack signal — cannot be mapped to any profile bucket.\"\n    },\n    {\n      \"title\": \"Need Wordpress developer with Polylang expertise\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Polylang\", \"WordPress\", \"PHP\", \"CSS\"],\n      \"budget\": \"20 - 40 USD\",\n      \"client\": {\"spent\": 29660.90, \"hires\": 19, \"rating\": 4.99, \"country\": \"United States\"},\n      \"reasons\": [\"Out of stack\"],\n      \"gates_failed\": [\"1_stack_match\"],\n      \"explanation\": \"Polylang is a niche WordPress i18n plugin; not in Shayan's bucket despite WordPress overlap.\"\n    },\n    {\n      \"title\": \"Programmatic SEO Strategist for Golf Travel Startup — Next.js SEO Page Launch\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Search Engine Optimization\", \"SEO Keyword Research\", \"Organic Traffic Growth\", \"Google Analytics\", \"On-Page SEO\"],\n      \"budget\": \"10 - 20 USD\",\n      \"client\": {\"spent\": 1000, \"hires\": 3, \"rating\": 5.00, \"country\": \"United States\"},\n      \"reasons\": [\"Out of stack\"],\n      \"gates_failed\": [\"1_stack_match\", \"4_hourly_floor\"],\n      \"explanation\": \"SEO strategy role with a Next.js red herring in the title; hourly bottom $10 is below floor.\"\n    },\n    {\n      \"title\": \"I need a frontend developer to recreate a Figma design (Laravel/Blade/Livewire)\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Front-End Development\", \"Laravel\", \"Blade Server\", \"tailwindcss\", \"livewire\"],\n      \"budget\": \"18 - 40 USD\",\n      \"client\": {\"spent\": 2861.40, \"hires\": 29, \"rating\": 4.98, \"country\": \"United Kingdom\"},\n      \"reasons\": [\"Out of stack\"],\n      \"gates_failed\": [\"1_stack_match\"],\n      \"explanation\": \"Laravel/Blade/Livewire stack — Shayan is React/Next.js-leaning; mismatched bucket.\"\n    },\n    {\n      \"title\": \"Wix Website Designer Needed for Section Redesign\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Wix\", \"Web Design\", \"Graphic Design\", \"Mockup\", \"Web Development\"],\n      \"budget\": \"15 - 30 USD\",\n      \"client\": {\"spent\": 672.89, \"hires\": 63, \"rating\": 5.00, \"country\": \"Nigeria\"},\n      \"reasons\": [\"Old job\", \"Out of stack\"],\n      \"gates_failed\": [\"1_stack_match\", \"2_freshness\"],\n      \"explanation\": \"No-code platform (Wix); we don't field Wix work on any profile.\"\n    },\n    {\n      \"title\": \"Senior Node.js Engineer — On-Call Maintenance for AI Document Pipeline\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"API Integration\", \"Node.js\", \"JavaScript\", \"API\", \"PDF Conversion\", \"Claude API\", \"Open AI API\", \"Automation Workflow\"],\n      \"budget\": \"20 - 40 USD\",\n      \"client\": {\"spent\": 189896.64, \"hires\": 58, \"rating\": 4.99, \"country\": \"United States\"},\n      \"reasons\": [\"Old job\"],\n      \"gates_failed\": [\"2_freshness\"],\n      \"explanation\": \"On-stack and high-conviction client signal, but listing was already 24h+ old when triaged.\"\n    },\n    {\n      \"title\": \"Divi/WordPress Designer Needed — 10-Page Site Refresh (3-4 Week Sprint)\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"Divi\", \"Responsive Design\", \"Landing Page\", \"WordPress\", \"Web Design\", \"Visual Design\"],\n      \"budget\": \"18 - 40 USD\",\n      \"client\": {\"spent\": 4928.68, \"hires\": 9, \"rating\": 4.99, \"country\": \"United States\"},\n      \"reasons\": [\"Old job\"],\n      \"gates_failed\": [\"2_freshness\"],\n      \"explanation\": \"Stack-aligned WordPress + healthy client, but listing aged past freshness window.\"\n    },\n    {\n      \"title\": \"Advanced All-in-One Travel Booking Platform (Flights, Hotels, & Cars)\",\n      \"profile\": \"Rebekah\",\n      \"skills\": [\"Full-Stack Development\", \"Next.js\", \"React\", \"JavaScript\", \"TypeScript\", \"API Integration\", \"AI Agent Development\", \"n8n\", \"React Native\", \"Supabase\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"Canada\"},\n      \"reasons\": [\"Old job\"],\n      \"gates_failed\": [\"2_freshness\"],\n      \"explanation\": \"On-stack for Rebekah but listing aged out — Rebekah's feed cadence is a recurring root cause (90% Old job).\"\n    },\n    {\n      \"title\": \"Operations Specialist wanted for busy Founder\",\n      \"profile\": \"Saim\",\n      \"skills\": [\"Email Communication\", \"Microsoft Word\", \"Microsoft Excel\", \"Administrative Support\"],\n      \"budget\": \"25 USD\",\n      \"client\": {\"spent\": 29186.95, \"hires\": 21, \"rating\": 4.72, \"country\": \"United States\"},\n      \"reasons\": [\"Old job\"],\n      \"gates_failed\": [\"1_stack_match\", \"2_freshness\"],\n      \"explanation\": \"Admin/ops role — out of dev stack entirely; would also fail freshness.\"\n    },\n    {\n      \"title\": \"FlutterFlow + Firebase Developer Needed — Paid Messaging / Transactional Chat Feature\",\n      \"profile\": \"Craig\",\n      \"skills\": [\"FlutterFlow\", \"Flutter\", \"API Integration\", \"Supabase\", \"Google Cloud Platform\", \"Mobile App Development\", \"Firebase\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 170, \"hires\": 1, \"rating\": null, \"country\": \"Australia\"},\n      \"reasons\": [\"Too many invites\"],\n      \"gates_failed\": [\"3_proposal_saturation\", \"5_client_spend_floor\"],\n      \"explanation\": \"Saturated job board for this listing; client spend $170 also below floor.\"\n    },\n    {\n      \"title\": \"Website Redesign for Dog Daycare\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Web Design\", \"WordPress\", \"Web Development\", \"Website Redesign\", \"Graphic Design\", \"Marketing\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 953.50, \"hires\": 4, \"rating\": 5.00, \"country\": \"United States\"},\n      \"reasons\": [\"Too many invites\"],\n      \"gates_failed\": [\"3_proposal_saturation\"],\n      \"explanation\": \"On-stack and decent client, but 30+ proposals already in — connect ROI negative.\"\n    },\n    {\n      \"title\": \"PowerApp Developer & Consultant Needed\",\n      \"profile\": \"Craig\",\n      \"skills\": [\"Microsoft PowerApps\", \"Microsoft SharePoint Development\", \"Microsoft Windows\", \"Microsoft SharePoint\", \"iOS\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 430, \"hires\": 2, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Too many invites\"],\n      \"gates_failed\": [\"1_stack_match\", \"3_proposal_saturation\"],\n      \"explanation\": \"PowerApps not in any profile bucket; saturated regardless.\"\n    },\n    {\n      \"title\": \"Website Development for OnBoardNoe: Guided Onboarding Platform\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Web Development\", \"WordPress\", \"Web Design\", \"JavaScript\", \"HTML\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 85114.41, \"hires\": 38, \"rating\": 4.57, \"country\": \"United Kingdom\"},\n      \"reasons\": [\"Too many invites\"],\n      \"gates_failed\": [\"3_proposal_saturation\"],\n      \"explanation\": \"Strong client signal ($85k / 38 hires) but saturation killed marginal ROI.\"\n    },\n    {\n      \"title\": \"SeedProd Landing Page Creation\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Web Design\", \"HTML5\", \"Landing Page\", \"Graphic Design\"],\n      \"budget\": \"15 - 30 USD\",\n      \"client\": {\"spent\": null, \"hires\": 1, \"rating\": null, \"country\": \"Canada\"},\n      \"reasons\": [\"Low Higher rate\"],\n      \"gates_failed\": [\"4_hourly_floor\"],\n      \"explanation\": \"Hourly bottom $15 is below the $25 floor; client signal also weak.\"\n    },\n    {\n      \"title\": \"Senior Full-Stack Developer needed for Talent Marketplace Platform MVP (Next.js + Stripe)\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Next.js\", \"PostgreSQL\", \"React\", \"Node.js\", \"Stripe\"],\n      \"budget\": \"5,000 USD\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"Mexico\"},\n      \"reasons\": [\"Low Higher rate\"],\n      \"gates_failed\": [\"4_hourly_floor\"],\n      \"explanation\": \"Fixed-price $5k for an MVP-scope Next.js platform; implied effort produces sub-floor hourly rate.\"\n    },\n    {\n      \"title\": \"Capalot Gaming Web Design\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"WordPress\", \"WooCommerce\", \"Elementor\", \"Page Speed Optimization\", \"Landing Page Design\", \"SEO Audit\", \"Web Design\"],\n      \"budget\": \"15 - 30 USD\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Low Higher rate\"],\n      \"gates_failed\": [\"4_hourly_floor\"],\n      \"explanation\": \"Hourly $15-30 below floor; gaming-themed WP build.\"\n    },\n    {\n      \"title\": \"Family Law Firm Website Redesign\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Web Design\", \"Web Development\", \"Graphic Design\", \"Logo Design\"],\n      \"budget\": \"15 - 30 USD\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Low Higher rate\", \"Out of stack\"],\n      \"gates_failed\": [\"1_stack_match\", \"4_hourly_floor\"],\n      \"explanation\": \"Generic 'Web Design / Logo Design' tags + sub-floor hourly.\"\n    },\n    {\n      \"title\": \"Web Manager for Ongoing Maintenance and Updates\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"WordPress\", \"Web Development\", \"HTML\", \"PHP\", \"CSS\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": null, \"hires\": 1, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Location loc\"],\n      \"gates_failed\": [\"8_no_location_lockin\"],\n      \"explanation\": \"On-stack maintenance role but posting requires US-resident freelancer.\"\n    },\n    {\n      \"title\": \"American based app developer\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"JavaScript\", \"API\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 825.49, \"hires\": 1, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Location loc\"],\n      \"gates_failed\": [\"8_no_location_lockin\"],\n      \"explanation\": \"Title literally states US-based requirement.\"\n    },\n    {\n      \"title\": \"Custom ecommerce site migration to WooCommerce\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"WooCommerce\", \"Web Design\", \"Web Development\", \"Ecommerce Website Development\"],\n      \"budget\": \"3,000 USD\",\n      \"client\": {\"spent\": 1550.20, \"hires\": 6, \"rating\": 5.00, \"country\": \"United States\"},\n      \"reasons\": [\"Location loc\"],\n      \"gates_failed\": [\"8_no_location_lockin\"],\n      \"explanation\": \"Stack-aligned + acceptable client, but US-residency lock in posting body.\"\n    },\n    {\n      \"title\": \"Strategic Web Designer Needed for Website Build/Rebuild\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Web Design\", \"Web Development\"],\n      \"budget\": null,\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Location loc\"],\n      \"gates_failed\": [\"8_no_location_lockin\"],\n      \"explanation\": \"Posting requires US-based freelancer.\"\n    },\n    {\n      \"title\": \"Website Updates Needed – FAQ Section, Team Page Completion & Resource Page Setup\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"WordPress\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 230.75, \"hires\": 4, \"rating\": 1.91, \"country\": \"United States\"},\n      \"reasons\": [\"Client Low spending\"],\n      \"gates_failed\": [\"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"Client spent only $231 + low rating 1.91 — double red flag.\"\n    },\n    {\n      \"title\": \"Consulting Firm Website Redesign\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Web Design\", \"Web Development\", \"WordPress\", \"Graphic Design\"],\n      \"budget\": \"15 - 30 USD\",\n      \"client\": {\"spent\": 262.24, \"hires\": 1, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Client Low spending\"],\n      \"gates_failed\": [\"4_hourly_floor\", \"5_client_spend_floor\"],\n      \"explanation\": \"Sub-floor hourly + client spend $262.\"\n    },\n    {\n      \"title\": \"IT Expert Needed for Migration Project\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"WordPress\", \"PHP\", \"Web Development\", \"Data Entry\", \"JavaScript\"],\n      \"budget\": \"10 - 20 USD\",\n      \"client\": {\"spent\": 210.97, \"hires\": 6, \"rating\": 5.00, \"country\": \"United States\"},\n      \"reasons\": [\"Client Low spending\"],\n      \"gates_failed\": [\"4_hourly_floor\", \"5_client_spend_floor\"],\n      \"explanation\": \"Hourly $10-20 below floor; client spend $211 below floor; 5.0 rating cannot offset.\"\n    },\n    {\n      \"title\": \"Framer developer\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Web Development\", \"Framer\", \"webdesign\", \"ui ux\"],\n      \"budget\": \"15 - 30 USD\",\n      \"client\": {\"spent\": 300.19, \"hires\": 9, \"rating\": 5.00, \"country\": \"France\"},\n      \"reasons\": [\"Client Low spending\"],\n      \"gates_failed\": [\"1_stack_match\", \"4_hourly_floor\", \"5_client_spend_floor\"],\n      \"explanation\": \"Framer (no-code design) not in stack; sub-floor hourly + low spend.\"\n    },\n    {\n      \"title\": \"WordPress Bug Fixing Expert Needed\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"WordPress\", \"PHP\", \"WordPress Plugin\", \"Web Development\"],\n      \"budget\": \"30 - 50 USD\",\n      \"client\": {\"spent\": 4063.63, \"hires\": 9, \"rating\": 2.07, \"country\": \"United States\"},\n      \"reasons\": [\"Bad rating client\"],\n      \"gates_failed\": [\"6_client_rating_floor\"],\n      \"explanation\": \"Stack-perfect WP work + above-floor budget + above-floor spend, but client rating 2.07 disqualifies.\"\n    },\n    {\n      \"title\": \"Proactive Funnel & Website Assistant for Showit + Systeme.io\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"Landing Page\", \"system io\", \"Showit\", \"Email Marketing\"],\n      \"budget\": \"10 - 28 USD\",\n      \"client\": {\"spent\": 1039.30, \"hires\": 4, \"rating\": 1.52, \"country\": \"Netherlands\"},\n      \"reasons\": [\"Bad rating client\"],\n      \"gates_failed\": [\"1_stack_match\", \"4_hourly_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"No-code stack + sub-floor hourly + 1.52 rating.\"\n    },\n    {\n      \"title\": \"Upgrade Laravel Website to Latest Version\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"PHP\", \"Laravel\", \"MySQL\", \"MySQL Programming\"],\n      \"budget\": \"25 - 50 USD\",\n      \"client\": {\"spent\": 192993.11, \"hires\": 28, \"rating\": 5.00, \"country\": \"United States\"},\n      \"reasons\": [\"Already hired\"],\n      \"gates_failed\": [\"7_job_availability\"],\n      \"explanation\": \"Otherwise an ideal job (stack + $193k spend + 5.0 rating) — but already filled.\"\n    },\n    {\n      \"title\": \"Next.js + Supabase Marketplace Deployment — Fixed Scope\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"Next.js\", \"TypeScript\", \"Vercel\", \"Supabase\", \"Stripe API\"],\n      \"budget\": \"5,000 USD\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Already hired\"],\n      \"gates_failed\": [\"7_job_availability\"],\n      \"explanation\": \"Stack-perfect for Khansa, $5k fixed — but posting closed.\"\n    },\n    {\n      \"title\": \"SEO Specialist – Local SEO (Multiple Businesses)\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"Local SEO\", \"On-Page SEO\", \"SEO Audit\", \"Search Engine Optimization\", \"Google business profile\", \"Organic Traffic Growth\"],\n      \"budget\": \"15 - 20 USD\",\n      \"client\": {\"spent\": 1866, \"hires\": 12, \"rating\": 5.00, \"country\": \"United States\"},\n      \"reasons\": [\"Job unavailable\"],\n      \"gates_failed\": [\"7_job_availability\"],\n      \"explanation\": \"Posting taken down before bid sent.\"\n    },\n    {\n      \"title\": \"ZENTIQ AI – GLOBAL SaaS PLATFORM\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"Node.js\", \"SaaS\", \"Python\", \"API\", \"AWS Application\"],\n      \"budget\": \"5,000 USD\",\n      \"client\": {\"spent\": null, \"hires\": 1, \"rating\": null, \"country\": \"United Kingdom\"},\n      \"reasons\": [\"Job unavailable\"],\n      \"gates_failed\": [\"7_job_availability\"],\n      \"explanation\": \"On-stack SaaS work, but posting deleted before triage.\"\n    },\n    {\n      \"title\": \"Product Engineer (Next.js / Node) - AI Encouraged\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"JavaScript\", \"Node.js\", \"React\", \"PostgreSQL\", \"Next.js\", \"TypeScript\", \"Prisma\", \"Fastify\"],\n      \"budget\": \"40 - 65 USD\",\n      \"client\": {\"spent\": 1226132.69, \"hires\": 92, \"rating\": 4.97, \"country\": \"United States\"},\n      \"reasons\": [\"Video Proposal\"],\n      \"gates_failed\": [\"9_no_video_proposal\"],\n      \"explanation\": \"$1.2M spend + 92 hires + 4.97 rating + on-stack — would be elite, but requires video pitch (out of process).\"\n    },\n    {\n      \"title\": \"Frontend QA + UX Polish (Lovable / React) – Mobile App Feel (PWA)\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"Responsive Design\", \"UI Animation\", \"Front-End Development\", \"JavaScript\", \"react.js\", \"Progressive Web App\"],\n      \"budget\": \"15 - 30 USD\",\n      \"client\": {\"spent\": 59149.46, \"hires\": 43, \"rating\": 4.82, \"country\": \"Netherlands\"},\n      \"reasons\": [\"Video Proposal\"],\n      \"gates_failed\": [\"4_hourly_floor\", \"9_no_video_proposal\"],\n      \"explanation\": \"Strong client + on-stack, but sub-floor hourly + video pitch requirement.\"\n    },\n    {\n      \"title\": \"Ongoing WordPress Maintenance and HubSpot Integration\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"WordPress\", \"CSS\", \"Web Development\", \"HubSpot\", \"HTML\"],\n      \"budget\": \"14 - 28 USD\",\n      \"client\": {\"spent\": 14522.11, \"hires\": 21, \"rating\": 5.00, \"country\": \"Oman\"},\n      \"reasons\": [\"Language barrier\"],\n      \"gates_failed\": [],\n      \"soft_signal_failed\": [\"language_barrier\"],\n      \"explanation\": \"Healthy client, on-stack, but client communication non-English. Maps to §8 soft signal, not a hard gate.\"\n    },\n    {\n      \"title\": \"AI-Augmented Software Engineer (Contract) — Ship Features Fast with Claude Code\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"Node.js\", \"AWS Lambda\", \"TypeScript\", \"Python\", \"JavaScript\", \"Claude\", \"amazon connect\"],\n      \"budget\": \"30 - 45 USD\",\n      \"client\": {\"spent\": 10412.27, \"hires\": 1, \"rating\": null, \"country\": \"Canada\"},\n      \"reasons\": [\"Portfolio unavailable\"],\n      \"gates_failed\": [\"10_portfolio_match\"],\n      \"explanation\": \"Stack-aligned + above-floor, but profile lacked a Claude-Code-style case study to attach.\"\n    },\n    {\n      \"title\": \"HubSpot HTML/CSS Developer Needed – Clean Up Code, Fix Speed Issues\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"CSS\", \"HTML\", \"JavaScript\", \"HTML5\", \"Website\", \"PHP\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 7672.31, \"hires\": 26, \"rating\": 4.72, \"country\": \"United States\"},\n      \"reasons\": [\"Duplicate\"],\n      \"gates_failed\": [\"11_no_duplicate\"],\n      \"explanation\": \"Same `_job_id` already tracked on a sibling profile's board.\"\n    }\n  ],\n  \"proceed_examples\": [\n    {\n      \"title\": \"AI + Frontend Integration (Voiceflow + UI State + Kajabi) — Discovery Phase\",\n      \"profile\": \"Laiba\",\n      \"skills\": [\"API Integration\", \"Full-Stack Development\", \"Next.js\", \"Python\", \"AI Implementation\", \"AI Agent Development\", \"React\", \"Retrieval Augmented Generation\", \"LangChain\", \"Node.js\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 200, \"hires\": 1, \"rating\": null, \"country\": \"United States\"},\n      \"outcome_stage\": \"Won\",\n      \"gates_passed\": [\"1_stack_match\", \"2_freshness\", \"3_proposal_saturation\", \"7_job_availability\", \"8_no_location_lockin\", \"9_no_video_proposal\", \"10_portfolio_match\", \"11_no_duplicate\"],\n      \"explanation\": \"Stack-perfect AI/Next.js work for Laiba; sparse client metadata tolerated due to discovery-phase scope. Closed Won.\"\n    },\n    {\n      \"title\": \"Full Stack + AI Systems Engineer (AI Operating System for Businesses)\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"AI Agent Development\", \"AI App Development\", \"AI Model Integration\", \"Artificial Intelligence\", \"Python\", \"Machine Learning\", \"API\"],\n      \"budget\": \"15 - 35 USD\",\n      \"client\": {\"spent\": 10050.87, \"hires\": 32, \"rating\": 4.94, \"country\": \"United States\"},\n      \"outcome_stage\": \"InChat\",\n      \"gates_passed\": [\"1_stack_match\", \"2_freshness\", \"3_proposal_saturation\", \"5_client_spend_floor\", \"6_client_rating_floor\", \"7_job_availability\", \"8_no_location_lockin\"],\n      \"explanation\": \"Stack-perfect AI work + $10k spend + 4.94 rating. Hourly $15-35 borderline (fail on strict $25 floor — bottom is $15) but agent proceeded; flagged for §11 question 1.\"\n    },\n    {\n      \"title\": \"JavaScript App Code Verification and Server Configuration\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"JavaScript\", \"Node.js\", \"API\"],\n      \"budget\": \"2,400 USD\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"Canada\"},\n      \"outcome_stage\": \"InChat\",\n      \"gates_passed\": [\"1_stack_match\", \"2_freshness\", \"3_proposal_saturation\", \"7_job_availability\"],\n      \"explanation\": \"Stack-aligned JS/Node work; $2,400 fixed implies acceptable hourly. Client metadata sparse but stack signal dominated.\"\n    },\n    {\n      \"title\": \"Develop an AI-Powered Email Filtering SaaS Platform\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"Python\", \"API\", \"JavaScript\", \"Node.js\"],\n      \"budget\": \"30 - 50 USD\",\n      \"client\": {\"spent\": 9800.54, \"hires\": 38, \"rating\": 4.98, \"country\": \"United States\"},\n      \"outcome_stage\": \"ProposalViews\",\n      \"gates_passed\": [\"1_stack_match\", \"4_hourly_floor\", \"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"Above-floor hourly $30-50 + on-stack + $9.8k spend + 4.98 rating. Textbook proceed.\"\n    },\n    {\n      \"title\": \"Full-Stack Developer Needed to Build Claude-Powered SaaS MVP\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"AI App Development\", \"Website Redesign\", \"Web Application\", \"Claude\", \"React\"],\n      \"budget\": \"25 - 47 USD\",\n      \"client\": {\"spent\": 110.73, \"hires\": 5, \"rating\": 5.00, \"country\": \"Kenya\"},\n      \"outcome_stage\": \"ProposalViews\",\n      \"gates_passed\": [\"1_stack_match\", \"4_hourly_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"Hourly bottom $25 = floor pass; client spend $111 below threshold but agent proceeded on stack-perfection (Claude/React/SaaS for Khansa) — 5.0 rating offsets.\"\n    },\n    {\n      \"title\": \"RAG + Knowledge Graph System - Fixed Price Build\",\n      \"profile\": \"Laiba\",\n      \"skills\": [\"Python\", \"Retrieval Augmented Generation\", \"Knowledge Graph\", \"Neo4j\", \"Vector Database\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 15455.21, \"hires\": 71, \"rating\": 4.97, \"country\": \"United Kingdom\"},\n      \"outcome_stage\": \"ProposalViews\",\n      \"gates_passed\": [\"1_stack_match\", \"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"Niche but Laiba-aligned stack (RAG/KG/Vector); $15k client + 71 hires + 4.97 rating.\"\n    },\n    {\n      \"title\": \"Local SEO Specialist for U.S. Accounting Firm\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"Search Engine Optimization\", \"SEO Keyword Research\", \"SEO Backlinking\", \"SEO Audit\", \"Organic Traffic Growth\", \"On-Page SEO\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 4807.90, \"hires\": 19, \"rating\": 5.00, \"country\": \"United States\"},\n      \"outcome_stage\": \"ProposalViews\",\n      \"gates_passed\": [\"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"SEO work for Sana — note: §6.7 has SEO as out-of-stack for Shayan but Sana's bucket allows SEO/marketing-adjacent. Stack-bucket per profile matters.\"\n    },\n    {\n      \"title\": \"Software Engineer for Boutique M&A Advisory Firm\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"API Development\", \"Python\", \"JavaScript\", \"AI Development\", \"AWS Lambda\", \"SQL\", \"Zapier\", \"CRM Automation\"],\n      \"budget\": \"15 - 35 USD\",\n      \"client\": {\"spent\": 92602.24, \"hires\": 43, \"rating\": 5.00, \"country\": \"United States\"},\n      \"outcome_stage\": \"ProposalSubmitted\",\n      \"gates_passed\": [\"1_stack_match\", \"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"Strong client signal ($92k spend, 5.0 rating) + on-stack Python/AI/AWS. Hourly bottom $15 is below strict floor — agent override on client strength.\"\n    },\n    {\n      \"title\": \"Senior Full Stack Architect / Technical Lead\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"NestJS\", \"Python\", \"React\", \"Node.js\", \"System Architecture\", \"Full Stack Development\", \"API Design\", \"Technical Leadership\"],\n      \"budget\": \"25 - 35 USD\",\n      \"client\": {\"spent\": 8409.58, \"hires\": 103, \"rating\": 4.96, \"country\": \"United Kingdom\"},\n      \"outcome_stage\": \"ProposalSubmitted\",\n      \"gates_passed\": [\"1_stack_match\", \"4_hourly_floor\", \"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"Hourly $25 floor pass + 103 hires + 4.96 rating + NestJS/Python/React on Sana's bucket.\"\n    },\n    {\n      \"title\": \"Principal Engineer / Technical Steward for AI-Built Next.js / Vercel / Prisma archive\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"React\", \"TypeScript\", \"Next.js\", \"PostgreSQL\", \"Vercel\", \"Software Debugging\", \"Node.js\", \"Prisma\"],\n      \"budget\": \"40 - 75 USD\",\n      \"client\": {\"spent\": 3636.22, \"hires\": 18, \"rating\": 5.00, \"country\": \"United States\"},\n      \"outcome_stage\": \"ProposalSubmitted\",\n      \"gates_passed\": [\"1_stack_match\", \"4_hourly_floor\", \"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"All gates pass cleanly: hourly $40-75, client $3.6k, rating 5.0, stack perfect.\"\n    },\n    {\n      \"title\": \"AI Automation Workflow Setup n8n + Custom AI Agent\",\n      \"profile\": \"Laiba\",\n      \"skills\": [\"Node.js\", \"n8n\", \"Workflow Automation\", \"AI Integration\", \"AI Agents\", \"Python\", \"REST API\", \"Webhooks\"],\n      \"budget\": \"15 - 20 USD\",\n      \"client\": {\"spent\": 5867.27, \"hires\": 146, \"rating\": 5.00, \"country\": \"United Arab Emirates\"},\n      \"outcome_stage\": \"ProposalSubmitted\",\n      \"gates_passed\": [\"1_stack_match\", \"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"146 hires + 5.0 rating + n8n/AI core stack. Hourly $15-20 below strict floor — agent override on client strength + stack-perfection.\"\n    },\n    {\n      \"title\": \"PDR API Integration Development Using Fannie Mae Specifications\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"API\", \"PHP\", \"JavaScript\", \"API Integration\", \"WordPress\"],\n      \"budget\": \"6,000 USD\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"United States\"},\n      \"outcome_stage\": \"ProposalSubmitted\",\n      \"gates_passed\": [\"1_stack_match\"],\n      \"explanation\": \"Stack-aligned + $6k fixed scope. Client metadata sparse but agent proceeded on stack signal.\"\n    }\n  ]\n}\n```\n\n## CALIBRATION NOTES (read these carefully)\n\nThese notes call out non-obvious patterns from the labeled data above. They override naive gate-reading where they conflict.\n\n1. **Stack > client signal**: Several `proceed_examples` have weak client metadata (null spend, 1 hire, no rating) but proceed anyway because the stack alignment is undeniable. Conversely, several `reject_examples` have $50k+ client spend and 4.99 rating but reject because the stack is wrong (Polylang for a React profile, Wix for any profile). **When in doubt, weigh stack heavier than client metadata.**\n\n2. **Hourly floor is soft-overridable when client signal is elite**: PRD strict floor is $25/hr. Two `proceed_examples` (`AI Operating System for Businesses` and `M&A Advisory Firm`) passed at $15/hr because the client was 4.94+ rating with 30+ hires. The agents made these calls. Mirror their behavior: if hourly is sub-floor BUT (`client_total_spent ≥ $50,000` AND `client_rating ≥ 4.9`) AND stack-perfect, lean toward proceed — but lower `competition_position` and `red_flags` to reflect the budget concern.\n\n3. **\"Old job\" rejects often have STELLAR clients**: Several `reject_examples` for \"Old job\" have $50k–$190k client spend and 4.99 rating. Freshness is a hard gate — do NOT try to argue around it on client strength. If `posted_at > 24h ago`, reject as \"Old job\" regardless of other quality signals.\n\n4. **\"Already hired\" / \"Job unavailable\" cannot be detected from skills/budget alone** — only from description text. Look for phrases like \"we found someone\", \"position is closed\", \"this posting has been filled\". Absence of such phrases ≠ open posting, but the deterministic checker has no way to know either, so it's mostly down to LLM read.\n\n5. **Per-profile stack drift**: \"Local SEO Specialist\" is a PROCEED for Sana but `reject_examples` shows a similar SEO role as REJECT for Shayan. Sana's bucket includes SEO/marketing-adjacent; Shayan's is React/Next.js/WordPress. **Always evaluate stack-match against the SPECIFIC profile in input, not against a universal \"developer profile\".**\n\n6. **No-code platforms are out-of-stack everywhere**: Wix, Webflow, Bubble, Squarespace, Framer (as a no-code design tool), FlutterFlow, PowerApps, Showit, Systeme.io — none of our profiles field these. Reject on \"Out of stack\" regardless of other signals.\n\n7. **\"Language barrier\" maps to soft signal, NOT a hard gate**: The one labeled example sits at `gates_failed: []` with `soft_signal_failed: [\"language_barrier\"]`. If you detect non-English client communication or required-language mismatch, surface it via `confidence_warnings: [\"non_english_description\"]` and reduce `red_flags` component score — do NOT add \"Language barrier\" to `rejection_reasons` unless ALL hard gates also pass (which would make it the lone reason to reject).\n\n## OUTPUT RULES\n\n- Emit ONLY JSON conforming to the response schema. No markdown, no prose preamble, no commentary.\n- Every gate evaluated by you (those in `pending_for_llm`) MUST have an `evidence` string ≤ 200 chars citing concrete fields from the input.\n- Every rubric `components.<name>.reason` MUST cite concrete fields from the input.\n- `summary`: ≤ 600 chars. Lead with the decision and the strongest one or two signals.\n- `proposal_angles`: 0-3 strings. Lead with concrete portfolio items or prior work titles from `profile.portfolio_tldr` / `profile.work_history_tldr` when available. NEVER write generic angles (\"strong communication\", \"fast turnaround\") — those are useless to the proposal writer.\n- `missing_signals`: array of strings naming fields you wished you had (\"client_payment_verified\", \"client_member_since\", \"full_job_description\"). Empty array when input is complete.\n- `criteria_version`: echo back the `criteria_version` from input (currently \"0.2\").\n- `prompt_version`: emit \"v1\".\n- `confidence`: number 0..1 reflecting your own certainty.\n- `confidence_warnings`: array — see CONFIDENCE & WARNINGS section above.\n- When `request_meta.evidence_panel_required = true`: also emit `evidence_panel: { strengths: string[], weaknesses: string[], match_explanation: string }`. Keep each array 1-5 items, strings ≤ 200 chars each.\n- When `request_meta.evidence_panel_required = false`: omit `evidence_panel` entirely.\n- **You do NOT emit `effective_decision`, `threshold_flipped`, or `min_score_at_decision`.** Those are computed by the downstream C6 node from your `decision` and `total_score` plus the min-score threshold in force. Stay in your lane.\n\n## SELF-CHECK BEFORE EMITTING\n\n1. Does my `decision` match my gate findings? (any `fail` → must be `reject`)\n2. Are all reason labels in `rejection_reasons` from the 13-element enum? (no inventions, no typo fixes)\n3. If `decision = \"proceed\"` or `\"review\"`: did I emit all 7 rubric components with values ≤ each component's max?\n4. Does `total_score` equal the sum of component values?\n5. Does `tier` match `total_score` per the TIERS table?\n6. Did I trust the deterministic results without re-evaluating them?\n7. Is every `evidence` string anchored to concrete fields from the input (not invented)?\n\nAnswer all 7 yes before emitting."
+        }
+      },
+      "id": "c5-ai-agent",
+      "name": "AI Agent — Relevancy Classifier",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -368,
+        -96
+      ],
+      "onError": "continueErrorOutput",
+      "notes": "C5 — v3.3 Phase 6 Sitting 1. AI Agent (Gemini Flash 2.5 via sub-node, Structured Output Parser via sub-node). System prompt is the canonical Mode A body inlined in parameters.options.systemMessage (~30KB, source-of-truth = docs/relevancy/mode_a_prompt.md between the ~~~ fences). User msg from C4 ($json.user_message_json). On model error → continueErrorOutput (Sitting 2 wires to C11 DLQ).",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2500
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "gemini-25-flash",
+      "name": "Gemini Flash 2.5",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -432,
+        128
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "0gaoWdarY6itka7l",
+          "name": "Gemini API (Relevancy Classifier)"
+        }
+      },
+      "notes": "C5 sub-node (ai_languageModel) — v3.3 Phase 6 Sitting 1. Model pinned to gemini-2.5-flash. Credential = 'Gemini API (Relevancy Classifier)' (googlePalmApi, ID 0gaoWdarY6itka7l). Bound 2026-05-11.",
+      "retryOnFail": false,
+      "maxTries": 1,
+      "waitBetweenTries": 0
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"decision\": \"proceed\",\n  \"rejection_reasons\": [],\n  \"gates\": {\n    \"1_stack_match\": { \"status\": \"pass\", \"evidence\": \"Job needs Next.js + React + TS; profile lists React, TypeScript, Node.js and has SaaS experience.\" },\n    \"2_freshness\": { \"status\": \"skipped_deterministic\", \"evidence\": \"checked by deterministic pre-check\" },\n    \"3_proposal_saturation\": { \"status\": \"skipped_deterministic\", \"evidence\": \"checked by deterministic pre-check\" },\n    \"4_hourly_floor\": { \"status\": \"skipped_deterministic\", \"evidence\": \"checked by deterministic pre-check\" },\n    \"5_client_spend_floor\": { \"status\": \"skipped_deterministic\", \"evidence\": \"checked by deterministic pre-check\" },\n    \"6_client_rating_floor\": { \"status\": \"skipped_deterministic\", \"evidence\": \"checked by deterministic pre-check\" },\n    \"7_job_availability\": { \"status\": \"pass\", \"evidence\": \"No closure indicators in description.\" },\n    \"8_no_location_lockin\": { \"status\": \"pass\", \"evidence\": \"No US-residency requirement in description.\" },\n    \"9_no_video_proposal\": { \"status\": \"pass\", \"evidence\": \"No video pitch requirement in description.\" },\n    \"10_portfolio_match\": { \"status\": \"pass\", \"evidence\": \"Profile has SaaS CRM Laravel + React/Next.js portfolio item that mirrors job stack.\" },\n    \"11_no_duplicate\": { \"status\": \"skipped_deterministic\", \"evidence\": \"checked by deterministic pre-check\" }\n  },\n  \"components\": {\n    \"skill_match\": { \"value\": 24, \"max\": 30, \"reason\": \"Strong React/TS/Node alignment; Next.js inferred from work history.\" },\n    \"portfolio_evidence\": { \"value\": 16, \"max\": 20, \"reason\": \"SaaS CRM portfolio item is a direct mirror of B2B SaaS marketplace requirements.\" },\n    \"client_quality\": { \"value\": 13, \"max\": 15, \"reason\": \"$25k spend, 30 hires, 4.95 rating — strong client signal.\" },\n    \"competition_position\": { \"value\": 8, \"max\": 10, \"reason\": \"8 proposals at <4h fresh — favorable.\" },\n    \"domain_match\": { \"value\": 8, \"max\": 10, \"reason\": \"SaaS marketplace aligns with prior CRM SaaS work.\" },\n    \"experience_level_fit\": { \"value\": 8, \"max\": 10, \"reason\": \"Senior request matches top_rated + $30/hr profile rate.\" },\n    \"red_flags\": { \"value\": 4, \"max\": 5, \"reason\": \"Some risk on Next.js depth; otherwise clean scope.\" }\n  },\n  \"total_score\": 81,\n  \"tier\": \"apply_now\",\n  \"confidence\": 0.78,\n  \"confidence_warnings\": [],\n  \"proposal_angles\": [\n    \"Lead with the Laravel + React/Next.js SaaS CRM portfolio item as the closest mirror.\",\n    \"Reference 506 total hours and top_rated_plus status to signal velocity.\"\n  ],\n  \"summary\": \"Strong proceed: stack alignment via React/TS/Node + SaaS CRM portfolio, healthy client signal, fresh listing. Apply with the SaaS CRM piece as lead.\",\n  \"missing_signals\": [\"client_payment_verified\"],\n  \"criteria_version\": \"0.2\",\n  \"prompt_version\": \"v1\"\n}",
+        "autoFix": true
+      },
+      "id": "output-parser",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -256,
+        128
+      ],
+      "notes": "C5 sub-node (ai_outputParser) — v3.3 Phase 6 Sitting 2 (revision 3). schemaType=fromJson with a complete example verdict (proceed-shaped, all 11 gates, 7 components). autoFix=true so a parse miss triggers a corrective re-prompt. The example covers every field; n8n derives the schema from it."
+    },
+    {
+      "parameters": {
+        "jsCode": "// C6 — Validate Output + Apply Threshold (v3.3 Phase 6 Sitting 2)\n//\n// Input:    $json    = parsed LLM verdict from C5 (Structured Output Parser)\n// Upstream: $('Prepare Classifier Input').first().json carries profile_context, job, request_meta, criteria_version, thresholds_in_force\n// Output:   unified verdict ready for C8 routing + C10 ingest\n\n// AI Agent (no parser) emits { output: \"raw text\" }. Parse it as JSON; on failure, mark for review.\nconst raw = items[0].json;\nlet llmOutput;\ntry {\n  const text = raw.output ?? raw.text ?? JSON.stringify(raw);\n  // Strip optional markdown code fences (```json ... ``` or ``` ... ```)\n  const stripped = text.trim().replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/, '').trim();\n  llmOutput = JSON.parse(stripped);\n} catch (e) {\n  llmOutput = {\n    decision: 'review',\n    confidence: 0.0,\n    confidence_warnings: ['parse_failure', e.message ?? 'unknown'],\n    rejection_reasons: [],\n    summary: `JSON parse failed on LLM output: ${(raw.output ?? '').slice(0, 200)}`,\n  };\n}\nconst upstream = $('Prepare Classifier Input').first().json;\nconst profileCtx = upstream.profile_context ?? {};\nconst reqMeta = upstream.request_meta ?? {};\nconst job = upstream.job ?? {};\nconst system = profileCtx._system ?? {};\n\n// 1. Schema sanity — fall back to 'review' on invalid decision (do not silently default to proceed; §16.7 A1)\nconst ALLOWED = new Set(['proceed', 'reject', 'review']);\nconst verdict = { ...llmOutput };\nif (!ALLOWED.has(verdict.decision)) {\n  verdict.decision = 'review';\n  verdict.confidence = (verdict.confidence ?? 0) * 0.5;\n  verdict.confidence_warnings = [...(verdict.confidence_warnings ?? []), 'invalid_decision_value'];\n}\n\n// 2. Verifier (§16.7 A3) — regex-scan job description for gate-9 hallucinations\nconst description = (job.description ?? '').toLowerCase();\nconst VIDEO_RE = /\\b(loom|video|screen[-\\s]?recording|record yourself)\\b/i;\nif (verdict.decision === 'proceed' && VIDEO_RE.test(description)) {\n  verdict.decision = 'reject';\n  verdict.rejection_reasons = [...(verdict.rejection_reasons ?? []), 'Video Proposal'];\n  verdict.confidence_warnings = [...(verdict.confidence_warnings ?? []), 'verifier_flipped_video'];\n}\n\n// 3. Threshold application (v3.3 §7.5)\nconst classifierMode = system.classifier_mode ?? 'shadow';\nconst minScore = system.effective_min_score ?? 50;\nconst totalScore = verdict.total_score ?? null;\n\nlet effectiveDecision = verdict.decision;\nlet thresholdFlipped = false;\nif (verdict.decision === 'proceed' && totalScore !== null && totalScore < minScore) {\n  effectiveDecision = 'reject';\n  thresholdFlipped = true;\n  verdict.rejection_reasons = [...(verdict.rejection_reasons ?? []), 'Below score threshold'];\n}\n\n// 4. Stamp v3.3 fields\nverdict.effective_decision           = effectiveDecision;\nverdict.threshold_flipped            = thresholdFlipped;\nverdict.min_score_at_decision        = minScore;\nverdict.classifier_mode_at_decision  = classifierMode;\n\n// 5. Populate /api/relevancy-scores ingest-contract fields\nverdict.profile_id        = profileCtx.profile?.profile_id ?? null;\nverdict.job_external_id   = job.job_id ?? null;\nverdict.snapshot_id       = profileCtx.profile?.id ?? null;\nverdict.model             = 'gemini-2.5-flash';\nverdict.prompt_mode       = 'A_full';\nverdict.evaluation_path   = (upstream.deterministic?.passed?.length ?? 0) > 0\n  ? 'llm_after_deterministic'\n  : 'llm';\nverdict.criteria_version  = verdict.criteria_version ?? upstream.criteria_version ?? '0.2';\nverdict.prompt_version    = verdict.prompt_version  ?? 'v1';\nverdict.source            = reqMeta.source ?? 'auto';\nverdict.task_id           = reqMeta.task_id ?? null;\nverdict.request_meta      = reqMeta;\nverdict.thresholds_used   = upstream.thresholds_in_force ?? null;\n\nreturn [{ json: verdict }];\n"
+      },
+      "id": "c6-validate-threshold",
+      "name": "Validate Output + Apply Threshold",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        -96
+      ],
+      "notes": "C6 — v3.3 Phase 6 Sitting 2. Validates LLM verdict shape, runs the gate-9 video verifier (§16.7 A3), applies min_score threshold (flipping proceed→reject when total_score < min_score). Also populates the /api/relevancy-scores ingest-contract fields (profile_id, model, evaluation_path, etc.) so downstream C10 has everything it needs."
+    },
+    {
+      "parameters": {
+        "jsCode": "// C7 — Build Reject Payload (v3.3 Phase 6 Sitting 2)\n//\n// Two upstream inputs:\n//   A. From Gate Switch main[0] (deterministic reject path): C2 output, NO LLM verdict\n//   B. From Decision Switch reject branch (LLM/threshold-flipped reject): C6 output, FULL verdict\n//\n// Discriminator: presence of `decision` field on input.\n\nconst input = items[0].json;\n\n// Path B — already a full verdict, just pin tier='reject' and pass through\nif (input.decision) {\n  input.tier = 'reject';\n  return [{ json: input }];\n}\n\n// Path A — deterministic reject. Build verdict from scratch.\nconst det = input.deterministic ?? {};\nconst profileCtx = input.profile_context ?? {};\nconst job = input.job ?? {};\nconst reqMeta = input.request_meta ?? {};\nconst system = profileCtx._system ?? {};\n\nconst verdict = {\n  decision: 'reject',\n  effective_decision: 'reject',\n  threshold_flipped: false,\n  rejection_reasons: det.failed_reasons ?? [],\n  gates: {},\n  components: null,\n  total_score: null,\n  tier: 'reject',\n  confidence: 1.0,\n  confidence_warnings: [],\n  proposal_angles: [],\n  summary: `Deterministic reject: ${(det.failed_reasons ?? []).join(', ') || 'gate(s) failed'}`,\n  missing_signals: [],\n  criteria_version: input.criteria_version ?? '0.2',\n  prompt_version: 'v1',\n  prompt_mode: 'A_full',\n  evaluation_path: 'deterministic',\n  classifier_mode_at_decision: system.classifier_mode ?? 'shadow',\n  min_score_at_decision: system.effective_min_score ?? 50,\n  profile_id: profileCtx.profile?.profile_id ?? null,\n  job_external_id: job.job_id ?? null,\n  snapshot_id: profileCtx.profile?.id ?? null,\n  model: 'deterministic',\n  source: reqMeta.source ?? 'auto',\n  task_id: reqMeta.task_id ?? null,\n  request_meta: reqMeta,\n  thresholds_used: input.thresholds_in_force ?? null,\n};\n\nreturn [{ json: verdict }];\n"
+      },
+      "id": "c7-build-reject",
+      "name": "Build Reject Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        96
+      ],
+      "notes": "C7 — v3.3 Phase 6 Sitting 2. Two upstream inputs converge here: (A) deterministic reject path from Gate Switch (no LLM verdict, build from scratch); (B) LLM reject path from Decision Switch (full verdict, just pin tier). Discriminator = presence of `decision` field on input."
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "reject-rule",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.effective_decision }}",
+                    "rightValue": "reject"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "review-rule",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.effective_decision }}",
+                    "rightValue": "review"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "proceed-rule",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.effective_decision }}",
+                    "rightValue": "proceed"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "c8-decision-switch",
+      "name": "Decision Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        48,
+        -96
+      ],
+      "notes": "C8 — v3.3 Phase 6 Sitting 2. Routes by effective_decision: reject→C7, review→C9, proceed→C10. Fallback (unrecognized decision) goes to 'extra' output (currently unwired — safe default since C6 already coerces invalid decisions to 'review')."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "tier-marker",
+              "name": "tier",
+              "value": "={{ $json.tier ?? 'marginal' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "c9-build-review",
+      "name": "Build Review Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        256,
+        -192
+      ],
+      "notes": "C9 — v3.3 Phase 6 Sitting 2. Review-branch enrichment. Currently a passthrough that just ensures `tier` is set (default 'marginal' if missing). Reserved for adding human-review-specific fields (e.g., dashboard evidence_panel) in later phases."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://157.173.110.62/api/relevancy-scores",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Idempotency-Key",
+              "value": "={{ $execution.id }}-{{ $json.task_id || $json.job_external_id || 'noid' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "c10-persist",
+      "name": "Persist Relevancy Score",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        -96
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "yXpENDK1cKgFdxp0",
+          "name": "Relevancy Ingest Token (Contabo)"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "notes": "C10 — v3.3 Phase 6 Sitting 2. POST /api/relevancy-scores with Bearer auth (Relevancy Ingest Token). Idempotency-keyed by execution_id + task_or_job_id. On HTTP failure → error output flows to C11 (DLQ)."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://157.173.110.62/api/relevancy-scores?dlq=1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ payload: $json, error_detail: (($json.error && $json.error.message) || 'unknown') }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "c11-dlq",
+      "name": "Persist to DLQ",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        96
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "yXpENDK1cKgFdxp0",
+          "name": "Relevancy Ingest Token (Contabo)"
+        }
+      },
+      "notes": "C11 — v3.3 Phase 6 Sitting 2. DLQ fallback wired from C5 error output AND C10 error output. POST /api/relevancy-scores?dlq=1 (same Bearer auth) with body { payload, error_detail }. neverError: true so pipeline never blocks on audit-log failures."
+    },
+    {
+      "parameters": {
+        "jsCode": "// C12 — Return Verdict (Phase 7 prereq)\n//\n// Purpose: ensure executeWorkflow callers receive the VERDICT object on the\n// sub-workflow's main output, not C10's HTTP response ({ok,id}) or C11's DLQ\n// response ({ok,dlq_id}).\n//\n// Reaches this node from two terminals:\n//   - Persist Relevancy Score main[0]  (success → $json = {ok:true,id:<scoreId>})\n//   - Persist to DLQ          main[0]  (DLQ      → $json = {ok:true,dlq_id:N})\n//\n// Verdict source priority (only one of these has run on any execution):\n//   1. Build Reject Payload   — deterministic-reject OR LLM/threshold reject\n//   2. Build Review Payload   — LLM review branch\n//   3. Validate Output + Apply Threshold — LLM proceed branch (no rebuilder in between)\n// Fallback: C5 AI Agent errored → C11 directly with no verdict ever produced.\n//          Synthesize a 'review' fallback verdict so the parent can still route.\n\nfunction safeNode(name) {\n  try {\n    const ref = $(name);\n    if (ref && ref.isExecuted) {\n      return ref.first().json;\n    }\n  } catch (e) { /* node not in execution path */ }\n  return null;\n}\n\nlet verdict =\n  safeNode('Build Reject Payload') ||\n  safeNode('Build Review Payload') ||\n  safeNode('Validate Output + Apply Threshold');\n\nif (!verdict) {\n  // C5 error → C11 with no verdict. Synthesize a parent-routable fallback.\n  let trigger = {};\n  try { trigger = $('Execute Workflow Trigger').first().json || {}; } catch (e) {}\n  const reqMeta = trigger.request_meta || {};\n  verdict = {\n    decision: 'review',\n    effective_decision: 'review',\n    threshold_flipped: false,\n    rejection_reasons: [],\n    gates: {},\n    components: null,\n    total_score: null,\n    tier: 'marginal',\n    confidence: 0.0,\n    confidence_warnings: ['classifier_error_no_verdict'],\n    proposal_angles: [],\n    summary: 'Classifier errored before producing a verdict; routed to review by fallback.',\n    missing_signals: [],\n    profile_id: trigger.profile_id || null,\n    job_external_id: (trigger.job && trigger.job.job_id) || null,\n    snapshot_id: null,\n    model: 'gemini-2.5-flash',\n    prompt_mode: 'A_full',\n    evaluation_path: 'llm',\n    criteria_version: '0.2',\n    prompt_version: 'v1',\n    source: reqMeta.source || 'auto',\n    task_id: reqMeta.task_id || null,\n    request_meta: reqMeta,\n    thresholds_used: null,\n    classifier_mode_at_decision: 'shadow',\n    min_score_at_decision: 50,\n  };\n}\n\n// Stamp _score_id from C10 success leaf; null on DLQ leaf.\nconst inbound = (items[0] && items[0].json) || {};\nconst scoreId = (inbound && inbound.dlq_id == null && inbound.id != null) ? inbound.id : null;\nconst dlqId   = (inbound && inbound.dlq_id != null) ? inbound.dlq_id : null;\n\nconst classifierMode = verdict.classifier_mode_at_decision || 'shadow';\n\n// Mirror classifier_mode into request_meta for parent K3 switch convenience.\n// Keep both shapes: top-level classifier_mode_at_decision (existing) AND request_meta.classifier_mode (new).\nconst out = {\n  ...verdict,\n  _score_id: scoreId,\n  _dlq_id: dlqId,\n  request_meta: {\n    ...(verdict.request_meta || {}),\n    classifier_mode: classifierMode,\n  },\n};\n\nreturn [{ json: out }];\n"
+      },
+      "id": "c12-return-verdict",
+      "name": "Return Verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Profile Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Profile Context": {
+      "main": [
+        [
+          {
+            "node": "Deterministic Pre-check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deterministic Pre-check": {
+      "main": [
+        [
+          {
+            "node": "Gate Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate Switch": {
+      "main": [
+        [
+          {
+            "node": "Build Reject Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Classifier Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Classifier Input": {
+      "main": [
+        [
+          {
+            "node": "AI Agent — Relevancy Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Flash 2.5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent — Relevancy Classifier",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent — Relevancy Classifier",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent — Relevancy Classifier": {
+      "main": [
+        [
+          {
+            "node": "Validate Output + Apply Threshold",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Persist to DLQ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Output + Apply Threshold": {
+      "main": [
+        [
+          {
+            "node": "Decision Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision Switch": {
+      "main": [
+        [
+          {
+            "node": "Build Reject Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Review Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Persist Relevancy Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Reject Payload": {
+      "main": [
+        [
+          {
+            "node": "Persist Relevancy Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Review Payload": {
+      "main": [
+        [
+          {
+            "node": "Persist Relevancy Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Relevancy Score": {
+      "main": [
+        [
+          {
+            "node": "Return Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Persist to DLQ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist to DLQ": {
+      "main": [
+        [
+          {
+            "node": "Return Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "eb58771c-d022-4c93-adb3-3b10bcd2c11a",
+  "activeVersionId": "eb58771c-d022-4c93-adb3-3b10bcd2c11a",
+  "versionCounter": 31,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-05-11T17:03:51.780Z",
+      "createdAt": "2026-05-11T17:03:51.780Z",
+      "role": "workflow:owner",
+      "workflowId": "hi71jhPU8tmq7hEp",
+      "projectId": "lGDQUlj1QvOXlTer",
+      "project": {
+        "updatedAt": "2025-08-01T18:33:16.357Z",
+        "createdAt": "2025-08-01T18:33:13.013Z",
+        "id": "lGDQUlj1QvOXlTer",
+        "name": "Aleem Ahmed <ikonicsubscriptions@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-05-12T12:10:33.616Z",
+    "createdAt": "2026-05-12T12:10:33.616Z",
+    "versionId": "eb58771c-d022-4c93-adb3-3b10bcd2c11a",
+    "workflowId": "hi71jhPU8tmq7hEp",
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "passthrough"
+        },
+        "id": "c0-trigger",
+        "name": "Execute Workflow Trigger",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          -1408,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "url": "=http://157.173.110.62/api/profiles/{{ $json.profile_id }}/context",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            },
+            "timeout": 10000
+          }
+        },
+        "id": "c1-load-profile",
+        "name": "Load Profile Context",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          -1200,
+          0
+        ],
+        "onError": "continueRegularOutput",
+        "notes": "C1 — v3.3 Phase 6 Sitting 1. GET /api/profiles/:id/context (Contabo). Returns the snapshot-derived classifier-ready profile shape. Auth: NONE — endpoint is open per Phase 3 implementation (Phase 5a HMAC middleware deferred). Re-add auth in Phase 5a / Sitting 2 if the route gets locked down."
+      },
+      {
+        "parameters": {
+          "jsCode": "// C2 — Deterministic Pre-check (v3.3 Phase 6 Sitting 1)\n// Runs gates 2, 3, 4, 5, 6 in pure JS. Gates 1, 7, 8, 9, 10, 11 are deferred:\n// 1, 7, 8, 9, 10 → LLM (in pending_for_llm). 11 → wired in Sitting 2 (Postgres lookup).\n//\n// Input:\n//   $json                                  = Load Profile Context output (profile context API response)\n//   $('Execute Workflow Trigger').first().json = { profile_id, job, request_meta } from caller\n//\n// Output: merged shape that C4 consumes to build the LLM user message.\n\nconst profileContext = $input.first().json;\nconst triggerInput = $('Execute Workflow Trigger').first().json;\nconst job = triggerInput.job ?? {};\n\nconst passed = [];\nconst failed = [];\nconst failedReasons = [];\nconst pending = [];\n\n// Gate 2 — freshness (posted within 24h)\nif (job.posted_at) {\n  const ageHours = (Date.now() - new Date(job.posted_at).getTime()) / 3600000;\n  if (ageHours <= 24) passed.push('2_freshness');\n  else { failed.push('2_freshness'); failedReasons.push('Old job'); }\n} else {\n  pending.push('2_freshness');\n}\n\n// Gate 3 — proposal saturation (<30)\nif (typeof job.proposals_count === 'number') {\n  if (job.proposals_count < 30) passed.push('3_proposal_saturation');\n  else { failed.push('3_proposal_saturation'); failedReasons.push('Too many invites'); }\n} else {\n  pending.push('3_proposal_saturation');\n}\n\n// Gate 4 — hourly floor ($25/hr min when hourly; n/a when fixed or unspecified)\nif (job.budget_type === 'hourly' && typeof job.budget_min === 'number') {\n  if (job.budget_min >= 25) passed.push('4_hourly_floor');\n  else { failed.push('4_hourly_floor'); failedReasons.push('Low Higher rate'); }\n} else {\n  passed.push('4_hourly_floor');\n}\n\n// Gate 5 — client spend floor ($1000 lifetime). Sparse → pending (LLM weighs in red_flags).\nif (typeof job.client_total_spent === 'number') {\n  if (job.client_total_spent >= 1000) passed.push('5_client_spend_floor');\n  else { failed.push('5_client_spend_floor'); failedReasons.push('Client Low spending'); }\n} else {\n  pending.push('5_client_spend_floor');\n}\n\n// Gate 6 — client rating floor (≥4.0). New clients with 0/null hires → pass.\nif (typeof job.client_rating === 'number') {\n  if (job.client_rating >= 4.0) passed.push('6_client_rating_floor');\n  else { failed.push('6_client_rating_floor'); failedReasons.push('Bad rating client'); }\n} else if (job.client_rating === null && (job.client_hires === null || job.client_hires === 0)) {\n  passed.push('6_client_rating_floor');\n} else {\n  pending.push('6_client_rating_floor');\n}\n\n// LLM-only gates\npending.push('1_stack_match', '7_job_availability', '8_no_location_lockin', '9_no_video_proposal', '10_portfolio_match');\n\n// Gate 11 — duplicate (Postgres lookup wired in Sitting 2; pending for now)\npending.push('11_no_duplicate');\n\nreturn [{\n  json: {\n    profile_context: profileContext,\n    job,\n    request_meta: triggerInput.request_meta ?? {},\n    deterministic: {\n      passed,\n      failed,\n      failed_reasons: failedReasons,\n      pending_for_llm: pending\n    },\n    criteria_version: profileContext.criteria_version ?? '0.2',\n    thresholds_in_force: {\n      freshness_hours: 24,\n      max_proposals: 30,\n      hourly_floor_usd: 25,\n      client_spend_floor_usd: 1000,\n      client_rating_floor: 4.0\n    }\n  }\n}];\n"
+        },
+        "id": "c2-deterministic",
+        "name": "Deterministic Pre-check",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -992,
+          0
+        ],
+        "notes": "C2 — v3.3 Phase 6 Sitting 1. Runs hard gates 2-6 deterministically. Trusted-result pattern: any failure here → decision MUST be reject downstream. Gates 1, 7-10 marked pending_for_llm (LLM evaluates). Gate 11 (duplicate) is deterministic but needs DB call — wired in Sitting 2."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "deterministic-failed",
+                "operator": {
+                  "type": "number",
+                  "operation": "gt"
+                },
+                "leftValue": "={{ $json.deterministic.failed.length }}",
+                "rightValue": 0
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "c3-gate-switch",
+        "name": "Gate Switch",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          -784,
+          0
+        ],
+        "notes": "C3 — v3.3 Phase 6 Sitting 1. If ANY deterministic gate failed → route to C7 Build Reject Payload (Sitting 2 wires this). Else continue to C4 → C5 (LLM). True output (failed > 0) is currently disconnected; will be wired in Sitting 2."
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "user-message-json",
+                "name": "user_message_json",
+                "value": "={{ JSON.stringify({ request_meta: $json.request_meta, profile: $json.profile_context.profile, job: $json.job, deterministic: $json.deterministic, criteria_version: $json.criteria_version, thresholds_in_force: $json.thresholds_in_force }) }}",
+                "type": "string"
+              }
+            ]
+          },
+          "includeOtherFields": true,
+          "options": {}
+        },
+        "id": "c4-prepare-input",
+        "name": "Prepare Classifier Input",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -576,
+          -96
+        ],
+        "notes": "C4 — v3.3 Phase 6 Sitting 1. Assembles the user message JSON per docs/relevancy/mode_a_prompt.md 'User message contract'. AI Agent reads this from $json.user_message_json. includeOtherFields: true so the merged shape propagates to C6 (Sitting 2)."
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ $json.user_message_json }}",
+          "options": {
+            "systemMessage": "You are the Rising Lions Upwork Relevancy Classifier. Decide whether an incoming Upwork job is RELEVANT (worth a proposal) or NOT RELEVANT (move to N/A) for a specific freelancer profile.\n\nYou operate against PRD v0.2 of `job_relevancy_criteria_prd.md`. Your output MUST conform to the JSON schema set in generationConfig.responseSchema.\n\n## DECISION RULES\n\n1. A job is RELEVANT only if it passes ALL 11 hard gates listed below. Any single hard-gate failure → `decision: \"reject\"`.\n2. If `decision: \"proceed\"`, also assign a 0-100 rubric score across the 7 components below. `tier` is a function of `total_score` (see TIERS).\n3. The deterministic checker has already evaluated some gates before you see this input. Trust those results.\n   - Gates listed in `input.deterministic.passed` → emit `gates.\"<id>\".status = \"skipped_deterministic\"`.\n   - Gates listed in `input.deterministic.failed` → emit `gates.\"<id>\".status = \"fail\"` AND include the matching reason label in `rejection_reasons`. `decision` MUST be `\"reject\"`. Skip rubric scoring (set `components: null`, `total_score: null`, `tier: \"reject\"`).\n   - Gates listed in `input.deterministic.pending_for_llm` → evaluate yourself and emit `pass` or `fail` with concrete evidence.\n4. If multiple gates fail (whether deterministic or LLM-evaluated), include ALL their reason labels in `rejection_reasons`.\n5. If you choose `decision: \"review\"` (rare — only when evidence is genuinely ambiguous AND no gate has definitively failed), emit rubric components and `total_score` as you would for `\"proceed\"`. Use `\"review\"` sparingly; default to `\"reject\"` when in doubt.\n\n## HARD GATES (11)\n\n| # | Gate ID | Condition | Reason label on fail |\n|---|---|---|---|\n| 1 | `1_stack_match` | Job's primary skill(s) align with the profile's stack bucket (skills array + portfolio + work history). Allow common aliases (e.g. \"Node.js\" ≈ \"Nodejs\", \"React\" ≈ \"React.js\"). Generic single tags like \"Web Development\" alone are NOT a match. | \"Out of stack\" |\n| 2 | `2_freshness` | Posted within the last 24 hours (relative to current time at evaluation). | \"Old job\" |\n| 3 | `3_proposal_saturation` | `proposals_count` < 30 (or Upwork bucket \"Less than 5\", \"5–10\", \"10–15\", \"15–20\", \"20–50\" with bucket midpoint < 30). | \"Too many invites\" |\n| 4 | `4_hourly_floor` | If hourly: `budget_min` ≥ $25/hr. If fixed: skip this gate (cannot evaluate without effort estimate). If `budget_type = null` / not specified: skip. | \"Low Higher rate\" |\n| 5 | `5_client_spend_floor` | `client_total_spent` ≥ $1,000 lifetime. If `client_total_spent IS NULL` AND `client_hires IS NULL`: treat as sparse, NOT below-floor (skip and surface in `red_flags`). | \"Client Low spending\" |\n| 6 | `6_client_rating_floor` | `client_rating` ≥ 4.0. If `client_rating IS NULL` AND `client_hires == 0` or null: pass (new client, no rating yet). If `client_rating < 4.0`: fail. | \"Bad rating client\" |\n| 7 | `7_job_availability` | Posting open. Description does NOT contain \"filled\", \"closed\", \"hired already\", \"we already found someone\", \"position is closed\". | \"Job unavailable\" or \"Already hired\" |\n| 8 | `8_no_location_lockin` | Job does NOT require the freelancer to be physically located in a specific country (US-only, Canada-only, etc.). Look for phrases like \"U.S. residents only\", \"must be located in [country]\", \"American-based\", \"EU citizens only\". A client in country X is NOT a lock-in unless the posting demands the freelancer also be in X. | \"Location loc\" |\n| 9 | `9_no_video_proposal` | Job description does NOT require a recorded video pitch (look for \"video introduction\", \"Loom video\", \"send a video\", \"record yourself\"). | \"Video Proposal\" |\n| 10 | `10_portfolio_match` | The profile has at least one portfolio item (in `profile.portfolio_tldr`) whose `tech_stack_inferred` or title mirrors at least one core technology in `job.skills_required`. Generic portfolio overlap doesn't count — require concrete stack alignment. | \"Portfolio unavailable\" |\n| 11 | `11_no_duplicate` | (Deterministic only — you will not be asked to evaluate this. Trust the deterministic result.) | \"Duplicate\" |\n\n## REASON LABEL ENUM (USE EXACTLY — typos and shorthand are intentional)\n\nEvery value in `rejection_reasons` MUST be one of these 13 strings, byte-for-byte:\n\n```\n[\"Out of stack\", \"Old job\", \"Too many invites\", \"Low Higher rate\", \"Location loc\",\n \"Client Low spending\", \"Job unavailable\", \"Already hired\", \"Language barrier\",\n \"Bad rating client\", \"Video Proposal\", \"Duplicate\", \"Portfolio unavailable\"]\n```\n\nThe typos (\"Low Higher rate\" not \"Low Hourly Rate\", \"Location loc\" not \"Location Lock\") are deliberate — they match the labels agents use in production. Inventing new labels or fixing typos will break downstream routing.\n\n## RUBRIC (only when `decision = \"proceed\"` or `\"review\"`)\n\nWhen all hard gates pass (or you've chosen `review`), score the job on 7 weighted components. Each component has a max; assign an integer value 0..max plus a short `reason` citing concrete evidence from the input.\n\n| Component | Max | What it measures |\n|---|---|---|\n| `skill_match` | 30 | Depth of stack alignment in profile.skills + portfolio + work_history (not keyword counts) |\n| `portfolio_evidence` | 20 | Concrete portfolio item that mirrors the job's requirements (lead with named items) |\n| `client_quality` | 15 | Gradient on client_total_spent × client_hires × client_rating (treat null fields as sparse, not zero) |\n| `competition_position` | 10 | Proposals count, posting freshness within the 24h window, niche depth |\n| `domain_match` | 10 | Industry / problem-domain alignment with profile's prior work |\n| `experience_level_fit` | 10 | Job seniority (senior/lead/principal cues) vs profile signals (top_rated_status, hourly_rate, total_jobs) |\n| `red_flags` | 5 | **Higher value = FEWER red flags** (5 = none, 0 = many). Red flags include: vague scope, suspicious template language, missing client metadata, sub-floor budget that just passed by a hair, prior negative outcomes in the profile's work history with similar jobs |\n\n**`total_score`** = sum of component values, integer 0-100.\n\n## TIERS\n\n| total_score | tier |\n|---|---|\n| 80-100 | `apply_now` |\n| 60-79  | `strong` |\n| 40-59  | `marginal` |\n| 0-39   | `skip` |\n| (any when decision=reject) | `reject` |\n\n## CONFIDENCE & WARNINGS\n\n- `confidence`: number 0.0..1.0. Reflect your own uncertainty. Low confidence (<0.6) when input is sparse, ambiguous, or the deterministic gates left many checks to you.\n- `confidence_warnings`: array of strings. Emit one or more of:\n  - `\"stale_snapshot\"` when `profile.snapshot_age_days > 60`\n  - `\"non_english_description\"` when `job.description` appears non-English (≥3 consecutive non-Latin words or clearly machine-translated)\n  - `\"sparse_client_metadata\"` when ALL of `client_total_spent`, `client_hires`, `client_rating` are null\n  - `\"missing_skills_tags\"` when `job.skills_required.length < 2`\n  - `\"description_truncated\"` when `job.description.length === 1500` (exactly the truncation cap)\n\n## EVIDENCE LIBRARY (anchored — calibrate against these)\n\nThe following examples are real labeled jobs from the production board (Contabo snapshot, 2026-05-05). They define what `reject` and `proceed` look like for this team. When the input resembles one of these, use it as anchor — when it doesn't, fall back to first-principles gate evaluation.\n\n```json\n{\n  \"version\": \"0.2\",\n  \"generated_at\": \"2026-05-05\",\n  \"source\": \"Contabo sales_dashboard, n8n-sourced tasks (_source = 'n8n')\",\n  \"reject_examples\": [\n    {\n      \"title\": \"Web Developer\",\n      \"profile\": \"Craig\",\n      \"skills\": [\"Web Development\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Out of stack\"],\n      \"gates_failed\": [\"1_stack_match\"],\n      \"explanation\": \"Single generic skill tag with no concrete stack signal — cannot be mapped to any profile bucket.\"\n    },\n    {\n      \"title\": \"Need Wordpress developer with Polylang expertise\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Polylang\", \"WordPress\", \"PHP\", \"CSS\"],\n      \"budget\": \"20 - 40 USD\",\n      \"client\": {\"spent\": 29660.90, \"hires\": 19, \"rating\": 4.99, \"country\": \"United States\"},\n      \"reasons\": [\"Out of stack\"],\n      \"gates_failed\": [\"1_stack_match\"],\n      \"explanation\": \"Polylang is a niche WordPress i18n plugin; not in Shayan's bucket despite WordPress overlap.\"\n    },\n    {\n      \"title\": \"Programmatic SEO Strategist for Golf Travel Startup — Next.js SEO Page Launch\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Search Engine Optimization\", \"SEO Keyword Research\", \"Organic Traffic Growth\", \"Google Analytics\", \"On-Page SEO\"],\n      \"budget\": \"10 - 20 USD\",\n      \"client\": {\"spent\": 1000, \"hires\": 3, \"rating\": 5.00, \"country\": \"United States\"},\n      \"reasons\": [\"Out of stack\"],\n      \"gates_failed\": [\"1_stack_match\", \"4_hourly_floor\"],\n      \"explanation\": \"SEO strategy role with a Next.js red herring in the title; hourly bottom $10 is below floor.\"\n    },\n    {\n      \"title\": \"I need a frontend developer to recreate a Figma design (Laravel/Blade/Livewire)\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Front-End Development\", \"Laravel\", \"Blade Server\", \"tailwindcss\", \"livewire\"],\n      \"budget\": \"18 - 40 USD\",\n      \"client\": {\"spent\": 2861.40, \"hires\": 29, \"rating\": 4.98, \"country\": \"United Kingdom\"},\n      \"reasons\": [\"Out of stack\"],\n      \"gates_failed\": [\"1_stack_match\"],\n      \"explanation\": \"Laravel/Blade/Livewire stack — Shayan is React/Next.js-leaning; mismatched bucket.\"\n    },\n    {\n      \"title\": \"Wix Website Designer Needed for Section Redesign\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Wix\", \"Web Design\", \"Graphic Design\", \"Mockup\", \"Web Development\"],\n      \"budget\": \"15 - 30 USD\",\n      \"client\": {\"spent\": 672.89, \"hires\": 63, \"rating\": 5.00, \"country\": \"Nigeria\"},\n      \"reasons\": [\"Old job\", \"Out of stack\"],\n      \"gates_failed\": [\"1_stack_match\", \"2_freshness\"],\n      \"explanation\": \"No-code platform (Wix); we don't field Wix work on any profile.\"\n    },\n    {\n      \"title\": \"Senior Node.js Engineer — On-Call Maintenance for AI Document Pipeline\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"API Integration\", \"Node.js\", \"JavaScript\", \"API\", \"PDF Conversion\", \"Claude API\", \"Open AI API\", \"Automation Workflow\"],\n      \"budget\": \"20 - 40 USD\",\n      \"client\": {\"spent\": 189896.64, \"hires\": 58, \"rating\": 4.99, \"country\": \"United States\"},\n      \"reasons\": [\"Old job\"],\n      \"gates_failed\": [\"2_freshness\"],\n      \"explanation\": \"On-stack and high-conviction client signal, but listing was already 24h+ old when triaged.\"\n    },\n    {\n      \"title\": \"Divi/WordPress Designer Needed — 10-Page Site Refresh (3-4 Week Sprint)\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"Divi\", \"Responsive Design\", \"Landing Page\", \"WordPress\", \"Web Design\", \"Visual Design\"],\n      \"budget\": \"18 - 40 USD\",\n      \"client\": {\"spent\": 4928.68, \"hires\": 9, \"rating\": 4.99, \"country\": \"United States\"},\n      \"reasons\": [\"Old job\"],\n      \"gates_failed\": [\"2_freshness\"],\n      \"explanation\": \"Stack-aligned WordPress + healthy client, but listing aged past freshness window.\"\n    },\n    {\n      \"title\": \"Advanced All-in-One Travel Booking Platform (Flights, Hotels, & Cars)\",\n      \"profile\": \"Rebekah\",\n      \"skills\": [\"Full-Stack Development\", \"Next.js\", \"React\", \"JavaScript\", \"TypeScript\", \"API Integration\", \"AI Agent Development\", \"n8n\", \"React Native\", \"Supabase\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"Canada\"},\n      \"reasons\": [\"Old job\"],\n      \"gates_failed\": [\"2_freshness\"],\n      \"explanation\": \"On-stack for Rebekah but listing aged out — Rebekah's feed cadence is a recurring root cause (90% Old job).\"\n    },\n    {\n      \"title\": \"Operations Specialist wanted for busy Founder\",\n      \"profile\": \"Saim\",\n      \"skills\": [\"Email Communication\", \"Microsoft Word\", \"Microsoft Excel\", \"Administrative Support\"],\n      \"budget\": \"25 USD\",\n      \"client\": {\"spent\": 29186.95, \"hires\": 21, \"rating\": 4.72, \"country\": \"United States\"},\n      \"reasons\": [\"Old job\"],\n      \"gates_failed\": [\"1_stack_match\", \"2_freshness\"],\n      \"explanation\": \"Admin/ops role — out of dev stack entirely; would also fail freshness.\"\n    },\n    {\n      \"title\": \"FlutterFlow + Firebase Developer Needed — Paid Messaging / Transactional Chat Feature\",\n      \"profile\": \"Craig\",\n      \"skills\": [\"FlutterFlow\", \"Flutter\", \"API Integration\", \"Supabase\", \"Google Cloud Platform\", \"Mobile App Development\", \"Firebase\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 170, \"hires\": 1, \"rating\": null, \"country\": \"Australia\"},\n      \"reasons\": [\"Too many invites\"],\n      \"gates_failed\": [\"3_proposal_saturation\", \"5_client_spend_floor\"],\n      \"explanation\": \"Saturated job board for this listing; client spend $170 also below floor.\"\n    },\n    {\n      \"title\": \"Website Redesign for Dog Daycare\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Web Design\", \"WordPress\", \"Web Development\", \"Website Redesign\", \"Graphic Design\", \"Marketing\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 953.50, \"hires\": 4, \"rating\": 5.00, \"country\": \"United States\"},\n      \"reasons\": [\"Too many invites\"],\n      \"gates_failed\": [\"3_proposal_saturation\"],\n      \"explanation\": \"On-stack and decent client, but 30+ proposals already in — connect ROI negative.\"\n    },\n    {\n      \"title\": \"PowerApp Developer & Consultant Needed\",\n      \"profile\": \"Craig\",\n      \"skills\": [\"Microsoft PowerApps\", \"Microsoft SharePoint Development\", \"Microsoft Windows\", \"Microsoft SharePoint\", \"iOS\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 430, \"hires\": 2, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Too many invites\"],\n      \"gates_failed\": [\"1_stack_match\", \"3_proposal_saturation\"],\n      \"explanation\": \"PowerApps not in any profile bucket; saturated regardless.\"\n    },\n    {\n      \"title\": \"Website Development for OnBoardNoe: Guided Onboarding Platform\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Web Development\", \"WordPress\", \"Web Design\", \"JavaScript\", \"HTML\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 85114.41, \"hires\": 38, \"rating\": 4.57, \"country\": \"United Kingdom\"},\n      \"reasons\": [\"Too many invites\"],\n      \"gates_failed\": [\"3_proposal_saturation\"],\n      \"explanation\": \"Strong client signal ($85k / 38 hires) but saturation killed marginal ROI.\"\n    },\n    {\n      \"title\": \"SeedProd Landing Page Creation\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Web Design\", \"HTML5\", \"Landing Page\", \"Graphic Design\"],\n      \"budget\": \"15 - 30 USD\",\n      \"client\": {\"spent\": null, \"hires\": 1, \"rating\": null, \"country\": \"Canada\"},\n      \"reasons\": [\"Low Higher rate\"],\n      \"gates_failed\": [\"4_hourly_floor\"],\n      \"explanation\": \"Hourly bottom $15 is below the $25 floor; client signal also weak.\"\n    },\n    {\n      \"title\": \"Senior Full-Stack Developer needed for Talent Marketplace Platform MVP (Next.js + Stripe)\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Next.js\", \"PostgreSQL\", \"React\", \"Node.js\", \"Stripe\"],\n      \"budget\": \"5,000 USD\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"Mexico\"},\n      \"reasons\": [\"Low Higher rate\"],\n      \"gates_failed\": [\"4_hourly_floor\"],\n      \"explanation\": \"Fixed-price $5k for an MVP-scope Next.js platform; implied effort produces sub-floor hourly rate.\"\n    },\n    {\n      \"title\": \"Capalot Gaming Web Design\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"WordPress\", \"WooCommerce\", \"Elementor\", \"Page Speed Optimization\", \"Landing Page Design\", \"SEO Audit\", \"Web Design\"],\n      \"budget\": \"15 - 30 USD\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Low Higher rate\"],\n      \"gates_failed\": [\"4_hourly_floor\"],\n      \"explanation\": \"Hourly $15-30 below floor; gaming-themed WP build.\"\n    },\n    {\n      \"title\": \"Family Law Firm Website Redesign\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Web Design\", \"Web Development\", \"Graphic Design\", \"Logo Design\"],\n      \"budget\": \"15 - 30 USD\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Low Higher rate\", \"Out of stack\"],\n      \"gates_failed\": [\"1_stack_match\", \"4_hourly_floor\"],\n      \"explanation\": \"Generic 'Web Design / Logo Design' tags + sub-floor hourly.\"\n    },\n    {\n      \"title\": \"Web Manager for Ongoing Maintenance and Updates\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"WordPress\", \"Web Development\", \"HTML\", \"PHP\", \"CSS\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": null, \"hires\": 1, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Location loc\"],\n      \"gates_failed\": [\"8_no_location_lockin\"],\n      \"explanation\": \"On-stack maintenance role but posting requires US-resident freelancer.\"\n    },\n    {\n      \"title\": \"American based app developer\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"JavaScript\", \"API\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 825.49, \"hires\": 1, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Location loc\"],\n      \"gates_failed\": [\"8_no_location_lockin\"],\n      \"explanation\": \"Title literally states US-based requirement.\"\n    },\n    {\n      \"title\": \"Custom ecommerce site migration to WooCommerce\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"WooCommerce\", \"Web Design\", \"Web Development\", \"Ecommerce Website Development\"],\n      \"budget\": \"3,000 USD\",\n      \"client\": {\"spent\": 1550.20, \"hires\": 6, \"rating\": 5.00, \"country\": \"United States\"},\n      \"reasons\": [\"Location loc\"],\n      \"gates_failed\": [\"8_no_location_lockin\"],\n      \"explanation\": \"Stack-aligned + acceptable client, but US-residency lock in posting body.\"\n    },\n    {\n      \"title\": \"Strategic Web Designer Needed for Website Build/Rebuild\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Web Design\", \"Web Development\"],\n      \"budget\": null,\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Location loc\"],\n      \"gates_failed\": [\"8_no_location_lockin\"],\n      \"explanation\": \"Posting requires US-based freelancer.\"\n    },\n    {\n      \"title\": \"Website Updates Needed – FAQ Section, Team Page Completion & Resource Page Setup\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"WordPress\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 230.75, \"hires\": 4, \"rating\": 1.91, \"country\": \"United States\"},\n      \"reasons\": [\"Client Low spending\"],\n      \"gates_failed\": [\"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"Client spent only $231 + low rating 1.91 — double red flag.\"\n    },\n    {\n      \"title\": \"Consulting Firm Website Redesign\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Web Design\", \"Web Development\", \"WordPress\", \"Graphic Design\"],\n      \"budget\": \"15 - 30 USD\",\n      \"client\": {\"spent\": 262.24, \"hires\": 1, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Client Low spending\"],\n      \"gates_failed\": [\"4_hourly_floor\", \"5_client_spend_floor\"],\n      \"explanation\": \"Sub-floor hourly + client spend $262.\"\n    },\n    {\n      \"title\": \"IT Expert Needed for Migration Project\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"WordPress\", \"PHP\", \"Web Development\", \"Data Entry\", \"JavaScript\"],\n      \"budget\": \"10 - 20 USD\",\n      \"client\": {\"spent\": 210.97, \"hires\": 6, \"rating\": 5.00, \"country\": \"United States\"},\n      \"reasons\": [\"Client Low spending\"],\n      \"gates_failed\": [\"4_hourly_floor\", \"5_client_spend_floor\"],\n      \"explanation\": \"Hourly $10-20 below floor; client spend $211 below floor; 5.0 rating cannot offset.\"\n    },\n    {\n      \"title\": \"Framer developer\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"Web Development\", \"Framer\", \"webdesign\", \"ui ux\"],\n      \"budget\": \"15 - 30 USD\",\n      \"client\": {\"spent\": 300.19, \"hires\": 9, \"rating\": 5.00, \"country\": \"France\"},\n      \"reasons\": [\"Client Low spending\"],\n      \"gates_failed\": [\"1_stack_match\", \"4_hourly_floor\", \"5_client_spend_floor\"],\n      \"explanation\": \"Framer (no-code design) not in stack; sub-floor hourly + low spend.\"\n    },\n    {\n      \"title\": \"WordPress Bug Fixing Expert Needed\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"WordPress\", \"PHP\", \"WordPress Plugin\", \"Web Development\"],\n      \"budget\": \"30 - 50 USD\",\n      \"client\": {\"spent\": 4063.63, \"hires\": 9, \"rating\": 2.07, \"country\": \"United States\"},\n      \"reasons\": [\"Bad rating client\"],\n      \"gates_failed\": [\"6_client_rating_floor\"],\n      \"explanation\": \"Stack-perfect WP work + above-floor budget + above-floor spend, but client rating 2.07 disqualifies.\"\n    },\n    {\n      \"title\": \"Proactive Funnel & Website Assistant for Showit + Systeme.io\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"Landing Page\", \"system io\", \"Showit\", \"Email Marketing\"],\n      \"budget\": \"10 - 28 USD\",\n      \"client\": {\"spent\": 1039.30, \"hires\": 4, \"rating\": 1.52, \"country\": \"Netherlands\"},\n      \"reasons\": [\"Bad rating client\"],\n      \"gates_failed\": [\"1_stack_match\", \"4_hourly_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"No-code stack + sub-floor hourly + 1.52 rating.\"\n    },\n    {\n      \"title\": \"Upgrade Laravel Website to Latest Version\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"PHP\", \"Laravel\", \"MySQL\", \"MySQL Programming\"],\n      \"budget\": \"25 - 50 USD\",\n      \"client\": {\"spent\": 192993.11, \"hires\": 28, \"rating\": 5.00, \"country\": \"United States\"},\n      \"reasons\": [\"Already hired\"],\n      \"gates_failed\": [\"7_job_availability\"],\n      \"explanation\": \"Otherwise an ideal job (stack + $193k spend + 5.0 rating) — but already filled.\"\n    },\n    {\n      \"title\": \"Next.js + Supabase Marketplace Deployment — Fixed Scope\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"Next.js\", \"TypeScript\", \"Vercel\", \"Supabase\", \"Stripe API\"],\n      \"budget\": \"5,000 USD\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"United States\"},\n      \"reasons\": [\"Already hired\"],\n      \"gates_failed\": [\"7_job_availability\"],\n      \"explanation\": \"Stack-perfect for Khansa, $5k fixed — but posting closed.\"\n    },\n    {\n      \"title\": \"SEO Specialist – Local SEO (Multiple Businesses)\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"Local SEO\", \"On-Page SEO\", \"SEO Audit\", \"Search Engine Optimization\", \"Google business profile\", \"Organic Traffic Growth\"],\n      \"budget\": \"15 - 20 USD\",\n      \"client\": {\"spent\": 1866, \"hires\": 12, \"rating\": 5.00, \"country\": \"United States\"},\n      \"reasons\": [\"Job unavailable\"],\n      \"gates_failed\": [\"7_job_availability\"],\n      \"explanation\": \"Posting taken down before bid sent.\"\n    },\n    {\n      \"title\": \"ZENTIQ AI – GLOBAL SaaS PLATFORM\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"Node.js\", \"SaaS\", \"Python\", \"API\", \"AWS Application\"],\n      \"budget\": \"5,000 USD\",\n      \"client\": {\"spent\": null, \"hires\": 1, \"rating\": null, \"country\": \"United Kingdom\"},\n      \"reasons\": [\"Job unavailable\"],\n      \"gates_failed\": [\"7_job_availability\"],\n      \"explanation\": \"On-stack SaaS work, but posting deleted before triage.\"\n    },\n    {\n      \"title\": \"Product Engineer (Next.js / Node) - AI Encouraged\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"JavaScript\", \"Node.js\", \"React\", \"PostgreSQL\", \"Next.js\", \"TypeScript\", \"Prisma\", \"Fastify\"],\n      \"budget\": \"40 - 65 USD\",\n      \"client\": {\"spent\": 1226132.69, \"hires\": 92, \"rating\": 4.97, \"country\": \"United States\"},\n      \"reasons\": [\"Video Proposal\"],\n      \"gates_failed\": [\"9_no_video_proposal\"],\n      \"explanation\": \"$1.2M spend + 92 hires + 4.97 rating + on-stack — would be elite, but requires video pitch (out of process).\"\n    },\n    {\n      \"title\": \"Frontend QA + UX Polish (Lovable / React) – Mobile App Feel (PWA)\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"Responsive Design\", \"UI Animation\", \"Front-End Development\", \"JavaScript\", \"react.js\", \"Progressive Web App\"],\n      \"budget\": \"15 - 30 USD\",\n      \"client\": {\"spent\": 59149.46, \"hires\": 43, \"rating\": 4.82, \"country\": \"Netherlands\"},\n      \"reasons\": [\"Video Proposal\"],\n      \"gates_failed\": [\"4_hourly_floor\", \"9_no_video_proposal\"],\n      \"explanation\": \"Strong client + on-stack, but sub-floor hourly + video pitch requirement.\"\n    },\n    {\n      \"title\": \"Ongoing WordPress Maintenance and HubSpot Integration\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"WordPress\", \"CSS\", \"Web Development\", \"HubSpot\", \"HTML\"],\n      \"budget\": \"14 - 28 USD\",\n      \"client\": {\"spent\": 14522.11, \"hires\": 21, \"rating\": 5.00, \"country\": \"Oman\"},\n      \"reasons\": [\"Language barrier\"],\n      \"gates_failed\": [],\n      \"soft_signal_failed\": [\"language_barrier\"],\n      \"explanation\": \"Healthy client, on-stack, but client communication non-English. Maps to §8 soft signal, not a hard gate.\"\n    },\n    {\n      \"title\": \"AI-Augmented Software Engineer (Contract) — Ship Features Fast with Claude Code\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"Node.js\", \"AWS Lambda\", \"TypeScript\", \"Python\", \"JavaScript\", \"Claude\", \"amazon connect\"],\n      \"budget\": \"30 - 45 USD\",\n      \"client\": {\"spent\": 10412.27, \"hires\": 1, \"rating\": null, \"country\": \"Canada\"},\n      \"reasons\": [\"Portfolio unavailable\"],\n      \"gates_failed\": [\"10_portfolio_match\"],\n      \"explanation\": \"Stack-aligned + above-floor, but profile lacked a Claude-Code-style case study to attach.\"\n    },\n    {\n      \"title\": \"HubSpot HTML/CSS Developer Needed – Clean Up Code, Fix Speed Issues\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"CSS\", \"HTML\", \"JavaScript\", \"HTML5\", \"Website\", \"PHP\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 7672.31, \"hires\": 26, \"rating\": 4.72, \"country\": \"United States\"},\n      \"reasons\": [\"Duplicate\"],\n      \"gates_failed\": [\"11_no_duplicate\"],\n      \"explanation\": \"Same `_job_id` already tracked on a sibling profile's board.\"\n    }\n  ],\n  \"proceed_examples\": [\n    {\n      \"title\": \"AI + Frontend Integration (Voiceflow + UI State + Kajabi) — Discovery Phase\",\n      \"profile\": \"Laiba\",\n      \"skills\": [\"API Integration\", \"Full-Stack Development\", \"Next.js\", \"Python\", \"AI Implementation\", \"AI Agent Development\", \"React\", \"Retrieval Augmented Generation\", \"LangChain\", \"Node.js\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 200, \"hires\": 1, \"rating\": null, \"country\": \"United States\"},\n      \"outcome_stage\": \"Won\",\n      \"gates_passed\": [\"1_stack_match\", \"2_freshness\", \"3_proposal_saturation\", \"7_job_availability\", \"8_no_location_lockin\", \"9_no_video_proposal\", \"10_portfolio_match\", \"11_no_duplicate\"],\n      \"explanation\": \"Stack-perfect AI/Next.js work for Laiba; sparse client metadata tolerated due to discovery-phase scope. Closed Won.\"\n    },\n    {\n      \"title\": \"Full Stack + AI Systems Engineer (AI Operating System for Businesses)\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"AI Agent Development\", \"AI App Development\", \"AI Model Integration\", \"Artificial Intelligence\", \"Python\", \"Machine Learning\", \"API\"],\n      \"budget\": \"15 - 35 USD\",\n      \"client\": {\"spent\": 10050.87, \"hires\": 32, \"rating\": 4.94, \"country\": \"United States\"},\n      \"outcome_stage\": \"InChat\",\n      \"gates_passed\": [\"1_stack_match\", \"2_freshness\", \"3_proposal_saturation\", \"5_client_spend_floor\", \"6_client_rating_floor\", \"7_job_availability\", \"8_no_location_lockin\"],\n      \"explanation\": \"Stack-perfect AI work + $10k spend + 4.94 rating. Hourly $15-35 borderline (fail on strict $25 floor — bottom is $15) but agent proceeded; flagged for §11 question 1.\"\n    },\n    {\n      \"title\": \"JavaScript App Code Verification and Server Configuration\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"JavaScript\", \"Node.js\", \"API\"],\n      \"budget\": \"2,400 USD\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"Canada\"},\n      \"outcome_stage\": \"InChat\",\n      \"gates_passed\": [\"1_stack_match\", \"2_freshness\", \"3_proposal_saturation\", \"7_job_availability\"],\n      \"explanation\": \"Stack-aligned JS/Node work; $2,400 fixed implies acceptable hourly. Client metadata sparse but stack signal dominated.\"\n    },\n    {\n      \"title\": \"Develop an AI-Powered Email Filtering SaaS Platform\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"Python\", \"API\", \"JavaScript\", \"Node.js\"],\n      \"budget\": \"30 - 50 USD\",\n      \"client\": {\"spent\": 9800.54, \"hires\": 38, \"rating\": 4.98, \"country\": \"United States\"},\n      \"outcome_stage\": \"ProposalViews\",\n      \"gates_passed\": [\"1_stack_match\", \"4_hourly_floor\", \"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"Above-floor hourly $30-50 + on-stack + $9.8k spend + 4.98 rating. Textbook proceed.\"\n    },\n    {\n      \"title\": \"Full-Stack Developer Needed to Build Claude-Powered SaaS MVP\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"AI App Development\", \"Website Redesign\", \"Web Application\", \"Claude\", \"React\"],\n      \"budget\": \"25 - 47 USD\",\n      \"client\": {\"spent\": 110.73, \"hires\": 5, \"rating\": 5.00, \"country\": \"Kenya\"},\n      \"outcome_stage\": \"ProposalViews\",\n      \"gates_passed\": [\"1_stack_match\", \"4_hourly_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"Hourly bottom $25 = floor pass; client spend $111 below threshold but agent proceeded on stack-perfection (Claude/React/SaaS for Khansa) — 5.0 rating offsets.\"\n    },\n    {\n      \"title\": \"RAG + Knowledge Graph System - Fixed Price Build\",\n      \"profile\": \"Laiba\",\n      \"skills\": [\"Python\", \"Retrieval Augmented Generation\", \"Knowledge Graph\", \"Neo4j\", \"Vector Database\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 15455.21, \"hires\": 71, \"rating\": 4.97, \"country\": \"United Kingdom\"},\n      \"outcome_stage\": \"ProposalViews\",\n      \"gates_passed\": [\"1_stack_match\", \"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"Niche but Laiba-aligned stack (RAG/KG/Vector); $15k client + 71 hires + 4.97 rating.\"\n    },\n    {\n      \"title\": \"Local SEO Specialist for U.S. Accounting Firm\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"Search Engine Optimization\", \"SEO Keyword Research\", \"SEO Backlinking\", \"SEO Audit\", \"Organic Traffic Growth\", \"On-Page SEO\"],\n      \"budget\": \"Not specified\",\n      \"client\": {\"spent\": 4807.90, \"hires\": 19, \"rating\": 5.00, \"country\": \"United States\"},\n      \"outcome_stage\": \"ProposalViews\",\n      \"gates_passed\": [\"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"SEO work for Sana — note: §6.7 has SEO as out-of-stack for Shayan but Sana's bucket allows SEO/marketing-adjacent. Stack-bucket per profile matters.\"\n    },\n    {\n      \"title\": \"Software Engineer for Boutique M&A Advisory Firm\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"API Development\", \"Python\", \"JavaScript\", \"AI Development\", \"AWS Lambda\", \"SQL\", \"Zapier\", \"CRM Automation\"],\n      \"budget\": \"15 - 35 USD\",\n      \"client\": {\"spent\": 92602.24, \"hires\": 43, \"rating\": 5.00, \"country\": \"United States\"},\n      \"outcome_stage\": \"ProposalSubmitted\",\n      \"gates_passed\": [\"1_stack_match\", \"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"Strong client signal ($92k spend, 5.0 rating) + on-stack Python/AI/AWS. Hourly bottom $15 is below strict floor — agent override on client strength.\"\n    },\n    {\n      \"title\": \"Senior Full Stack Architect / Technical Lead\",\n      \"profile\": \"Sana\",\n      \"skills\": [\"NestJS\", \"Python\", \"React\", \"Node.js\", \"System Architecture\", \"Full Stack Development\", \"API Design\", \"Technical Leadership\"],\n      \"budget\": \"25 - 35 USD\",\n      \"client\": {\"spent\": 8409.58, \"hires\": 103, \"rating\": 4.96, \"country\": \"United Kingdom\"},\n      \"outcome_stage\": \"ProposalSubmitted\",\n      \"gates_passed\": [\"1_stack_match\", \"4_hourly_floor\", \"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"Hourly $25 floor pass + 103 hires + 4.96 rating + NestJS/Python/React on Sana's bucket.\"\n    },\n    {\n      \"title\": \"Principal Engineer / Technical Steward for AI-Built Next.js / Vercel / Prisma archive\",\n      \"profile\": \"Khansa\",\n      \"skills\": [\"React\", \"TypeScript\", \"Next.js\", \"PostgreSQL\", \"Vercel\", \"Software Debugging\", \"Node.js\", \"Prisma\"],\n      \"budget\": \"40 - 75 USD\",\n      \"client\": {\"spent\": 3636.22, \"hires\": 18, \"rating\": 5.00, \"country\": \"United States\"},\n      \"outcome_stage\": \"ProposalSubmitted\",\n      \"gates_passed\": [\"1_stack_match\", \"4_hourly_floor\", \"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"All gates pass cleanly: hourly $40-75, client $3.6k, rating 5.0, stack perfect.\"\n    },\n    {\n      \"title\": \"AI Automation Workflow Setup n8n + Custom AI Agent\",\n      \"profile\": \"Laiba\",\n      \"skills\": [\"Node.js\", \"n8n\", \"Workflow Automation\", \"AI Integration\", \"AI Agents\", \"Python\", \"REST API\", \"Webhooks\"],\n      \"budget\": \"15 - 20 USD\",\n      \"client\": {\"spent\": 5867.27, \"hires\": 146, \"rating\": 5.00, \"country\": \"United Arab Emirates\"},\n      \"outcome_stage\": \"ProposalSubmitted\",\n      \"gates_passed\": [\"1_stack_match\", \"5_client_spend_floor\", \"6_client_rating_floor\"],\n      \"explanation\": \"146 hires + 5.0 rating + n8n/AI core stack. Hourly $15-20 below strict floor — agent override on client strength + stack-perfection.\"\n    },\n    {\n      \"title\": \"PDR API Integration Development Using Fannie Mae Specifications\",\n      \"profile\": \"Shayan\",\n      \"skills\": [\"API\", \"PHP\", \"JavaScript\", \"API Integration\", \"WordPress\"],\n      \"budget\": \"6,000 USD\",\n      \"client\": {\"spent\": null, \"hires\": null, \"rating\": null, \"country\": \"United States\"},\n      \"outcome_stage\": \"ProposalSubmitted\",\n      \"gates_passed\": [\"1_stack_match\"],\n      \"explanation\": \"Stack-aligned + $6k fixed scope. Client metadata sparse but agent proceeded on stack signal.\"\n    }\n  ]\n}\n```\n\n## CALIBRATION NOTES (read these carefully)\n\nThese notes call out non-obvious patterns from the labeled data above. They override naive gate-reading where they conflict.\n\n1. **Stack > client signal**: Several `proceed_examples` have weak client metadata (null spend, 1 hire, no rating) but proceed anyway because the stack alignment is undeniable. Conversely, several `reject_examples` have $50k+ client spend and 4.99 rating but reject because the stack is wrong (Polylang for a React profile, Wix for any profile). **When in doubt, weigh stack heavier than client metadata.**\n\n2. **Hourly floor is soft-overridable when client signal is elite**: PRD strict floor is $25/hr. Two `proceed_examples` (`AI Operating System for Businesses` and `M&A Advisory Firm`) passed at $15/hr because the client was 4.94+ rating with 30+ hires. The agents made these calls. Mirror their behavior: if hourly is sub-floor BUT (`client_total_spent ≥ $50,000` AND `client_rating ≥ 4.9`) AND stack-perfect, lean toward proceed — but lower `competition_position` and `red_flags` to reflect the budget concern.\n\n3. **\"Old job\" rejects often have STELLAR clients**: Several `reject_examples` for \"Old job\" have $50k–$190k client spend and 4.99 rating. Freshness is a hard gate — do NOT try to argue around it on client strength. If `posted_at > 24h ago`, reject as \"Old job\" regardless of other quality signals.\n\n4. **\"Already hired\" / \"Job unavailable\" cannot be detected from skills/budget alone** — only from description text. Look for phrases like \"we found someone\", \"position is closed\", \"this posting has been filled\". Absence of such phrases ≠ open posting, but the deterministic checker has no way to know either, so it's mostly down to LLM read.\n\n5. **Per-profile stack drift**: \"Local SEO Specialist\" is a PROCEED for Sana but `reject_examples` shows a similar SEO role as REJECT for Shayan. Sana's bucket includes SEO/marketing-adjacent; Shayan's is React/Next.js/WordPress. **Always evaluate stack-match against the SPECIFIC profile in input, not against a universal \"developer profile\".**\n\n6. **No-code platforms are out-of-stack everywhere**: Wix, Webflow, Bubble, Squarespace, Framer (as a no-code design tool), FlutterFlow, PowerApps, Showit, Systeme.io — none of our profiles field these. Reject on \"Out of stack\" regardless of other signals.\n\n7. **\"Language barrier\" maps to soft signal, NOT a hard gate**: The one labeled example sits at `gates_failed: []` with `soft_signal_failed: [\"language_barrier\"]`. If you detect non-English client communication or required-language mismatch, surface it via `confidence_warnings: [\"non_english_description\"]` and reduce `red_flags` component score — do NOT add \"Language barrier\" to `rejection_reasons` unless ALL hard gates also pass (which would make it the lone reason to reject).\n\n## OUTPUT RULES\n\n- Emit ONLY JSON conforming to the response schema. No markdown, no prose preamble, no commentary.\n- Every gate evaluated by you (those in `pending_for_llm`) MUST have an `evidence` string ≤ 200 chars citing concrete fields from the input.\n- Every rubric `components.<name>.reason` MUST cite concrete fields from the input.\n- `summary`: ≤ 600 chars. Lead with the decision and the strongest one or two signals.\n- `proposal_angles`: 0-3 strings. Lead with concrete portfolio items or prior work titles from `profile.portfolio_tldr` / `profile.work_history_tldr` when available. NEVER write generic angles (\"strong communication\", \"fast turnaround\") — those are useless to the proposal writer.\n- `missing_signals`: array of strings naming fields you wished you had (\"client_payment_verified\", \"client_member_since\", \"full_job_description\"). Empty array when input is complete.\n- `criteria_version`: echo back the `criteria_version` from input (currently \"0.2\").\n- `prompt_version`: emit \"v1\".\n- `confidence`: number 0..1 reflecting your own certainty.\n- `confidence_warnings`: array — see CONFIDENCE & WARNINGS section above.\n- When `request_meta.evidence_panel_required = true`: also emit `evidence_panel: { strengths: string[], weaknesses: string[], match_explanation: string }`. Keep each array 1-5 items, strings ≤ 200 chars each.\n- When `request_meta.evidence_panel_required = false`: omit `evidence_panel` entirely.\n- **You do NOT emit `effective_decision`, `threshold_flipped`, or `min_score_at_decision`.** Those are computed by the downstream C6 node from your `decision` and `total_score` plus the min-score threshold in force. Stay in your lane.\n\n## SELF-CHECK BEFORE EMITTING\n\n1. Does my `decision` match my gate findings? (any `fail` → must be `reject`)\n2. Are all reason labels in `rejection_reasons` from the 13-element enum? (no inventions, no typo fixes)\n3. If `decision = \"proceed\"` or `\"review\"`: did I emit all 7 rubric components with values ≤ each component's max?\n4. Does `total_score` equal the sum of component values?\n5. Does `tier` match `total_score` per the TIERS table?\n6. Did I trust the deterministic results without re-evaluating them?\n7. Is every `evidence` string anchored to concrete fields from the input (not invented)?\n\nAnswer all 7 yes before emitting."
+          }
+        },
+        "id": "c5-ai-agent",
+        "name": "AI Agent — Relevancy Classifier",
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 3.1,
+        "position": [
+          -368,
+          -96
+        ],
+        "onError": "continueErrorOutput",
+        "notes": "C5 — v3.3 Phase 6 Sitting 1. AI Agent (Gemini Flash 2.5 via sub-node, Structured Output Parser via sub-node). System prompt is the canonical Mode A body inlined in parameters.options.systemMessage (~30KB, source-of-truth = docs/relevancy/mode_a_prompt.md between the ~~~ fences). User msg from C4 ($json.user_message_json). On model error → continueErrorOutput (Sitting 2 wires to C11 DLQ).",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2500
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "id": "gemini-25-flash",
+        "name": "Gemini Flash 2.5",
+        "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+        "typeVersion": 1,
+        "position": [
+          -432,
+          128
+        ],
+        "credentials": {
+          "googlePalmApi": {
+            "id": "0gaoWdarY6itka7l",
+            "name": "Gemini API (Relevancy Classifier)"
+          }
+        },
+        "notes": "C5 sub-node (ai_languageModel) — v3.3 Phase 6 Sitting 1. Model pinned to gemini-2.5-flash. Credential = 'Gemini API (Relevancy Classifier)' (googlePalmApi, ID 0gaoWdarY6itka7l). Bound 2026-05-11.",
+        "retryOnFail": false,
+        "maxTries": 1,
+        "waitBetweenTries": 0
+      },
+      {
+        "parameters": {
+          "jsonSchemaExample": "{\n  \"decision\": \"proceed\",\n  \"rejection_reasons\": [],\n  \"gates\": {\n    \"1_stack_match\": { \"status\": \"pass\", \"evidence\": \"Job needs Next.js + React + TS; profile lists React, TypeScript, Node.js and has SaaS experience.\" },\n    \"2_freshness\": { \"status\": \"skipped_deterministic\", \"evidence\": \"checked by deterministic pre-check\" },\n    \"3_proposal_saturation\": { \"status\": \"skipped_deterministic\", \"evidence\": \"checked by deterministic pre-check\" },\n    \"4_hourly_floor\": { \"status\": \"skipped_deterministic\", \"evidence\": \"checked by deterministic pre-check\" },\n    \"5_client_spend_floor\": { \"status\": \"skipped_deterministic\", \"evidence\": \"checked by deterministic pre-check\" },\n    \"6_client_rating_floor\": { \"status\": \"skipped_deterministic\", \"evidence\": \"checked by deterministic pre-check\" },\n    \"7_job_availability\": { \"status\": \"pass\", \"evidence\": \"No closure indicators in description.\" },\n    \"8_no_location_lockin\": { \"status\": \"pass\", \"evidence\": \"No US-residency requirement in description.\" },\n    \"9_no_video_proposal\": { \"status\": \"pass\", \"evidence\": \"No video pitch requirement in description.\" },\n    \"10_portfolio_match\": { \"status\": \"pass\", \"evidence\": \"Profile has SaaS CRM Laravel + React/Next.js portfolio item that mirrors job stack.\" },\n    \"11_no_duplicate\": { \"status\": \"skipped_deterministic\", \"evidence\": \"checked by deterministic pre-check\" }\n  },\n  \"components\": {\n    \"skill_match\": { \"value\": 24, \"max\": 30, \"reason\": \"Strong React/TS/Node alignment; Next.js inferred from work history.\" },\n    \"portfolio_evidence\": { \"value\": 16, \"max\": 20, \"reason\": \"SaaS CRM portfolio item is a direct mirror of B2B SaaS marketplace requirements.\" },\n    \"client_quality\": { \"value\": 13, \"max\": 15, \"reason\": \"$25k spend, 30 hires, 4.95 rating — strong client signal.\" },\n    \"competition_position\": { \"value\": 8, \"max\": 10, \"reason\": \"8 proposals at <4h fresh — favorable.\" },\n    \"domain_match\": { \"value\": 8, \"max\": 10, \"reason\": \"SaaS marketplace aligns with prior CRM SaaS work.\" },\n    \"experience_level_fit\": { \"value\": 8, \"max\": 10, \"reason\": \"Senior request matches top_rated + $30/hr profile rate.\" },\n    \"red_flags\": { \"value\": 4, \"max\": 5, \"reason\": \"Some risk on Next.js depth; otherwise clean scope.\" }\n  },\n  \"total_score\": 81,\n  \"tier\": \"apply_now\",\n  \"confidence\": 0.78,\n  \"confidence_warnings\": [],\n  \"proposal_angles\": [\n    \"Lead with the Laravel + React/Next.js SaaS CRM portfolio item as the closest mirror.\",\n    \"Reference 506 total hours and top_rated_plus status to signal velocity.\"\n  ],\n  \"summary\": \"Strong proceed: stack alignment via React/TS/Node + SaaS CRM portfolio, healthy client signal, fresh listing. Apply with the SaaS CRM piece as lead.\",\n  \"missing_signals\": [\"client_payment_verified\"],\n  \"criteria_version\": \"0.2\",\n  \"prompt_version\": \"v1\"\n}",
+          "autoFix": true
+        },
+        "id": "output-parser",
+        "name": "Structured Output Parser",
+        "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+        "typeVersion": 1.3,
+        "position": [
+          -256,
+          128
+        ],
+        "notes": "C5 sub-node (ai_outputParser) — v3.3 Phase 6 Sitting 2 (revision 3). schemaType=fromJson with a complete example verdict (proceed-shaped, all 11 gates, 7 components). autoFix=true so a parse miss triggers a corrective re-prompt. The example covers every field; n8n derives the schema from it."
+      },
+      {
+        "parameters": {
+          "jsCode": "// C6 — Validate Output + Apply Threshold (v3.3 Phase 6 Sitting 2)\n//\n// Input:    $json    = parsed LLM verdict from C5 (Structured Output Parser)\n// Upstream: $('Prepare Classifier Input').first().json carries profile_context, job, request_meta, criteria_version, thresholds_in_force\n// Output:   unified verdict ready for C8 routing + C10 ingest\n\n// AI Agent (no parser) emits { output: \"raw text\" }. Parse it as JSON; on failure, mark for review.\nconst raw = items[0].json;\nlet llmOutput;\ntry {\n  const text = raw.output ?? raw.text ?? JSON.stringify(raw);\n  // Strip optional markdown code fences (```json ... ``` or ``` ... ```)\n  const stripped = text.trim().replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/, '').trim();\n  llmOutput = JSON.parse(stripped);\n} catch (e) {\n  llmOutput = {\n    decision: 'review',\n    confidence: 0.0,\n    confidence_warnings: ['parse_failure', e.message ?? 'unknown'],\n    rejection_reasons: [],\n    summary: `JSON parse failed on LLM output: ${(raw.output ?? '').slice(0, 200)}`,\n  };\n}\nconst upstream = $('Prepare Classifier Input').first().json;\nconst profileCtx = upstream.profile_context ?? {};\nconst reqMeta = upstream.request_meta ?? {};\nconst job = upstream.job ?? {};\nconst system = profileCtx._system ?? {};\n\n// 1. Schema sanity — fall back to 'review' on invalid decision (do not silently default to proceed; §16.7 A1)\nconst ALLOWED = new Set(['proceed', 'reject', 'review']);\nconst verdict = { ...llmOutput };\nif (!ALLOWED.has(verdict.decision)) {\n  verdict.decision = 'review';\n  verdict.confidence = (verdict.confidence ?? 0) * 0.5;\n  verdict.confidence_warnings = [...(verdict.confidence_warnings ?? []), 'invalid_decision_value'];\n}\n\n// 2. Verifier (§16.7 A3) — regex-scan job description for gate-9 hallucinations\nconst description = (job.description ?? '').toLowerCase();\nconst VIDEO_RE = /\\b(loom|video|screen[-\\s]?recording|record yourself)\\b/i;\nif (verdict.decision === 'proceed' && VIDEO_RE.test(description)) {\n  verdict.decision = 'reject';\n  verdict.rejection_reasons = [...(verdict.rejection_reasons ?? []), 'Video Proposal'];\n  verdict.confidence_warnings = [...(verdict.confidence_warnings ?? []), 'verifier_flipped_video'];\n}\n\n// 3. Threshold application (v3.3 §7.5)\nconst classifierMode = system.classifier_mode ?? 'shadow';\nconst minScore = system.effective_min_score ?? 50;\nconst totalScore = verdict.total_score ?? null;\n\nlet effectiveDecision = verdict.decision;\nlet thresholdFlipped = false;\nif (verdict.decision === 'proceed' && totalScore !== null && totalScore < minScore) {\n  effectiveDecision = 'reject';\n  thresholdFlipped = true;\n  verdict.rejection_reasons = [...(verdict.rejection_reasons ?? []), 'Below score threshold'];\n}\n\n// 4. Stamp v3.3 fields\nverdict.effective_decision           = effectiveDecision;\nverdict.threshold_flipped            = thresholdFlipped;\nverdict.min_score_at_decision        = minScore;\nverdict.classifier_mode_at_decision  = classifierMode;\n\n// 5. Populate /api/relevancy-scores ingest-contract fields\nverdict.profile_id        = profileCtx.profile?.profile_id ?? null;\nverdict.job_external_id   = job.job_id ?? null;\nverdict.snapshot_id       = profileCtx.profile?.id ?? null;\nverdict.model             = 'gemini-2.5-flash';\nverdict.prompt_mode       = 'A_full';\nverdict.evaluation_path   = (upstream.deterministic?.passed?.length ?? 0) > 0\n  ? 'llm_after_deterministic'\n  : 'llm';\nverdict.criteria_version  = verdict.criteria_version ?? upstream.criteria_version ?? '0.2';\nverdict.prompt_version    = verdict.prompt_version  ?? 'v1';\nverdict.source            = reqMeta.source ?? 'auto';\nverdict.task_id           = reqMeta.task_id ?? null;\nverdict.request_meta      = reqMeta;\nverdict.thresholds_used   = upstream.thresholds_in_force ?? null;\n\nreturn [{ json: verdict }];\n"
+        },
+        "id": "c6-validate-threshold",
+        "name": "Validate Output + Apply Threshold",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -160,
+          -96
+        ],
+        "notes": "C6 — v3.3 Phase 6 Sitting 2. Validates LLM verdict shape, runs the gate-9 video verifier (§16.7 A3), applies min_score threshold (flipping proceed→reject when total_score < min_score). Also populates the /api/relevancy-scores ingest-contract fields (profile_id, model, evaluation_path, etc.) so downstream C10 has everything it needs."
+      },
+      {
+        "parameters": {
+          "jsCode": "// C7 — Build Reject Payload (v3.3 Phase 6 Sitting 2)\n//\n// Two upstream inputs:\n//   A. From Gate Switch main[0] (deterministic reject path): C2 output, NO LLM verdict\n//   B. From Decision Switch reject branch (LLM/threshold-flipped reject): C6 output, FULL verdict\n//\n// Discriminator: presence of `decision` field on input.\n\nconst input = items[0].json;\n\n// Path B — already a full verdict, just pin tier='reject' and pass through\nif (input.decision) {\n  input.tier = 'reject';\n  return [{ json: input }];\n}\n\n// Path A — deterministic reject. Build verdict from scratch.\nconst det = input.deterministic ?? {};\nconst profileCtx = input.profile_context ?? {};\nconst job = input.job ?? {};\nconst reqMeta = input.request_meta ?? {};\nconst system = profileCtx._system ?? {};\n\nconst verdict = {\n  decision: 'reject',\n  effective_decision: 'reject',\n  threshold_flipped: false,\n  rejection_reasons: det.failed_reasons ?? [],\n  gates: {},\n  components: null,\n  total_score: null,\n  tier: 'reject',\n  confidence: 1.0,\n  confidence_warnings: [],\n  proposal_angles: [],\n  summary: `Deterministic reject: ${(det.failed_reasons ?? []).join(', ') || 'gate(s) failed'}`,\n  missing_signals: [],\n  criteria_version: input.criteria_version ?? '0.2',\n  prompt_version: 'v1',\n  prompt_mode: 'A_full',\n  evaluation_path: 'deterministic',\n  classifier_mode_at_decision: system.classifier_mode ?? 'shadow',\n  min_score_at_decision: system.effective_min_score ?? 50,\n  profile_id: profileCtx.profile?.profile_id ?? null,\n  job_external_id: job.job_id ?? null,\n  snapshot_id: profileCtx.profile?.id ?? null,\n  model: 'deterministic',\n  source: reqMeta.source ?? 'auto',\n  task_id: reqMeta.task_id ?? null,\n  request_meta: reqMeta,\n  thresholds_used: input.thresholds_in_force ?? null,\n};\n\nreturn [{ json: verdict }];\n"
+        },
+        "id": "c7-build-reject",
+        "name": "Build Reject Payload",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -160,
+          96
+        ],
+        "notes": "C7 — v3.3 Phase 6 Sitting 2. Two upstream inputs converge here: (A) deterministic reject path from Gate Switch (no LLM verdict, build from scratch); (B) LLM reject path from Decision Switch (full verdict, just pin tier). Discriminator = presence of `decision` field on input."
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "reject-rule",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "leftValue": "={{ $json.effective_decision }}",
+                      "rightValue": "reject"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "review-rule",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "leftValue": "={{ $json.effective_decision }}",
+                      "rightValue": "review"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "proceed-rule",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "leftValue": "={{ $json.effective_decision }}",
+                      "rightValue": "proceed"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              }
+            ]
+          },
+          "options": {
+            "fallbackOutput": "extra"
+          }
+        },
+        "id": "c8-decision-switch",
+        "name": "Decision Switch",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": [
+          48,
+          -96
+        ],
+        "notes": "C8 — v3.3 Phase 6 Sitting 2. Routes by effective_decision: reject→C7, review→C9, proceed→C10. Fallback (unrecognized decision) goes to 'extra' output (currently unwired — safe default since C6 already coerces invalid decisions to 'review')."
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "tier-marker",
+                "name": "tier",
+                "value": "={{ $json.tier ?? 'marginal' }}",
+                "type": "string"
+              }
+            ]
+          },
+          "includeOtherFields": true,
+          "options": {}
+        },
+        "id": "c9-build-review",
+        "name": "Build Review Payload",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          256,
+          -192
+        ],
+        "notes": "C9 — v3.3 Phase 6 Sitting 2. Review-branch enrichment. Currently a passthrough that just ensures `tier` is set (default 'marginal' if missing). Reserved for adding human-review-specific fields (e.g., dashboard evidence_panel) in later phases."
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://157.173.110.62/api/relevancy-scores",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Idempotency-Key",
+                "value": "={{ $execution.id }}-{{ $json.task_id || $json.job_external_id || 'noid' }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json) }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "id": "c10-persist",
+        "name": "Persist Relevancy Score",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          464,
+          -96
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "yXpENDK1cKgFdxp0",
+            "name": "Relevancy Ingest Token (Contabo)"
+          }
+        },
+        "onError": "continueErrorOutput",
+        "notes": "C10 — v3.3 Phase 6 Sitting 2. POST /api/relevancy-scores with Bearer auth (Relevancy Ingest Token). Idempotency-keyed by execution_id + task_or_job_id. On HTTP failure → error output flows to C11 (DLQ)."
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://157.173.110.62/api/relevancy-scores?dlq=1",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ payload: $json, error_detail: (($json.error && $json.error.message) || 'unknown') }) }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            },
+            "timeout": 10000
+          }
+        },
+        "id": "c11-dlq",
+        "name": "Persist to DLQ",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          672,
+          96
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "yXpENDK1cKgFdxp0",
+            "name": "Relevancy Ingest Token (Contabo)"
+          }
+        },
+        "notes": "C11 — v3.3 Phase 6 Sitting 2. DLQ fallback wired from C5 error output AND C10 error output. POST /api/relevancy-scores?dlq=1 (same Bearer auth) with body { payload, error_detail }. neverError: true so pipeline never blocks on audit-log failures."
+      },
+      {
+        "parameters": {
+          "jsCode": "// C12 — Return Verdict (Phase 7 prereq)\n//\n// Purpose: ensure executeWorkflow callers receive the VERDICT object on the\n// sub-workflow's main output, not C10's HTTP response ({ok,id}) or C11's DLQ\n// response ({ok,dlq_id}).\n//\n// Reaches this node from two terminals:\n//   - Persist Relevancy Score main[0]  (success → $json = {ok:true,id:<scoreId>})\n//   - Persist to DLQ          main[0]  (DLQ      → $json = {ok:true,dlq_id:N})\n//\n// Verdict source priority (only one of these has run on any execution):\n//   1. Build Reject Payload   — deterministic-reject OR LLM/threshold reject\n//   2. Build Review Payload   — LLM review branch\n//   3. Validate Output + Apply Threshold — LLM proceed branch (no rebuilder in between)\n// Fallback: C5 AI Agent errored → C11 directly with no verdict ever produced.\n//          Synthesize a 'review' fallback verdict so the parent can still route.\n\nfunction safeNode(name) {\n  try {\n    const ref = $(name);\n    if (ref && ref.isExecuted) {\n      return ref.first().json;\n    }\n  } catch (e) { /* node not in execution path */ }\n  return null;\n}\n\nlet verdict =\n  safeNode('Build Reject Payload') ||\n  safeNode('Build Review Payload') ||\n  safeNode('Validate Output + Apply Threshold');\n\nif (!verdict) {\n  // C5 error → C11 with no verdict. Synthesize a parent-routable fallback.\n  let trigger = {};\n  try { trigger = $('Execute Workflow Trigger').first().json || {}; } catch (e) {}\n  const reqMeta = trigger.request_meta || {};\n  verdict = {\n    decision: 'review',\n    effective_decision: 'review',\n    threshold_flipped: false,\n    rejection_reasons: [],\n    gates: {},\n    components: null,\n    total_score: null,\n    tier: 'marginal',\n    confidence: 0.0,\n    confidence_warnings: ['classifier_error_no_verdict'],\n    proposal_angles: [],\n    summary: 'Classifier errored before producing a verdict; routed to review by fallback.',\n    missing_signals: [],\n    profile_id: trigger.profile_id || null,\n    job_external_id: (trigger.job && trigger.job.job_id) || null,\n    snapshot_id: null,\n    model: 'gemini-2.5-flash',\n    prompt_mode: 'A_full',\n    evaluation_path: 'llm',\n    criteria_version: '0.2',\n    prompt_version: 'v1',\n    source: reqMeta.source || 'auto',\n    task_id: reqMeta.task_id || null,\n    request_meta: reqMeta,\n    thresholds_used: null,\n    classifier_mode_at_decision: 'shadow',\n    min_score_at_decision: 50,\n  };\n}\n\n// Stamp _score_id from C10 success leaf; null on DLQ leaf.\nconst inbound = (items[0] && items[0].json) || {};\nconst scoreId = (inbound && inbound.dlq_id == null && inbound.id != null) ? inbound.id : null;\nconst dlqId   = (inbound && inbound.dlq_id != null) ? inbound.dlq_id : null;\n\nconst classifierMode = verdict.classifier_mode_at_decision || 'shadow';\n\n// Mirror classifier_mode into request_meta for parent K3 switch convenience.\n// Keep both shapes: top-level classifier_mode_at_decision (existing) AND request_meta.classifier_mode (new).\nconst out = {\n  ...verdict,\n  _score_id: scoreId,\n  _dlq_id: dlqId,\n  request_meta: {\n    ...(verdict.request_meta || {}),\n    classifier_mode: classifierMode,\n  },\n};\n\nreturn [{ json: out }];\n"
+        },
+        "id": "c12-return-verdict",
+        "name": "Return Verdict",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          880,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "Execute Workflow Trigger": {
+        "main": [
+          [
+            {
+              "node": "Load Profile Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Load Profile Context": {
+        "main": [
+          [
+            {
+              "node": "Deterministic Pre-check",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Deterministic Pre-check": {
+        "main": [
+          [
+            {
+              "node": "Gate Switch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Gate Switch": {
+        "main": [
+          [
+            {
+              "node": "Build Reject Payload",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare Classifier Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Classifier Input": {
+        "main": [
+          [
+            {
+              "node": "AI Agent — Relevancy Classifier",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Gemini Flash 2.5": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent — Relevancy Classifier",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Structured Output Parser": {
+        "ai_outputParser": [
+          [
+            {
+              "node": "AI Agent — Relevancy Classifier",
+              "type": "ai_outputParser",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Agent — Relevancy Classifier": {
+        "main": [
+          [
+            {
+              "node": "Validate Output + Apply Threshold",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Persist to DLQ",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate Output + Apply Threshold": {
+        "main": [
+          [
+            {
+              "node": "Decision Switch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Decision Switch": {
+        "main": [
+          [
+            {
+              "node": "Build Reject Payload",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build Review Payload",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Persist Relevancy Score",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Reject Payload": {
+        "main": [
+          [
+            {
+              "node": "Persist Relevancy Score",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Review Payload": {
+        "main": [
+          [
+            {
+              "node": "Persist Relevancy Score",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Persist Relevancy Score": {
+        "main": [
+          [
+            {
+              "node": "Return Verdict",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Persist to DLQ",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Persist to DLQ": {
+        "main": [
+          [
+            {
+              "node": "Return Verdict",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Aleem Ahmed",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-05-12T12:10:33.823Z",
+        "id": 310,
+        "workflowId": "hi71jhPU8tmq7hEp",
+        "versionId": "eb58771c-d022-4c93-adb3-3b10bcd2c11a",
+        "event": "activated",
+        "userId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
+      },
+      {
+        "createdAt": "2026-05-12T12:10:33.732Z",
+        "id": 309,
+        "workflowId": "hi71jhPU8tmq7hEp",
+        "versionId": "eb58771c-d022-4c93-adb3-3b10bcd2c11a",
+        "event": "deactivated",
+        "userId": "ecc1c8a7-a6d2-4261-8cbc-6d307947d023"
+      }
+    ]
+  }
+}

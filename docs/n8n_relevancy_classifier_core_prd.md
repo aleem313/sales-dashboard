@@ -616,7 +616,7 @@ The pipeline is **proven** end-to-end. Production readiness blocked only on Phas
 | **TD-1** | Gate 11 (`11_no_duplicate`) is marked `pending_for_llm` but LLM cannot actually check this | Medium | The LLM has no visibility into the dashboard's `jobs.job_id` history. Either (a) wire a Postgres lookup in C2 (preferred — needs a new dashboard endpoint or direct query node) or (b) drop gate 11 from the gate list entirely. Plan v3 §4.1 has C2 doing this lookup; my Sitting 1 deferred it to Sitting 2 and Sitting 2 didn't ship it. |
 | **TD-2** | Structured Output Parser sub-node is connected but disabled (`hasOutputParser: false`) | Low | Two prior attempts to enable schema enforcement failed at schema-init time (parser would reject the AI Agent's call before Gemini ran, with `executionTime: 8ms`). Cause unclear — possibly a Gemini × LangChain Structured Parser integration bug on n8n cloud's current version. Workaround: C6 JSON.parses the raw text with a try/catch fallback. The parser node was left connected for future re-enablement if the integration is fixed in a future n8n release. |
 | **TD-3** | C9 (Build Review Payload) is a near-passthrough | Low | Reserved for future review-specific UI enrichment (e.g., a synthesized `evidence_panel`). Not blocking; currently just pins `tier`. |
-| **TD-4** | No committed workflow JSON snapshot file | Low | Parent workflow has `docs/multiple webhooks (working flow).json` as a rollback artifact. The classifier should have an equivalent. Suggested path: `docs/_relevancy-classifier-core (working flow).json`. |
+| **TD-4** | ~~No committed workflow JSON snapshot file~~ **RESOLVED 2026-05-12** | — | `docs/_relevancy-classifier-core (working flow).json` now committed (post AI-Agent retry-relocation patch, 15 nodes, 19 connections, active: true). Refresh on every behavior-affecting edit via the same dump path. |
 | **TD-5** | Outdated typeVersions | Low | Gemini Flash 2.5 at v1 (latest 1.1, but 1.1 not installed on this n8n cloud version). Decision Switch at 3.2 (latest 3.4). Bump in one batch when n8n cloud upgrades. |
 | **TD-6** | `model: 'deterministic'` is a fudge for deterministic-reject rows | Low | The `model` field on `relevancy_scores` was designed to record the LLM identifier. Deterministic rejects have no LLM. Using the string `'deterministic'` is unambiguous in queries but a more principled design would split the column or add an `is_deterministic` flag. Acceptable for now. |
 | **TD-7** | C10's `X-Idempotency-Key` uses `task_id || job_external_id || 'noid'` — last fallback collides for any two `noid` events in the same execution | Low | Theoretical: only happens if `task_id` AND `job_external_id` are both null, which is unusual (every real job has at least one). Acceptable; can tighten later. |
@@ -626,7 +626,36 @@ The pipeline is **proven** end-to-end. Production readiness blocked only on Phas
 
 ## 12. Recent changes
 
-### 2026-05-12 — Gemini Flash 2.5 sub-node: add node-level retry config to absorb transient 503s (SHIPPED)
+### 2026-05-12 — AI Agent retry boundary: relocate retry config from Gemini sub-node to AI Agent (the only place it actually fires) (SHIPPED)
+
+- **Why:** This morning's retry-config edit on the Gemini Flash 2.5 sub-node was **structurally inert**. Sub-execution 13399 (called from parent 13396, Shayan profile, 2026-05-12) hit Gemini "Service unavailable" again and burned through the path in **1271ms total** — single try, no retries. If retries had fired, total time would have been ≥6s (1s × 3 attempts + 2 × 2.5s waits). Three consecutive DLQs today (13379, 13382, 13396) all matched this pattern.
+- **Root cause:** Gemini Flash 2.5 is wired into the AI Agent via `ai_languageModel` (sub-node), NOT as a main-flow step. n8n's `retryOnFail` on a sub-node is never triggered because the sub-node doesn't run as a standalone main-flow node — it's invoked by the AI Agent. When Gemini errors, the AI Agent CATCHES the error and routes via main[1] per its `onError: "continueErrorOutput"` setting. The AI Agent itself reports `success` (it gracefully handled the sub-node failure), so no retry boundary engages anywhere. Confirmed by inspecting the live config + execution 13399 timing.
+- **What:**
+  - `updateNode` on **AI Agent — Relevancy Classifier**: added top-level `retryOnFail: true, maxTries: 3, waitBetweenTries: 2500`. Kept `onError: "continueErrorOutput"` so that AFTER retries exhaust, the error still routes to C11 DLQ → C12 fallback. n8n's documented behavior: retries fire BEFORE the error-output path, so the DLQ remains the last-resort fallback.
+  - `updateNode` on **Gemini Flash 2.5** sub-node: stripped the dead retry config (`retryOnFail: false, maxTries: 1, waitBetweenTries: 0`). Pure cleanup — that config was never honored. typeVersion 1 preserved.
+- **Op shapes applied:**
+  ```json
+  [
+    { "type": "updateNode", "nodeName": "AI Agent — Relevancy Classifier",
+      "updates": { "retryOnFail": true, "maxTries": 3, "waitBetweenTries": 2500 } },
+    { "type": "updateNode", "nodeName": "Gemini Flash 2.5",
+      "updates": { "retryOnFail": false, "maxTries": 1, "waitBetweenTries": 0 } }
+  ]
+  ```
+- **Verification:** `n8n_validate_workflow profile=runtime` → `valid: true`, 0 errors, 25 warnings (matches baseline from this morning's C12 add). Re-fetched both nodes: AI Agent now has all three retry keys at top level + `onError: continueErrorOutput` preserved; Gemini sub-node retry fields cleared. Node count 15, connection count 19, all unchanged.
+- **Smoke-test:** Skipped — `executeWorkflowTrigger` requires manual UI click. Live verification will come from the next Vollna fire. Acceptance: a 503 case shows AI Agent `executionTime ≥ ~5s` (proving retries fired) OR a success verdict (retries recovered the blip). Persistent failures still gracefully fall to DLQ.
+- **Workflow state note (divergence from prior PRD):** during pre-flight, `active: true` on the sub-workflow — PRD §4.4 stated `active: false`. This implies Phase 7 has already shipped on the parent side (execution 13399's sub-execution was triggered by parent execution 13396 via executeWorkflow, which requires the sub-workflow to be active). PRD §4.4 and the contract's "stays inactive until Phase 7 ships" rule are now stale on this point. Flagging for `n8n-workflow-keeper` / admin to confirm and reconcile.
+- **Rollback baseline:** two inverse ops:
+  ```json
+  [
+    { "type": "updateNode", "nodeName": "AI Agent — Relevancy Classifier",
+      "updates": { "retryOnFail": false, "maxTries": 1, "waitBetweenTries": 0 } },
+    { "type": "updateNode", "nodeName": "Gemini Flash 2.5",
+      "updates": { "retryOnFail": true, "maxTries": 3, "waitBetweenTries": 2500 } }
+  ]
+  ```
+
+### 2026-05-12 — Gemini Flash 2.5 sub-node: add node-level retry config to absorb transient 503s (SUPERSEDED — sub-node retry config is structurally ignored when wired as `ai_languageModel`; see entry above)
 
 - **Why:** Two consecutive post-Phase-7 parent runs (executions 13379 and 13382, both Khansa profile, 2026-05-12) hit Gemini "Service unavailable - try again later" 503s. The C5 main[1] error path correctly routed to C11 DLQ → C12 fallback (`decision: "review", confidence_warnings: ["classifier_error_no_verdict"]`), but the classifier never produced a real verdict on those calls. n8n's own error message recommends node-level retry; this is the structural fix. Earlier today's smoke (execution 13356, Shayan synthetic SaaS, `proceed/91/apply_now` in 18.2s) succeeded, so happy-path is fine — these 503s are transient Google API blips, not consistent failures.
 - **What:** One-op `updateNode` on `Gemini Flash 2.5` (sub-node id `gemini-25-flash`, typeVersion 1 preserved per CLAUDE.md gotcha) adding three top-level fields: `retryOnFail: true`, `maxTries: 3`, `waitBetweenTries: 2500`. Initial attempt + 2 retries; 2.5s back-off. Worst-case adds ~5s latency on top of the classifier's existing 8–20s budget. Chose 2500ms (not higher) to keep total worst-case latency under the parent K2 `executeWorkflow` node's compounded budget.

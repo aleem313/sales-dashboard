@@ -555,6 +555,37 @@ mcp__n8n-mcp__n8n_update_partial_workflow with operations:
 
 ## 12. Recent changes
 
+### 2026-05-12 — Process Job + Build GPT Input: propagate Upwork snapshot into Claude prompt (SHIPPED)
+- **What:**
+  - `Process Job` (node id `a064f102-37a6-47ec-bfcb-f47bbd95dc6c`) `parameters.jsCode`: added one line — `upwork: profile.upwork || null` — to the `_result: 'proceed'` emit object literal, immediately after `custom_gpt_instructions: ''`. All other lines unchanged. The `custom_gpt_instructions: ''` placeholder is intentionally retained for backward compat.
+  - `Build GPT Input` (node id `e21fa42e-9d56-43fe-a253-8c83849d4d07`) `parameters.jsCode`: wholesale replacement. Now reads `item.upwork` from upstream and formats a rich `=== FREELANCER PROFILE ===` section into Claude's prompt: name, profile id, agent, title, track record (top_rated_status, hourly_rate, rating, total_jobs, total_hours, last_worked_on), skills_summary, stack focus, bio (truncated to 1000 chars), and up to 3 portfolio highlights (each description truncated to 220 chars). Falls back gracefully to a "(No Upwork snapshot available for this profile)" line when `upwork` is `null`, preserving the historical behaviour. Hook rotation, job sections (title/description/budget/skills/client context) and the final `Write the proposal now.` line are unchanged.
+- **Why:** Live executions 13389/13392/13394 (and 13378/13379/13382) all surfaced `_proposalOk: false` because Claude was receiving only `PROFILE: <name>, TECH STACK: <empty>, AGENT: <name>` — `profiles.stack` is empty for ALL 8 profiles and the legacy `custom_gpt_instructions` column never existed. For 13394 (Khansa, Laravel/Livewire job) Claude literally responded "I need additional information to generate a complete proposal. Please provide: 1) The PROJECT DATABASE with Khansa's past projects...". Fix path B (user-approved) extends `/api/profiles/mapping` with an `upwork` nested object sourced from `upwork_profile_snapshots_current` (7 of 8 profiles already have rich snapshots); this PRD entry covers the n8n side that propagates the new field through Process Job and uses it in Build GPT Input.
+- **How:** Single atomic `n8n_update_partial_workflow` call, 2 operations: 1× `patchNodeField` (Process Job — single-line surgical add) + 1× `updateNode` (Build GPT Input — full jsCode replace, ~100 lines new). No topology change, no other node touched, no connection edits, no typeVersion bumps.
+- **Verification:** `n8n_validate_workflow profile=runtime` → `valid: true, errorCount: 0, warningCount: 47` (one warning lower than the prior 48 baseline — the "Code doesn't reference input data" false-positive on Build GPT Input is gone now that the new code references `item`/`upwork`/`profileLines` extensively). Node count still 34. Re-read of the live workflow confirms exactly one occurrence each of `upwork: profile.upwork || null` (Process Job), `const upwork = item.upwork || null` (Build GPT Input), `=== FREELANCER PROFILE ===` (Build GPT Input), and `Portfolio Highlights` (Build GPT Input).
+- **Backward compatibility:** When the dashboard returns a profile without an `upwork` key (e.g. Laiba, which has no snapshot row yet, or any future profile created before its first snapshot upload), `Process Job` emits `upwork: null` and `Build GPT Input` takes the `else` branch — Claude's prompt falls back to the old "Stack Focus + agent" shape with an explicit "(No Upwork snapshot available)" note. Existing behaviour preserved.
+- **Rollback baseline:** `docs/multiple webhooks (working flow).json` (refreshed post-patch).
+- **Rollback ops (single atomic `n8n_update_partial_workflow`, 2 ops, inverse of this run):**
+  ```json
+  [
+    {
+      "type": "patchNodeField",
+      "nodeName": "Process Job",
+      "fieldPath": "parameters.jsCode",
+      "patches": [{
+        "find": "    clickup_list_id: profile.clickup_list_id || DEFAULT_LIST,\n    custom_gpt_instructions: '',\n    upwork: profile.upwork || null\n  }});",
+        "replace": "    clickup_list_id: profile.clickup_list_id || DEFAULT_LIST,\n    custom_gpt_instructions: ''\n  }});"
+      }]
+    },
+    {
+      "type": "updateNode",
+      "nodeName": "Build GPT Input",
+      "updates": { "parameters.jsCode": "<paste the pre-patch jsCode from the prior PRD entry 2026-05-12 — Build GPT Input source patch>" }
+    }
+  ]
+  ```
+- **Live verification pending:** awaits dashboard `/api/profiles/mapping` extension deploy (Dashboard Agent's workstream — auto via GitHub Actions) AND next real Vollna fire. Acceptance: Process Job emits items with `upwork: { title, top_rated_status, hourly_rate, rating, total_jobs, total_hours, last_worked_on, skills_summary, bio, portfolio[3] }` populated for 7/8 profiles (Laiba bypassed as `null`); Build GPT Input's `gptInput` now contains the full FREELANCER PROFILE block; Claude produces `_proposalOk: true` proposals with profile-specific framing (e.g., references Khansa's Laravel portfolio item titles, Shayan's past React/Node engagements). Out-of-scope for this entry: the structured-output-parser schema, AI Agent system prompt, and Claude model itself were NOT touched — separate workstream.
+- **NOT changed in this run:** Process Job's profile-mapping fetch order (still Contabo primary, Vercel fallback), Route Job rules, AI Agent system prompt, Structured Output Parser schema, Format ClickUp Task, Create Board Task - Self-Hosted, Format Dashboard Event, Send to Self-Hosted Dashboard, all 8 Webhook + Respond + Merge wiring (indices 0..7, `numberInputs: 8`), classifier nodes (IF - Classifier Enabled / Score Relevancy / Route Verdict / End (Audit Only)).
+
 ### 2026-05-12 — Create Board Task - Self-Hosted: added `_relevancy_summary` (12th relevancy field) (SHIPPED)
 - **What:** Added one key/value to `Create Board Task - Self-Hosted.parameters.jsonBody` (node id `a55e6692-843c-4ef6-ba9b-e62a3ddab7b6`) — `_relevancy_summary: ($json.relevancyVerdict && $json.relevancyVerdict.summary) || null`. Inserted directly after `_relevancy_score` in the `custom_fields` object literal. Brings the total `_relevancy_*` stamp from 11 fields to 12.
 - **Why:** User feedback (diagnosed via execution 13387): the classifier verdict has a top-level `summary` field carrying the LLM's qualitative feedback text (e.g. "Strong skill match on React/Node; client spend in target range; portfolio aligns") that was not being captured on cards. Needed for Shadow-mode calibration so reviewers can read the LLM's reasoning alongside score/tier/decision.
