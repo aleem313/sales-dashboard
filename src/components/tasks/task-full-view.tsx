@@ -1422,6 +1422,9 @@ const REASON_OPTIONS = [
   "Job unavailable",
   "Already hired",
   "Out of stack",
+  "Client already conducting an interview",
+  "Short term job checks",
+  "Red flag",
 ] as const;
 
 function ReasonMultiSelect({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {

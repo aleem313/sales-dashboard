@@ -40,6 +40,7 @@ const REASON_OPTIONS = [
   "Language barrier", "Too many invites", "Video Proposal",
   "Client suspended", "Portfolio unavailable", "Client Low spending",
   "Bad rating client", "Job unavailable", "Already hired", "Out of stack",
+  "Client already conducting an interview", "Short term job checks", "Red flag",
 ];
 
 const REASON_VIRTUAL_FIELD: CustomFieldDefinition = {
