@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath, revalidateTag, updateTag } from "next/cache";
 import {
   toggleAgentActive,
   createAgent,
@@ -340,8 +340,10 @@ export async function saveUpworkProfileSnapshotAction(
 
   // Phase 3 (plan v3.3 §5.4 + §11.4): bust the classifier's profile-context cache
   // so the next score reads the fresh snapshot. "Latest snapshot wins" semantics.
-  // updateTag (vs revalidateTag) gives read-your-own-writes from within this Server Action.
-  updateTag(`profile-context-${profileId}`);
+  // revalidateTag (not updateTag) because this action is invoked from the
+  // upwork-snapshot route handler, not a true Server Action context — updateTag
+  // throws outside the React-server-action invocation.
+  revalidateTag(`profile-context-${profileId}`);
 
   return result;
 }
@@ -371,7 +373,9 @@ export async function restorePreviousSnapshotAction(
   revalidatePath("/profiles");
   revalidatePath("/my-profiles");
   revalidatePath("/my-dashboard");
-  updateTag(`profile-context-${profileId}`);
+  // Called from the restore route handler — see saveUpworkProfileSnapshotAction
+  // for why this is revalidateTag instead of updateTag.
+  revalidateTag(`profile-context-${profileId}`);
 
   return { ok: true, promotedId: result.promoted_id, deletedId: result.deleted_id };
 }
