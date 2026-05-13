@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 
 // Admin-only route prefixes — agents get redirected
-const ADMIN_ROUTES = ["/dashboard", "/pipeline", "/connects", "/analytics", "/alerts", "/agents", "/profiles", "/jobs", "/settings", "/tasks"];
+const ADMIN_ROUTES = ["/dashboard", "/pipeline", "/connects", "/analytics", "/alerts", "/agents", "/profiles", "/jobs", "/settings", "/tasks", "/relevancy-audit"];
 
 export default auth((req) => {
   if (!req.auth) {
@@ -46,5 +46,7 @@ export const config = {
     "/my-tasks/:path*",
     "/api/projects/:path*",
     "/api/tasks/:path*",
+    "/relevancy-audit/:path*",
+    "/api/relevancy-audit/:path*",
   ],
 };

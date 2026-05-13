@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "019" && migration !== "020" && migration !== "migrate-tasks") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "019" && migration !== "020" && migration !== "021" && migration !== "migrate-tasks") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
   }
 
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const sourceBoard = request.nextUrl.searchParams.get("from") || "e8442ebd-afd3-4217-99c4-e55ee20d4bfa";
     const destBoard = request.nextUrl.searchParams.get("to") || "351494d8-918e-475e-b16c-2eee3232aefe";
     return runMigrateTasks(sourceBoard, destBoard);
+  }
+
+  if (migration === "021") {
+    return run021();
   }
 
   if (migration === "020") {
@@ -448,6 +452,66 @@ async function run011() {
     return NextResponse.json({
       success: false,
       migration: "011_fix_profile_assignments",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run021() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 021: Extend relevancy_overrides to support admin audit-page overrides...");
+
+    // 1. Add columns (idempotent via IF NOT EXISTS).
+    await sql`
+      ALTER TABLE relevancy_overrides
+        ADD COLUMN IF NOT EXISTS override_type TEXT NOT NULL DEFAULT 'agent_move'
+          CHECK (override_type IN ('agent_move', 'admin_audit'))
+    `;
+    await sql`ALTER TABLE relevancy_overrides ADD COLUMN IF NOT EXISTS admin_id TEXT`;
+    await sql`ALTER TABLE relevancy_overrides ADD COLUMN IF NOT EXISTS note TEXT`;
+    results.push("✓ Added override_type, admin_id, note columns");
+
+    // 2. Relax NOT NULL. ALTER COLUMN ... DROP NOT NULL is idempotent — re-running
+    //    on an already-nullable column is a no-op.
+    await sql`ALTER TABLE relevancy_overrides ALTER COLUMN task_id DROP NOT NULL`;
+    await sql`ALTER TABLE relevancy_overrides ALTER COLUMN agent_action DROP NOT NULL`;
+    results.push("✓ Relaxed NOT NULL on task_id + agent_action");
+
+    // 3. Indexes for audit-page filtering and admin-scoped delete checks.
+    await sql`CREATE INDEX IF NOT EXISTS idx_overrides_type ON relevancy_overrides (override_type, created_at DESC)`;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_overrides_admin
+        ON relevancy_overrides (admin_id, created_at DESC)
+        WHERE override_type = 'admin_audit'
+    `;
+    results.push("✓ Created idx_overrides_type + idx_overrides_admin");
+
+    // 4. Bust stats cache for consistency with prior migrations.
+    const cacheWipe = await sql`DELETE FROM stats_cache`;
+    results.push(`✓ Cleared stats_cache: ${cacheWipe.rowCount} rows removed`);
+
+    // 5. Sanity check the schema.
+    const verifyResult = await sql`
+      SELECT column_name, is_nullable
+      FROM information_schema.columns
+      WHERE table_name = 'relevancy_overrides'
+        AND column_name IN ('task_id', 'agent_action', 'override_type', 'admin_id', 'note')
+      ORDER BY column_name
+    `;
+    results.push(`✓ Verified columns: ${verifyResult.rows.map((r) => `${r.column_name}(nullable=${r.is_nullable})`).join(", ")}`);
+
+    return NextResponse.json({
+      success: true,
+      migration: "021_relevancy_overrides_admin",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "021_relevancy_overrides_admin",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });

@@ -22,6 +22,7 @@ import {
   KanbanSquare,
   Settings,
   BarChart3,
+  ShieldCheck,
 } from "lucide-react";
 import { useState, Suspense } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -70,6 +71,12 @@ const adminNavSections: NavSection[] = [
     label: "Tasks",
     items: [
       { href: "/tasks", label: "Task Board", icon: KanbanSquare },
+    ],
+  },
+  {
+    label: "Relevancy",
+    items: [
+      { href: "/relevancy-audit", label: "Relevancy Audit", icon: ShieldCheck },
     ],
   },
   {

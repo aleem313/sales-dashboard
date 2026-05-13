@@ -4051,3 +4051,275 @@ export async function getTaskJobPayload(
     _missing_fields: Array.from(new Set(missing)),
   };
 }
+
+// ===================================================================
+// Relevancy audit page (migration 021 — admin overrides on classifier rejects)
+// ===================================================================
+
+export interface RelevancyAuditRejectRow {
+  score_id: number;
+  evaluated_at: string;
+  profile_id: string | null;
+  profile_name: string | null;
+  job_external_id: string | null;
+  job_title: string;
+  task_id: string | null;
+  total_score: number | null;
+  tier: string | null;
+  decision: string;
+  effective_decision: string;
+  threshold_flipped: boolean;
+  rejection_reasons: string[] | null;
+  classifier_mode_at_decision: string;
+  override: { override_id: number; note: string | null; created_at: string } | null;
+}
+
+export interface RelevancyAuditListResult {
+  rows: RelevancyAuditRejectRow[];
+  total: number;
+}
+
+// Lists classifier rejects within the date window, optionally filtered by profile
+// and hiding rows the admin has already flagged. Joins relevancy_scores → profiles
+// (for display name), tasks (for title via _relevancy_score_id stamp), and the
+// per-row admin_audit override (LEFT JOIN — NULL means unreviewed).
+export async function listRelevancyAuditRejects(opts: {
+  from: Date;
+  to: Date;
+  profileIds: string[] | null;
+  hideOverridden: boolean;
+  limit?: number;
+}): Promise<RelevancyAuditListResult> {
+  const limit = opts.limit ?? 200;
+  const profileFilter = opts.profileIds && opts.profileIds.length > 0 ? opts.profileIds : null;
+
+  const dataResult = await sql<{
+    score_id: number | string;
+    evaluated_at: string | Date;
+    profile_id: string | null;
+    profile_name: string | null;
+    job_external_id: string | null;
+    job_title: string | null;
+    task_id: string | null;
+    total_score: number | null;
+    tier: string | null;
+    decision: string;
+    effective_decision: string;
+    threshold_flipped: boolean;
+    rejection_reasons: string[] | null;
+    classifier_mode_at_decision: string;
+    override_id: number | string | null;
+    override_note: string | null;
+    override_created_at: string | Date | null;
+  }>`
+    SELECT
+      rs.id AS score_id,
+      rs.evaluated_at,
+      rs.profile_id,
+      p.profile_name,
+      rs.job_external_id,
+      t.title AS job_title,
+      t.id AS task_id,
+      rs.total_score,
+      rs.tier,
+      rs.decision,
+      rs.effective_decision,
+      rs.threshold_flipped,
+      rs.rejection_reasons,
+      rs.classifier_mode_at_decision,
+      ro.id AS override_id,
+      ro.note AS override_note,
+      ro.created_at AS override_created_at
+    FROM relevancy_scores rs
+    LEFT JOIN profiles p ON p.profile_id = rs.profile_id
+    LEFT JOIN tasks t ON t.custom_fields->>'_relevancy_score_id' = rs.id::text
+    LEFT JOIN relevancy_overrides ro
+      ON ro.score_id = rs.id AND ro.override_type = 'admin_audit'
+    WHERE rs.effective_decision = 'reject'
+      AND rs.evaluated_at BETWEEN ${opts.from.toISOString()} AND ${opts.to.toISOString()}
+      AND (${profileFilter}::text[] IS NULL OR rs.profile_id = ANY(${profileFilter}::text[]))
+      AND (${opts.hideOverridden} = FALSE OR ro.id IS NULL)
+    ORDER BY rs.evaluated_at DESC
+    LIMIT ${limit}
+  `;
+
+  // Separate count query for the badge — same filters, no LIMIT.
+  const countResult = await sql<{ total: number | string }>`
+    SELECT COUNT(*)::int AS total
+    FROM relevancy_scores rs
+    LEFT JOIN relevancy_overrides ro
+      ON ro.score_id = rs.id AND ro.override_type = 'admin_audit'
+    WHERE rs.effective_decision = 'reject'
+      AND rs.evaluated_at BETWEEN ${opts.from.toISOString()} AND ${opts.to.toISOString()}
+      AND (${profileFilter}::text[] IS NULL OR rs.profile_id = ANY(${profileFilter}::text[]))
+      AND (${opts.hideOverridden} = FALSE OR ro.id IS NULL)
+  `;
+
+  const rows: RelevancyAuditRejectRow[] = dataResult.rows.map((r) => ({
+    score_id: Number(r.score_id),
+    evaluated_at: r.evaluated_at instanceof Date ? r.evaluated_at.toISOString() : r.evaluated_at,
+    profile_id: r.profile_id,
+    profile_name: r.profile_name,
+    job_external_id: r.job_external_id,
+    job_title: r.job_title ?? "Untitled",
+    task_id: r.task_id,
+    total_score: r.total_score,
+    tier: r.tier,
+    decision: r.decision,
+    effective_decision: r.effective_decision,
+    threshold_flipped: r.threshold_flipped,
+    rejection_reasons: r.rejection_reasons,
+    classifier_mode_at_decision: r.classifier_mode_at_decision,
+    override: r.override_id != null
+      ? {
+          override_id: Number(r.override_id),
+          note: r.override_note,
+          created_at: r.override_created_at instanceof Date
+            ? r.override_created_at.toISOString()
+            : (r.override_created_at as string),
+        }
+      : null,
+  }));
+
+  return { rows, total: Number(countResult.rows[0]?.total ?? 0) };
+}
+
+export interface RelevancyAuditRejectDetail {
+  score_id: number;
+  summary: string | null;
+  confidence: number | null;
+  confidence_warnings: string[] | null;
+  gates_passed: number[] | null;
+  gates_failed: number[] | null;
+  gates_evidence: Record<string, unknown> | null;
+  components: Record<string, unknown> | null;
+  snapshot_id: string | null;
+  total_score: number | null;
+  tier: string | null;
+  rejection_reasons: string[] | null;
+  threshold_flipped: boolean;
+  min_score_at_decision: number | null;
+  classifier_mode_at_decision: string;
+  model: string;
+  prompt_version: string;
+  criteria_version: string;
+}
+
+// Full row detail for the expand-row view on /relevancy-audit. Only the fields
+// the UI renders are projected (drops requested_by, request_id, etc.).
+export async function getRelevancyAuditRejectDetail(
+  scoreId: number
+): Promise<RelevancyAuditRejectDetail | null> {
+  const result = await sql<RelevancyAuditRejectDetail>`
+    SELECT
+      id AS score_id,
+      summary,
+      confidence,
+      confidence_warnings,
+      gates_passed,
+      gates_failed,
+      gates_evidence,
+      components,
+      snapshot_id,
+      total_score,
+      tier,
+      rejection_reasons,
+      threshold_flipped,
+      min_score_at_decision,
+      classifier_mode_at_decision,
+      model,
+      prompt_version,
+      criteria_version
+    FROM relevancy_scores
+    WHERE id = ${scoreId}
+    LIMIT 1
+  `;
+  return result.rows[0] ?? null;
+}
+
+// Creates an admin_audit override for the given score. Resolves task_id from
+// tasks.custom_fields->>'_relevancy_score_id' (NULL if no card was created —
+// expected in Active mode for jobs that hit the End audit-only branch).
+// Returns the new override row id + classifier_decision + source for the caller.
+export async function createAdminAuditOverride(opts: {
+  scoreId: number;
+  adminId: string;
+  note: string | null;
+}): Promise<{ override_id: number; created_at: string } | { error: "score_not_found" } | { error: "already_overridden"; override_id: number }> {
+  // 1. Look up the score row (need classifier_decision + source for the insert).
+  const scoreRow = await sql<{
+    decision: string;
+    source: string | null;
+  }>`
+    SELECT decision, source FROM relevancy_scores WHERE id = ${opts.scoreId} LIMIT 1
+  `;
+  if (scoreRow.rows.length === 0) {
+    return { error: "score_not_found" };
+  }
+  const { decision, source } = scoreRow.rows[0];
+
+  // 2. Block duplicate admin overrides for the same score — admin should
+  //    re-use the existing override row via DELETE-then-POST or PATCH (TODO).
+  const existing = await sql<{ id: number | string }>`
+    SELECT id FROM relevancy_overrides
+    WHERE score_id = ${opts.scoreId} AND override_type = 'admin_audit'
+    LIMIT 1
+  `;
+  if (existing.rows.length > 0) {
+    return { error: "already_overridden", override_id: Number(existing.rows[0].id) };
+  }
+
+  // 3. Resolve task_id from the card stamp (nullable).
+  const taskRow = await sql<{ id: string }>`
+    SELECT id FROM tasks
+    WHERE custom_fields->>'_relevancy_score_id' = ${String(opts.scoreId)}
+    LIMIT 1
+  `;
+  const taskId = taskRow.rows[0]?.id ?? null;
+
+  // 4. Insert. agent_action + agent_id stay NULL (admin path, post-migration-021).
+  const inserted = await sql<{ id: number | string; created_at: string | Date }>`
+    INSERT INTO relevancy_overrides (
+      score_id, task_id, classifier_decision, agent_action, agent_id,
+      override_type, admin_id, note, source
+    ) VALUES (
+      ${opts.scoreId},
+      ${taskId},
+      ${decision},
+      NULL,
+      NULL,
+      'admin_audit',
+      ${opts.adminId},
+      ${opts.note},
+      ${source}
+    )
+    RETURNING id, created_at
+  `;
+
+  const row = inserted.rows[0];
+  return {
+    override_id: Number(row.id),
+    created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+  };
+}
+
+// Deletes an admin override iff it belongs to the requesting admin. Returns
+// the outcome so the route can map to 204 / 403 / 404.
+export async function deleteAdminAuditOverride(opts: {
+  overrideId: number;
+  adminId: string;
+}): Promise<"deleted" | "not_found" | "forbidden"> {
+  const row = await sql<{ admin_id: string | null; override_type: string }>`
+    SELECT admin_id, override_type
+    FROM relevancy_overrides
+    WHERE id = ${opts.overrideId}
+    LIMIT 1
+  `;
+  if (row.rows.length === 0) return "not_found";
+  const r = row.rows[0];
+  if (r.override_type !== "admin_audit") return "not_found";
+  if (r.admin_id !== opts.adminId) return "forbidden";
+
+  await sql`DELETE FROM relevancy_overrides WHERE id = ${opts.overrideId}`;
+  return "deleted";
+}
