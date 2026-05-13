@@ -3603,7 +3603,11 @@ export async function setProfileClassifierConfigRow(
 // Maps every nullable / array / JSONB column from the v3.3 schema; missing
 // fields fall through to NULL or [] defaults at the SQL layer.
 export async function insertRelevancyScore(
-  row: import("./types").RelevancyScoreInsert
+  row: import("./types").RelevancyScoreInsert,
+  // Optional sql client — pass a TxSql from withTransaction when the insert
+  // must commit atomically with other statements (DLQ drain, manual eval, etc).
+  // Defaults to the top-level pool sql.
+  client: typeof sql | import("./db").TxSql = sql
 ): Promise<{ id: number }> {
   // JSON-stringify JSONB fields once so they can be parameterized as text + cast.
   const gatesEvidenceJson = row.gates_evidence != null ? JSON.stringify(row.gates_evidence) : null;
@@ -3611,7 +3615,7 @@ export async function insertRelevancyScore(
   const evidencePanelJson = row.evidence_panel != null ? JSON.stringify(row.evidence_panel) : null;
   const thresholdsUsedJson = row.thresholds_used != null ? JSON.stringify(row.thresholds_used) : null;
 
-  const result = await sql<{ id: number | string }>`
+  const result = await client<{ id: number | string }>`
     INSERT INTO relevancy_scores (
       task_id, job_external_id, profile_id, snapshot_id,
       decision, effective_decision, threshold_flipped, min_score_at_decision, classifier_mode_at_decision,
@@ -4486,4 +4490,117 @@ export async function captureAgentMoveOverride(opts: {
     RETURNING id
   `;
   return { override_id: Number(inserted.rows[0].id) };
+}
+
+// ===================================================================
+// DLQ retry worker (plan v3.3 Appendix C)
+// ===================================================================
+
+export interface DlqDrainResult {
+  retried: number;          // rows we attempted (= succeeded + failed)
+  succeeded: number;        // rows that re-inserted cleanly into relevancy_scores
+  failed: number;           // rows whose retry threw — backoff bumped
+  permanent: number;        // rows that just crossed `maxAttempts` (terminal)
+  pending_after_run: number; // DLQ depth still awaiting future attempts
+}
+
+// Drains up to `batchSize` rows from relevancy_scores_dlq that are ready to
+// retry. Each row is processed in its own transaction with FOR UPDATE SKIP
+// LOCKED so overlapping cron + manual workflow_dispatch runs never touch the
+// same row. Plan §C.1 + §C.4.
+//
+// Backoff: next_attempt_at = NOW() + INTERVAL '1 hour' * 2^attempts (so
+// attempts=0 → +1h, attempts=4 → +16h). When attempts crosses maxAttempts the
+// row is left with resolved_at=NULL but excluded from future selections by the
+// `attempts < maxAttempts` predicate — preserves forensic state for manual
+// inspection without bouncing the same broken payload forever.
+//
+// Slack alerting is intentionally not wired (per v3.3 Q12 — no Slack for
+// relevancy events; surface via the audit page tile instead).
+export async function drainRelevancyScoresDlq(opts: {
+  maxAttempts?: number;
+  batchSize?: number;
+}): Promise<DlqDrainResult> {
+  const maxAttempts = opts.maxAttempts ?? 5;
+  const batchSize = opts.batchSize ?? 50;
+
+  let succeeded = 0;
+  let failed = 0;
+  let permanent = 0;
+  let retried = 0;
+
+  for (let i = 0; i < batchSize; i++) {
+    const didWork = await withTransaction(async (tx) => {
+      // Grab one ready-to-retry row, exclude permanently-failed ones, and
+      // hold a row lock for the duration of this tx.
+      const sel = await tx<{
+        id: number | string;
+        payload: unknown;
+        attempts: number;
+      }>`
+        SELECT id, payload, attempts
+        FROM relevancy_scores_dlq
+        WHERE resolved_at IS NULL
+          AND next_attempt_at <= NOW()
+          AND attempts < ${maxAttempts}
+        ORDER BY created_at
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      `;
+      if (sel.rows.length === 0) return false; // nothing left to do
+
+      const row = sel.rows[0];
+      const dlqId = Number(row.id);
+      const currentAttempts = row.attempts;
+      retried++;
+
+      try {
+        // Replay the parked verdict through the normal insert path. Postgres
+        // CHECK constraints + FK on criteria_version are the validator —
+        // shape mismatches raise here and route to the failure branch below.
+        await insertRelevancyScore(
+          row.payload as import("./types").RelevancyScoreInsert,
+          tx
+        );
+        await tx`
+          UPDATE relevancy_scores_dlq
+          SET resolved_at = NOW()
+          WHERE id = ${dlqId}
+        `;
+        succeeded++;
+      } catch (err) {
+        // Exponential backoff: 1h, 2h, 4h, 8h, 16h. attempts will become
+        // `currentAttempts + 1` after this UPDATE; if that crosses maxAttempts
+        // the row is permanent.
+        const intervalHours = Math.pow(2, currentAttempts);
+        const errDetail = (err as Error).message.slice(0, 500);
+        await tx`
+          UPDATE relevancy_scores_dlq
+          SET attempts = attempts + 1,
+              next_attempt_at = NOW() + (${intervalHours} || ' hours')::interval,
+              error_detail = ${errDetail}
+          WHERE id = ${dlqId}
+        `;
+        failed++;
+        if (currentAttempts + 1 >= maxAttempts) permanent++;
+      }
+      return true;
+    });
+    if (!didWork) break;
+  }
+
+  // Final depth — only counts rows that are still recoverable.
+  const depth = await sql<{ pending: number | string }>`
+    SELECT COUNT(*)::int AS pending
+    FROM relevancy_scores_dlq
+    WHERE resolved_at IS NULL AND attempts < ${maxAttempts}
+  `;
+
+  return {
+    retried,
+    succeeded,
+    failed,
+    permanent,
+    pending_after_run: Number(depth.rows[0]?.pending ?? 0),
+  };
 }
