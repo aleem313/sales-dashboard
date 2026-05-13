@@ -79,6 +79,8 @@ export interface RelevancyScoreInsert {
   // Identity
   task_id?: string | null;                       // UUID
   job_external_id?: string | null;
+  job_title?: string | null;                     // surfaced on /relevancy-audit when no task row exists (Active-mode rejects)
+  job_url?: string | null;                       // canonical Upwork URL captured at scoring time (migration 022)
   profile_id: string;
   snapshot_id?: string | null;
   // Decisions

@@ -76,6 +76,25 @@ function validateScoreInsert(body: unknown): { ok: true; row: RelevancyScoreInse
     return { ok: false, error: "min_score_at_decision must be a number 0-100" };
   }
 
+  // Optional job_title + job_url (migration 022). Cap lengths so a runaway
+  // upstream value can't bloat the row. NULL when absent.
+  if (b.job_title != null) {
+    if (typeof b.job_title !== "string") {
+      return { ok: false, error: "job_title must be a string when present" };
+    }
+    if (b.job_title.length > 500) {
+      b.job_title = b.job_title.slice(0, 500);
+    }
+  }
+  if (b.job_url != null) {
+    if (typeof b.job_url !== "string") {
+      return { ok: false, error: "job_url must be a string when present" };
+    }
+    if (b.job_url.length > 2000) {
+      b.job_url = b.job_url.slice(0, 2000);
+    }
+  }
+
   return { ok: true, row: b as unknown as RelevancyScoreInsert };
 }
 

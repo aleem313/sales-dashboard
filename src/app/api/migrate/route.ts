@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "019" && migration !== "020" && migration !== "021" && migration !== "migrate-tasks") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "019" && migration !== "020" && migration !== "021" && migration !== "022" && migration !== "migrate-tasks") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
   }
 
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const sourceBoard = request.nextUrl.searchParams.get("from") || "e8442ebd-afd3-4217-99c4-e55ee20d4bfa";
     const destBoard = request.nextUrl.searchParams.get("to") || "351494d8-918e-475e-b16c-2eee3232aefe";
     return runMigrateTasks(sourceBoard, destBoard);
+  }
+
+  if (migration === "022") {
+    return run022();
   }
 
   if (migration === "021") {
@@ -453,6 +457,52 @@ async function run011() {
       success: false,
       migration: "011_fix_profile_assignments",
       steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run022() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 022: Add job_title + job_url columns to relevancy_scores...");
+
+    await sql`ALTER TABLE relevancy_scores ADD COLUMN IF NOT EXISTS job_title TEXT`;
+    results.push("✓ Added job_title column");
+
+    await sql`ALTER TABLE relevancy_scores ADD COLUMN IF NOT EXISTS job_url TEXT`;
+    results.push("✓ Added job_url column");
+
+    // Verify both
+    const colCheck = await sql<{ name: string }>`
+      SELECT column_name AS name
+      FROM information_schema.columns
+      WHERE table_name = 'relevancy_scores'
+        AND column_name IN ('job_title', 'job_url')
+    `;
+    const present = new Set(colCheck.rows.map((r) => r.name));
+    if (!present.has("job_title") || !present.has("job_url")) {
+      throw new Error(
+        `Verification failed: missing ${["job_title", "job_url"].filter((c) => !present.has(c)).join(", ")} after ALTER`
+      );
+    }
+    results.push("✓ Verified: relevancy_scores.job_title + job_url exist");
+
+    // Housekeeping per prior migrations
+    await sql`DELETE FROM stats_cache`;
+    results.push("✓ Cleared stats_cache");
+
+    return NextResponse.json({
+      success: true,
+      migration: "022",
+      results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "022",
+      results,
       error: (error as Error).message,
     }, { status: 500 });
   }

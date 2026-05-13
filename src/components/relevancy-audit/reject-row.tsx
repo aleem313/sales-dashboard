@@ -106,9 +106,19 @@ export function RejectRow({ row, expanded, onToggleExpand }: RejectRowProps) {
     onToggleExpand();
   }
 
-  const jobUrl = row.job_external_id
-    ? `https://www.upwork.com/jobs/~${row.job_external_id}`
-    : null;
+  // Prefer the row's canonical job_url (written at scoring time, migration 022).
+  // Fall back to deriving from job_external_id with proper tilde handling —
+  // strip a leading `~` if Vollna gave us the canonical form so we don't
+  // produce `~~01abc…` URLs.
+  let jobUrl: string | null = row.job_url ?? null;
+  if (!jobUrl && row.job_external_id) {
+    const trimmed = row.job_external_id.replace(/^~/, "");
+    // Only build a URL when the derived ID looks like Upwork's `01abc…` form.
+    // Long numeric ciphertexts (e.g. 022051374…) don't resolve at /jobs/~<id>.
+    if (/^0[0-9a-f]+$/i.test(trimmed)) {
+      jobUrl = `https://www.upwork.com/jobs/~${trimmed}`;
+    }
+  }
 
   const topReason = row.rejection_reasons && row.rejection_reasons.length > 0
     ? row.rejection_reasons[0]

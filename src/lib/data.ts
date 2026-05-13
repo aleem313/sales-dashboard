@@ -3617,7 +3617,7 @@ export async function insertRelevancyScore(
 
   const result = await client<{ id: number | string }>`
     INSERT INTO relevancy_scores (
-      task_id, job_external_id, profile_id, snapshot_id,
+      task_id, job_external_id, job_title, job_url, profile_id, snapshot_id,
       decision, effective_decision, threshold_flipped, min_score_at_decision, classifier_mode_at_decision,
       rejection_reasons, gates_passed, gates_failed,
       gates_evidence, components,
@@ -3629,6 +3629,8 @@ export async function insertRelevancyScore(
     ) VALUES (
       ${row.task_id ?? null},
       ${row.job_external_id ?? null},
+      ${row.job_title ?? null},
+      ${row.job_url ?? null},
       ${row.profile_id},
       ${row.snapshot_id ?? null},
       ${row.decision},
@@ -4139,6 +4141,7 @@ export interface RelevancyAuditRejectRow {
   profile_name: string | null;
   job_external_id: string | null;
   job_title: string;
+  job_url: string | null;
   task_id: string | null;
   total_score: number | null;
   tier: string | null;
@@ -4176,6 +4179,7 @@ export async function listRelevancyAuditRejects(opts: {
     profile_name: string | null;
     job_external_id: string | null;
     job_title: string | null;
+    job_url: string | null;
     task_id: string | null;
     total_score: number | null;
     tier: string | null;
@@ -4194,7 +4198,13 @@ export async function listRelevancyAuditRejects(opts: {
       rs.profile_id,
       p.profile_name,
       rs.job_external_id,
-      t.title AS job_title,
+      -- Prefer the verdict-time title written by the classifier (migration 022);
+      -- fall back to the task title when present (pre-022 rows + Shadow-mode
+      -- rows where a card was created). NULL → "Untitled" at the mapper layer.
+      COALESCE(rs.job_title, t.title) AS job_title,
+      -- Prefer the verdict-time URL (migration 022); fall back to the task's
+      -- _job_url custom_field. NULL when neither is available.
+      COALESCE(rs.job_url, t.custom_fields->>'_job_url') AS job_url,
       t.id AS task_id,
       rs.total_score,
       rs.tier,
@@ -4238,6 +4248,7 @@ export async function listRelevancyAuditRejects(opts: {
     profile_name: r.profile_name,
     job_external_id: r.job_external_id,
     job_title: r.job_title ?? "Untitled",
+    job_url: r.job_url,
     task_id: r.task_id,
     total_score: r.total_score,
     tier: r.tier,
