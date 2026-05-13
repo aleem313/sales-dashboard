@@ -44,6 +44,7 @@ export const config = {
     "/my-analytics/:path*",
     "/tasks/:path*",
     "/my-tasks/:path*",
+    "/my-profiles/:path*",
     "/api/projects/:path*",
     "/api/tasks/:path*",
     "/relevancy-audit/:path*",

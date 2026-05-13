@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import AdmZip from "adm-zip";
 import { auth } from "@/lib/auth";
 import {
   getProfileById,
@@ -7,6 +8,12 @@ import {
   getUpworkProfileSnapshotHistory,
 } from "@/lib/data";
 import { saveUpworkProfileSnapshotAction } from "@/lib/actions";
+import {
+  extractProfileFromHtml,
+  ProfileExtractionError,
+} from "@/lib/upwork-extractor";
+
+const MAX_ZIP_SIZE = 25 * 1024 * 1024; // 25 MB
 
 // GET /api/profiles/[id]/upwork-snapshot
 //   → current snapshot (full JSONB)
@@ -61,9 +68,14 @@ export async function GET(
 }
 
 // POST /api/profiles/[id]/upwork-snapshot
-//   - Body can be application/json (the parsed snapshot itself) OR
-//     multipart/form-data with a `file` field (a .json file upload).
-//   - Admin-only (agents currently read-only on snapshots).
+//   - Body can be:
+//       * application/json — parsed snapshot itself (admin path; legacy)
+//       * multipart/form-data with `file` field:
+//           - .json → snapshot itself
+//           - .zip  → Chrome "Save Page As → Webpage, Complete" output; the server
+//             extracts the .html, runs the extractor, and stores the result.
+//   - Auth: admins can upload to any profile; agents only to their own assigned profile.
+//     The auth check lives inside saveUpworkProfileSnapshotAction.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -72,9 +84,6 @@ export async function POST(
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden — admin only" }, { status: 403 });
-  }
 
   const { id: profileUuid } = await params;
   const profile = await getProfileById(profileUuid);
@@ -82,24 +91,65 @@ export async function POST(
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
 
-  // Parse the body — either JSON or multipart with a file field.
+  // Resolve the snapshot JSON from whichever input shape the client sent.
   let json: unknown;
   const contentType = request.headers.get("content-type") || "";
   try {
     if (contentType.includes("multipart/form-data")) {
       const form = await request.formData();
-      const file = form.get("file");
-      if (!file || typeof file === "string") {
-        return NextResponse.json({ error: "Missing 'file' field in form data" }, { status: 400 });
+      const fileField = form.get("file");
+      if (!fileField || typeof fileField === "string") {
+        return NextResponse.json(
+          { error: "Missing 'file' field in form data" },
+          { status: 400 }
+        );
       }
-      const text = await (file as File).text();
-      json = JSON.parse(text);
+      const file = fileField as File;
+      const filename = (file.name || "").toLowerCase();
+      const fileType = (file.type || "").toLowerCase();
+      const looksZip =
+        filename.endsWith(".zip") ||
+        fileType === "application/zip" ||
+        fileType === "application/x-zip-compressed";
+
+      if (looksZip) {
+        if (file.size > MAX_ZIP_SIZE) {
+          return NextResponse.json(
+            {
+              error: `ZIP is too large (${(file.size / 1024 / 1024).toFixed(
+                1
+              )} MB, max 25 MB). Make sure you didn't accidentally include other files.`,
+            },
+            { status: 400 }
+          );
+        }
+        const buffer = Buffer.from(await file.arrayBuffer());
+        try {
+          json = await extractFromZipBuffer(buffer, file.name || "upload.zip");
+        } catch (err) {
+          return NextResponse.json(
+            { error: zipErrorMessage(err as Error) },
+            { status: 400 }
+          );
+        }
+      } else {
+        // .json file — parse the text body.
+        const text = await file.text();
+        try {
+          json = JSON.parse(text);
+        } catch (err) {
+          return NextResponse.json(
+            { error: `Invalid JSON: ${(err as Error).message}` },
+            { status: 400 }
+          );
+        }
+      }
     } else {
       json = await request.json();
     }
   } catch (err) {
     return NextResponse.json(
-      { error: `Invalid JSON: ${(err as Error).message}` },
+      { error: `Could not read request body: ${(err as Error).message}` },
       { status: 400 }
     );
   }
@@ -113,9 +163,64 @@ export async function POST(
       profileId: profile.profile_id,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: (err as Error).message },
-      { status: 400 }
+    const message = (err as Error).message;
+    const status =
+      message === "Unauthorized"
+        ? 401
+        : message.includes("Not authorized")
+          ? 403
+          : 400;
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+// Unzips an in-memory ZIP buffer, locates the first .html entry that
+// isn't inside a *_files/ sidecar directory, and runs the extractor.
+// Throws ProfileExtractionError or a plain Error with a user-readable message.
+async function extractFromZipBuffer(
+  buffer: Buffer,
+  archiveName: string
+): Promise<unknown> {
+  let zip: AdmZip;
+  try {
+    zip = new AdmZip(buffer);
+  } catch (err) {
+    throw new Error(
+      `Could not open ZIP archive (${(err as Error).message}). Make sure the file is a valid .zip.`
     );
   }
+
+  const entries = zip.getEntries();
+  const htmlEntry = entries.find(
+    (e) =>
+      !e.isDirectory &&
+      e.entryName.toLowerCase().endsWith(".html") &&
+      // ignore HTML files Chrome may have placed inside the *_files sidecar
+      !/_files\//i.test(e.entryName)
+  );
+
+  if (!htmlEntry) {
+    throw new Error(
+      "ZIP doesn't contain an HTML file. Save the Upwork profile page with 'Save Page As → Webpage, Complete' (Ctrl+S), then zip the resulting .html and *_files folder together."
+    );
+  }
+
+  const html = htmlEntry.getData().toString("utf8");
+  // extractProfileFromHtml may throw ProfileExtractionError — bubble up unchanged
+  // so the caller can map error.code to a specific user-facing message.
+  return extractProfileFromHtml(html, htmlEntry.entryName || archiveName);
+}
+
+function zipErrorMessage(err: Error): string {
+  if (err instanceof ProfileExtractionError) {
+    switch (err.code) {
+      case "no_nuxt":
+      case "eval_failed":
+        return "Couldn't read profile data from this HTML. The page you saved doesn't look like a freelancer profile page. Open your profile on Upwork, then re-save and re-zip.";
+      case "no_identity":
+      case "no_stats":
+        return "Extracted data is missing required fields (name/stats). The profile page may not have fully loaded before saving. Reload the page on Upwork, wait until all sections are visible, then re-save.";
+    }
+  }
+  return err.message;
 }

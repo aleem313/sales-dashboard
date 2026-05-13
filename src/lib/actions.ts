@@ -346,6 +346,36 @@ export async function saveUpworkProfileSnapshotAction(
   return result;
 }
 
+// Admin-only restore: hard-delete the current snapshot for `profileId` and promote
+// the historical row identified by `snapshotId` to current. Same cache-bust
+// surface as saveUpworkProfileSnapshotAction so the classifier picks up the
+// restored snapshot immediately.
+export async function restorePreviousSnapshotAction(
+  profileId: string,
+  snapshotId: string
+): Promise<{ ok: true; promotedId: string; deletedId: string | null }> {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin") throw new Error("Admin only");
+
+  if (!profileId || !snapshotId) {
+    throw new Error("profileId and snapshotId are required");
+  }
+
+  const { restoreUpworkProfileSnapshot } = await import("./data");
+  const result = await restoreUpworkProfileSnapshot(profileId, snapshotId);
+
+  const { sql } = await import("./db");
+  await sql`DELETE FROM stats_cache`;
+  revalidatePath("/settings");
+  revalidatePath("/profiles");
+  revalidatePath("/my-profiles");
+  revalidatePath("/my-dashboard");
+  updateTag(`profile-context-${profileId}`);
+
+  return { ok: true, promotedId: result.promoted_id, deletedId: result.deleted_id };
+}
+
 // ============================================================
 // RELEVANCY CLASSIFIER — OPERATOR SETTINGS (Phase 5b, plan v3.3 §10.6)
 // ============================================================

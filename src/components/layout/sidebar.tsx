@@ -110,6 +110,12 @@ const agentNavSections: NavSection[] = [
       { href: "/my-tasks", label: "My Tasks", icon: KanbanSquare },
     ],
   },
+  {
+    label: "Profiles",
+    items: [
+      { href: "/my-profiles", label: "My Profiles", icon: UserCircle },
+    ],
+  },
 ];
 
 // Global filter params to preserve across page navigation

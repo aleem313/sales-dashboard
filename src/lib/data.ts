@@ -3375,6 +3375,67 @@ export async function saveUpworkProfileSnapshot(
   return { id: row.id, replaced: row.replaced };
 }
 
+// Admin restore: hard-deletes the current snapshot for `profileId` and promotes
+// the historical snapshot identified by `snapshotId` to is_current=TRUE in one
+// statement. The partial unique index uq_upwork_snapshot_current_per_profile
+// is validated at statement end, so both modifications coexist mid-statement.
+// Throws if `snapshotId` doesn't exist, doesn't belong to `profileId`, or is
+// already the current row.
+export async function restoreUpworkProfileSnapshot(
+  profileId: string,
+  snapshotId: string
+): Promise<{ promoted_id: string; deleted_id: string | null }> {
+  if (!profileId || !snapshotId) {
+    throw new Error("profileId and snapshotId are required");
+  }
+
+  const result = await sql<{ promoted_id: string; deleted_id: string | null }>`
+    WITH target AS (
+      SELECT id FROM upwork_profile_snapshots
+      WHERE id = ${snapshotId}::uuid
+        AND profile_id = ${profileId}
+        AND is_current = FALSE
+    ),
+    deleted_current AS (
+      DELETE FROM upwork_profile_snapshots
+      WHERE profile_id = ${profileId}
+        AND is_current = TRUE
+        AND EXISTS (SELECT 1 FROM target)
+      RETURNING id
+    ),
+    promoted AS (
+      UPDATE upwork_profile_snapshots
+      SET is_current = TRUE
+      WHERE id = (SELECT id FROM target)
+      RETURNING id
+    )
+    SELECT
+      (SELECT id FROM promoted) AS promoted_id,
+      (SELECT id FROM deleted_current) AS deleted_id
+  `;
+
+  const row = result.rows[0];
+  if (!row?.promoted_id) {
+    throw new Error(
+      "Snapshot not found, does not belong to this profile, or is already current"
+    );
+  }
+  return { promoted_id: row.promoted_id, deleted_id: row.deleted_id };
+}
+
+// Returns all profiles assigned to a given agent, ordered by name.
+// Used by the agent-side /my-profiles page.
+export async function getProfilesByAgent(
+  agentId: string
+): Promise<import("./types").Profile[]> {
+  const result = await sql`
+    SELECT * FROM profiles
+    WHERE agent_id = ${agentId}
+    ORDER BY profile_name
+  `;
+  return result.rows as import("./types").Profile[];
+}
+
 // Fetches a specific historical snapshot by id (returns the full JSONB).
 // Used when the History tab user clicks an older row to view its content.
 export async function getUpworkProfileSnapshotById(
@@ -4322,4 +4383,96 @@ export async function deleteAdminAuditOverride(opts: {
 
   await sql`DELETE FROM relevancy_overrides WHERE id = ${opts.overrideId}`;
   return "deleted";
+}
+
+// Captures an agent_move override when a card move contradicts the classifier
+// verdict stamped on its custom_fields. Two disagreement directions:
+//   - effective_decision in (proceed, review) AND move TO N/A   → false proceed
+//   - effective_decision = reject               AND move OUT of N/A → false reject
+//
+// No-op when:
+//   - actorId is null (admin moves use the audit page instead)
+//   - the card has no `_relevancy_score_id` (pre-classifier card)
+//   - the move is between two non-N/A columns (normal workflow progression)
+//   - the move direction agrees with the classifier
+//   - the score row has already been overridden by the same agent (duplicate guard)
+//
+// Returns the new override id, or null when it was a no-op. Callers should
+// wrap this in try/catch — failure must never block the move.
+export async function captureAgentMoveOverride(opts: {
+  taskId: string;
+  agentId: string;
+  oldColumnName: string;
+  newColumnName: string;
+}): Promise<{ override_id: number } | null> {
+  const N_A = "N/A";
+  const movingToNA = opts.newColumnName === N_A && opts.oldColumnName !== N_A;
+  const movingFromNA = opts.oldColumnName === N_A && opts.newColumnName !== N_A;
+  if (!movingToNA && !movingFromNA) return null;
+
+  // Pull the score-related fields stamped on the card.
+  const taskRow = await sql<{
+    score_id_raw: unknown;
+    effective: string | null;
+    decision: string | null;
+  }>`
+    SELECT
+      custom_fields->>'_relevancy_score_id' AS score_id_raw,
+      custom_fields->>'_relevancy_effective' AS effective,
+      custom_fields->>'_relevancy_decision' AS decision
+    FROM tasks
+    WHERE id = ${opts.taskId}
+    LIMIT 1
+  `;
+  if (taskRow.rows.length === 0) return null;
+  const { score_id_raw, effective, decision } = taskRow.rows[0];
+  if (!score_id_raw || decision === null) return null;
+  const scoreId = Number(score_id_raw);
+  if (!Number.isFinite(scoreId) || !Number.isInteger(scoreId) || scoreId <= 0) {
+    return null;
+  }
+
+  // Disagreement check (use effective_decision since that's what would have
+  // routed the job in active mode).
+  const effDecision = effective ?? decision;
+  const proceedLike = effDecision === "proceed" || effDecision === "review";
+  const rejectLike = effDecision === "reject";
+  const isDisagreement = (movingToNA && proceedLike) || (movingFromNA && rejectLike);
+  if (!isDisagreement) return null;
+
+  // Duplicate guard — one agent_move override per (score_id, agent_id).
+  const existing = await sql<{ id: number | string }>`
+    SELECT id FROM relevancy_overrides
+    WHERE score_id = ${scoreId}
+      AND override_type = 'agent_move'
+      AND agent_id = ${opts.agentId}::uuid
+    LIMIT 1
+  `;
+  if (existing.rows.length > 0) return null;
+
+  // Pull source from the score row for the audit trail. Skip if the score
+  // row doesn't exist anymore (shouldn't happen — score_id is stamped from
+  // an insert that already succeeded, but defend in case of manual deletion).
+  const scoreRow = await sql<{ source: string | null }>`
+    SELECT source FROM relevancy_scores WHERE id = ${scoreId} LIMIT 1
+  `;
+  if (scoreRow.rows.length === 0) return null;
+  const source = scoreRow.rows[0].source;
+
+  const inserted = await sql<{ id: number | string }>`
+    INSERT INTO relevancy_overrides (
+      score_id, task_id, classifier_decision, agent_action, agent_id,
+      override_type, source
+    ) VALUES (
+      ${scoreId},
+      ${opts.taskId}::uuid,
+      ${decision},
+      ${movingToNA ? "moved_to_na" : "moved_from_na"},
+      ${opts.agentId}::uuid,
+      'agent_move',
+      ${source}
+    )
+    RETURNING id
+  `;
+  return { override_id: Number(inserted.rows[0].id) };
 }

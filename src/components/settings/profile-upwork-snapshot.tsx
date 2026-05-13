@@ -10,7 +10,15 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, FileText, History as HistoryIcon, Upload, ExternalLink, Star } from "lucide-react";
+import {
+  Loader2,
+  FileText,
+  History as HistoryIcon,
+  Upload,
+  ExternalLink,
+  Star,
+  RotateCcw,
+} from "lucide-react";
 import { toast } from "sonner";
 import type { UpworkProfileSnapshot, UpworkProfileSnapshotHistoryRow } from "@/lib/types";
 
@@ -20,7 +28,7 @@ interface Props {
   profileUuid: string;     // profiles.id (UUID) — used in API URL
   profileName: string;     // for display in sheet title
   hasSnapshot: boolean;    // whether a current snapshot exists
-  isAdmin: boolean;        // controls Upload tab visibility
+  isAdmin: boolean;        // admins see JSON paste + restore; agents see ZIP upload only
 }
 
 export function ProfileUpworkSnapshotSheet({ profileUuid, profileName, hasSnapshot, isAdmin }: Props) {
@@ -34,6 +42,7 @@ export function ProfileUpworkSnapshotSheet({ profileUuid, profileName, hasSnapsh
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [pasteText, setPasteText] = useState("");
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   const apiBase = `/api/profiles/${profileUuid}/upwork-snapshot`;
 
@@ -96,7 +105,8 @@ export function ProfileUpworkSnapshotSheet({ profileUuid, profileName, hasSnapsh
     setTab("current");
   }
 
-  async function submitUpload(rawJson: unknown) {
+  // JSON path: posts the parsed object directly. Admin-only flow.
+  async function submitJsonUpload(rawJson: unknown) {
     setUploading(true);
     setUploadError(null);
     try {
@@ -113,12 +123,7 @@ export function ProfileUpworkSnapshotSheet({ profileUuid, profileName, hasSnapsh
         `Snapshot saved · ${responseJson.replaced ? "replaced previous" : "first snapshot for this profile"}`
       );
       setPasteText("");
-      // Refresh both panels.
-      setSnapshot(null);
-      setViewingSnapshotId(null);
-      setTab("current");
-      await loadCurrent();
-      await loadHistory();
+      await refreshPanels();
     } catch (err) {
       setUploadError((err as Error).message);
     } finally {
@@ -126,17 +131,55 @@ export function ProfileUpworkSnapshotSheet({ profileUuid, profileName, hasSnapsh
     }
   }
 
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  // ZIP path: multipart POST, server unzips + runs the extractor.
+  async function submitZipUpload(file: File) {
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const r = await fetch(apiBase, { method: "POST", body: formData });
+      const responseJson = (await r.json()) as { ok?: boolean; replaced?: boolean; error?: string };
+      if (!r.ok || !responseJson.ok) {
+        throw new Error(responseJson.error ?? `HTTP ${r.status}`);
+      }
+      toast.success(
+        `Snapshot saved · ${responseJson.replaced ? "replaced previous" : "first snapshot for this profile"}`
+      );
+      await refreshPanels();
+    } catch (err) {
+      setUploadError((err as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function refreshPanels() {
+    setSnapshot(null);
+    setViewingSnapshotId(null);
+    setTab("current");
+    await loadCurrent();
+    await loadHistory();
+  }
+
+  async function handleJsonFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       const text = await file.text();
       const parsed = JSON.parse(text) as unknown;
-      await submitUpload(parsed);
+      await submitJsonUpload(parsed);
     } catch (err) {
       setUploadError(`Could not parse file: ${(err as Error).message}`);
     }
-    e.target.value = ""; // reset input
+    e.target.value = "";
+  }
+
+  async function handleZipFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await submitZipUpload(file);
+    e.target.value = "";
   }
 
   async function handlePasteSubmit() {
@@ -148,7 +191,38 @@ export function ProfileUpworkSnapshotSheet({ profileUuid, profileName, hasSnapsh
       setUploadError(`Pasted text is not valid JSON: ${(err as Error).message}`);
       return;
     }
-    await submitUpload(parsed);
+    await submitJsonUpload(parsed);
+  }
+
+  async function handleRestore(snapshotId: string) {
+    const confirmed = window.confirm(
+      "Restore this snapshot as current? The current snapshot will be permanently deleted."
+    );
+    if (!confirmed) return;
+
+    setRestoringId(snapshotId);
+    try {
+      const r = await fetch(`${apiBase}/restore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ snapshotId }),
+      });
+      const responseJson = (await r.json()) as { ok?: boolean; error?: string };
+      if (!r.ok || !responseJson.ok) {
+        throw new Error(responseJson.error ?? `HTTP ${r.status}`);
+      }
+      toast.success("Snapshot restored — previous current row deleted");
+      await loadHistory();
+      // If user was viewing the live snapshot, refresh it too.
+      if (!viewingSnapshotId) {
+        setSnapshot(null);
+        await loadCurrent();
+      }
+    } catch (err) {
+      toast.error(`Restore failed: ${(err as Error).message}`);
+    } finally {
+      setRestoringId(null);
+    }
   }
 
   return (
@@ -174,11 +248,9 @@ export function ProfileUpworkSnapshotSheet({ profileUuid, profileName, hasSnapsh
           <TabButton active={tab === "history"} onClick={() => setTab("history")}>
             <HistoryIcon className="h-3.5 w-3.5" /> History
           </TabButton>
-          {isAdmin && (
-            <TabButton active={tab === "upload"} onClick={() => setTab("upload")}>
-              <Upload className="h-3.5 w-3.5" /> Upload
-            </TabButton>
-          )}
+          <TabButton active={tab === "upload"} onClick={() => setTab("upload")}>
+            <Upload className="h-3.5 w-3.5" /> Upload
+          </TabButton>
         </div>
 
         <div className="flex-1 overflow-y-auto pt-4">
@@ -195,17 +267,22 @@ export function ProfileUpworkSnapshotSheet({ profileUuid, profileName, hasSnapsh
               history={history}
               loading={loadingHistory}
               onSelect={viewHistoricalSnapshot}
+              isAdmin={isAdmin}
+              onRestore={handleRestore}
+              restoringId={restoringId}
             />
           )}
-          {tab === "upload" && isAdmin && (
+          {tab === "upload" && (
             <UploadTab
               uploading={uploading}
               error={uploadError}
               pasteText={pasteText}
               setPasteText={setPasteText}
-              onFile={handleFileUpload}
+              onZipFile={handleZipFileChange}
+              onJsonFile={handleJsonFileChange}
               onPasteSubmit={handlePasteSubmit}
               onClearError={() => setUploadError(null)}
+              isAdmin={isAdmin}
             />
           )}
         </div>
@@ -426,10 +503,16 @@ function HistoryTab({
   history,
   loading,
   onSelect,
+  isAdmin,
+  onRestore,
+  restoringId,
 }: {
   history: UpworkProfileSnapshotHistoryRow[];
   loading: boolean;
   onSelect: (id: string) => void;
+  isAdmin: boolean;
+  onRestore: (id: string) => void;
+  restoringId: string | null;
 }) {
   if (loading) {
     return (
@@ -445,26 +528,47 @@ function HistoryTab({
     <div className="space-y-2 pb-6 text-sm">
       <p className="text-xs text-muted-foreground">
         Click a row to view that snapshot. The first row (badged &ldquo;current&rdquo;) is the live snapshot — same as the Current tab.
+        {isAdmin && " Admins can also restore an older row as the new current; the existing current row is permanently deleted."}
       </p>
       <div className="rounded-md border divide-y">
         {history.map((row) => (
-          <button
+          <div
             key={row.id}
-            type="button"
-            onClick={() => onSelect(row.id)}
-            className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-center gap-3 text-xs"
+            className="flex items-stretch text-xs"
           >
-            <div className="flex-1">
-              <div className="font-medium">{formatDate(row.extracted_at)}</div>
-              <div className="text-muted-foreground">
-                {row.rating != null ? `${row.rating}★` : "—"} ·
-                {" "}JSS {row.job_success_score ?? "—"} ·
-                {" "}{row.total_jobs_worked ?? "?"} jobs ·
-                {" "}{row.total_hours ?? "?"} hrs
+            <button
+              type="button"
+              onClick={() => onSelect(row.id)}
+              className="flex-1 text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-center gap-3"
+            >
+              <div className="flex-1">
+                <div className="font-medium">{formatDate(row.extracted_at)}</div>
+                <div className="text-muted-foreground">
+                  {row.rating != null ? `${row.rating}★` : "—"} ·
+                  {" "}JSS {row.job_success_score ?? "—"} ·
+                  {" "}{row.total_jobs_worked ?? "?"} jobs ·
+                  {" "}{row.total_hours ?? "?"} hrs
+                </div>
               </div>
-            </div>
-            {row.is_current && <Badge variant="default" className="text-[10px]">current</Badge>}
-          </button>
+              {row.is_current && <Badge variant="default" className="text-[10px]">current</Badge>}
+            </button>
+            {isAdmin && !row.is_current && (
+              <button
+                type="button"
+                onClick={() => onRestore(row.id)}
+                disabled={restoringId !== null}
+                className="px-3 border-l text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                title="Restore as current (deletes current row)"
+              >
+                {restoringId === row.id ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-3 w-3" />
+                )}
+                <span>Restore</span>
+              </button>
+            )}
+          </div>
         ))}
       </div>
     </div>
@@ -476,69 +580,99 @@ function UploadTab({
   error,
   pasteText,
   setPasteText,
-  onFile,
+  onZipFile,
+  onJsonFile,
   onPasteSubmit,
   onClearError,
+  isAdmin,
 }: {
   uploading: boolean;
   error: string | null;
   pasteText: string;
   setPasteText: (s: string) => void;
-  onFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onZipFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onJsonFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onPasteSubmit: () => void;
   onClearError: () => void;
+  isAdmin: boolean;
 }) {
   return (
     <div className="space-y-4 pb-6 text-sm">
-      <p className="text-xs text-muted-foreground">
-        Upload a JSON produced by <code className="rounded bg-muted px-1">docs/profiles/extract-profile.js</code>.
-        The current snapshot is preserved as history; the new one becomes the live snapshot.
-      </p>
+      <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-900 px-3 py-2 text-xs">
+        <p className="font-medium mb-1">How to capture your Upwork profile</p>
+        <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground">
+          <li>Open your profile on Upwork in Chrome.</li>
+          <li>Wait until the page is fully loaded (all sections visible).</li>
+          <li>Press <kbd className="rounded border px-1 text-[10px]">Ctrl+S</kbd> and choose <em>Webpage, Complete</em>.</li>
+          <li>You&rsquo;ll get a <code className="rounded bg-muted px-1">.html</code> file plus a <code className="rounded bg-muted px-1">_files</code> folder. Select both, right-click, and create a ZIP.</li>
+          <li>Upload the ZIP below.</li>
+        </ol>
+      </div>
 
       {error && (
         <div className="rounded-md border border-red-300 bg-red-50 dark:bg-red-950/30 px-3 py-2 flex items-start justify-between gap-3 text-xs">
-          <span className="text-red-700 dark:text-red-400">{error}</span>
+          <span className="text-red-700 dark:text-red-400 whitespace-pre-wrap">{error}</span>
           <button onClick={onClearError} className="text-muted-foreground hover:text-foreground shrink-0">×</button>
         </div>
       )}
 
-      {/* File upload */}
+      {/* ZIP upload (always available) */}
       <div className="rounded-md border border-dashed p-4 space-y-2">
-        <label className="text-xs font-medium">Upload JSON file</label>
+        <label className="text-xs font-medium">Upload ZIP (.html + _files)</label>
         <input
           type="file"
-          accept="application/json,.json"
-          onChange={onFile}
+          accept=".zip,application/zip,application/x-zip-compressed"
+          onChange={onZipFile}
           disabled={uploading}
           className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground file:px-3 file:py-1.5 file:text-xs file:font-medium hover:file:bg-primary/90 file:cursor-pointer disabled:opacity-50"
         />
+        {uploading && (
+          <p className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
+            <Loader2 className="h-3 w-3 animate-spin" /> Extracting and saving…
+          </p>
+        )}
       </div>
 
-      <div className="text-center text-xs text-muted-foreground">— or —</div>
+      {/* Admin-only legacy paths: raw .json file + paste */}
+      {isAdmin && (
+        <>
+          <div className="text-center text-xs text-muted-foreground">— admin: legacy JSON paths —</div>
 
-      {/* Paste textarea */}
-      <div className="rounded-md border p-4 space-y-2">
-        <label className="text-xs font-medium">Paste JSON</label>
-        <textarea
-          value={pasteText}
-          onChange={(e) => setPasteText(e.target.value)}
-          placeholder='Paste the contents of e.g. Shayan.json here…'
-          rows={8}
-          className="w-full rounded-md border bg-background px-2 py-1.5 text-xs font-mono"
-          disabled={uploading}
-        />
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            size="sm"
-            onClick={onPasteSubmit}
-            disabled={uploading || !pasteText.trim()}
-          >
-            {uploading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : null}
-            Save snapshot
-          </Button>
-        </div>
-      </div>
+          <div className="rounded-md border border-dashed p-4 space-y-2">
+            <label className="text-xs font-medium">Upload JSON file (from extract-profile.js)</label>
+            <input
+              type="file"
+              accept="application/json,.json"
+              onChange={onJsonFile}
+              disabled={uploading}
+              className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground file:px-3 file:py-1.5 file:text-xs file:font-medium hover:file:bg-primary/90 file:cursor-pointer disabled:opacity-50"
+            />
+          </div>
+
+          <div className="rounded-md border p-4 space-y-2">
+            <label className="text-xs font-medium">Paste JSON</label>
+            <textarea
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              placeholder='Paste the contents of e.g. Shayan.json here…'
+              rows={8}
+              className="w-full rounded-md border bg-background px-2 py-1.5 text-xs font-mono"
+              disabled={uploading}
+            />
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                onClick={onPasteSubmit}
+                disabled={uploading || !pasteText.trim()}
+              >
+                {uploading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : null}
+                Save snapshot
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
