@@ -1,0 +1,186 @@
+{
+  "_snapshot_meta": {
+    "captured_at": "2026-05-13",
+    "captured_by": "Phase 8 of upwork-relevancy-scoring-ai-plan-v3.md",
+    "workflow_id": "fvbhmg0NPnRm4z54",
+    "n8n_instance": "https://ikonicdev.app.n8n.cloud",
+    "purpose": "Manual evaluator front door — admin pastes Task Board card URL + picks profile → returns classifier verdict synchronously. Invoked by dashboard /api/relevancy/evaluate-task."
+  },
+  "id": "fvbhmg0NPnRm4z54",
+  "name": "job-evaluate-manual",
+  "active": false,
+  "nodes": [
+    {
+      "id": "j1-webhook",
+      "name": "J1 - Webhook (Manual Eval)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-1200, 0],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "job-evaluate-manual",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "webhookId": "6f526e3b-0914-4f17-9790-de84136d9a57"
+    },
+    {
+      "id": "j2-validate",
+      "name": "J2 - Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1000, 0],
+      "parameters": {
+        "jsCode": "// J2 — Validate Input (plan v3.3 §4.3)\n// Confirms task_id is a UUID and profile_id is non-empty. Throws on failure\n// → n8n returns 500. The dashboard's /api/relevancy/evaluate-task route\n// already pre-validates, so this is defense-in-depth.\n\nconst body = items[0].json.body ?? items[0].json;\nconst taskId = body.task_id;\nconst profileId = body.profile_id;\nconst requestedBy = body.requested_by ?? null;\nconst requestId = body.request_id ?? null;\n\nconst UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nif (!taskId || typeof taskId !== 'string' || !UUID_RE.test(taskId)) {\n  throw new Error(`Invalid task_id: ${taskId}`);\n}\nif (!profileId || typeof profileId !== 'string') {\n  throw new Error(`Missing profile_id`);\n}\n\nreturn [{\n  json: {\n    task_id: taskId.toLowerCase(),\n    profile_id: profileId,\n    requested_by: requestedBy,\n    request_id: requestId,\n  },\n}];"
+      }
+    },
+    {
+      "id": "j3-load-task",
+      "name": "J3 - Load Task Card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-800, 0],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "=http://157.173.110.62/api/tasks/{{ $json.task_id }}/job-payload",
+        "options": { "timeout": 10000 }
+      }
+    },
+    {
+      "id": "j3-error-fmt",
+      "name": "J3.5 - Format Load Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-600, 192],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "err-1", "name": "error",   "value": "task_not_found",                                                                                "type": "string" },
+            { "id": "err-2", "name": "task_id", "value": "={{ $('J2 - Validate Input').first().json.task_id }}",                                          "type": "string" },
+            { "id": "err-3", "name": "detail",  "value": "={{ ($json.error && $json.error.message) ? $json.error.message : 'Task load failed' }}",        "type": "string" }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      }
+    },
+    {
+      "id": "j4-compose",
+      "name": "J4 - Compose Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-600, 0],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "f-profile", "name": "profile_id",   "value": "={{ $('J2 - Validate Input').first().json.profile_id }}",                                                                                                                                                                "type": "string" },
+            { "id": "f-job",     "name": "job",          "value": "={{ $json }}",                                                                                                                                                                                                            "type": "object" },
+            { "id": "f-meta",    "name": "request_meta", "value": "={{ ({ source: 'manual_url', task_id: $('J2 - Validate Input').first().json.task_id, requested_by: $('J2 - Validate Input').first().json.requested_by, request_id: $('J2 - Validate Input').first().json.request_id }) }}", "type": "object" }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      }
+    },
+    {
+      "id": "j5-score",
+      "name": "J5 - Score Relevancy",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [-400, 0],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500,
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "hi71jhPU8tmq7hEp",
+          "mode": "id",
+          "cachedResultName": "_relevancy-classifier-core"
+        },
+        "options": { "waitForSubWorkflow": true }
+      }
+    },
+    {
+      "id": "j5-error-fmt",
+      "name": "J5.5 - Format Classifier Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-200, 192],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "ce-1", "name": "error",   "value": "classifier_unavailable",                                                                                            "type": "string" },
+            { "id": "ce-2", "name": "task_id", "value": "={{ $('J2 - Validate Input').first().json.task_id }}",                                                              "type": "string" },
+            { "id": "ce-3", "name": "detail",  "value": "={{ ($json.error && $json.error.message) ? $json.error.message : 'Classifier sub-workflow failed after retries' }}", "type": "string" }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      }
+    },
+    {
+      "id": "j6-format",
+      "name": "J6 - Format Verdict for UI",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-200, 0],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "v-task",    "name": "task",     "value": "={{ $('J3 - Load Task Card').first().json.task ?? null }}",   "type": "object" },
+            { "id": "v-task-id", "name": "_task_id", "value": "={{ $('J2 - Validate Input').first().json.task_id }}",        "type": "string" }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "j7-respond",
+      "name": "J7 - Respond (Success)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [0, 0],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": { "responseCode": 200 }
+      }
+    },
+    {
+      "id": "j7-error",
+      "name": "J7 - Respond (Error)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [0, 192],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": { "responseCode": 422 }
+      }
+    }
+  ],
+  "connections": {
+    "J1 - Webhook (Manual Eval)":       { "main": [[ { "node": "J2 - Validate Input",           "type": "main", "index": 0 } ]] },
+    "J2 - Validate Input":              { "main": [[ { "node": "J3 - Load Task Card",           "type": "main", "index": 0 } ]] },
+    "J3 - Load Task Card":              { "main": [ [ { "node": "J4 - Compose Payload",         "type": "main", "index": 0 } ], [ { "node": "J3.5 - Format Load Error",       "type": "main", "index": 0 } ] ] },
+    "J3.5 - Format Load Error":         { "main": [[ { "node": "J7 - Respond (Error)",          "type": "main", "index": 0 } ]] },
+    "J4 - Compose Payload":             { "main": [[ { "node": "J5 - Score Relevancy",          "type": "main", "index": 0 } ]] },
+    "J5 - Score Relevancy":             { "main": [ [ { "node": "J6 - Format Verdict for UI",   "type": "main", "index": 0 } ], [ { "node": "J5.5 - Format Classifier Error", "type": "main", "index": 0 } ] ] },
+    "J5.5 - Format Classifier Error":   { "main": [[ { "node": "J7 - Respond (Error)",          "type": "main", "index": 0 } ]] },
+    "J6 - Format Verdict for UI":       { "main": [[ { "node": "J7 - Respond (Success)",        "type": "main", "index": 0 } ]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": false
+  }
+}

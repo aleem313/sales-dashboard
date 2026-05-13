@@ -4604,3 +4604,125 @@ export async function drainRelevancyScoresDlq(opts: {
     pending_after_run: Number(depth.rows[0]?.pending ?? 0),
   };
 }
+
+// ============================================================
+// MANUAL EVALUATOR (Phase 5 + 9, plan v3.3 §6.1, §10.3)
+// ============================================================
+
+export type ManualEvalLoadStatus = "success" | "partial" | "failed";
+
+// Writes one row to manual_job_evaluations linking the request to the
+// resulting relevancy_scores row (or to the failure that prevented one).
+export async function insertManualJobEvaluation(args: {
+  taskId: string;
+  profileId: string;
+  requestedBy: string;
+  scoreId: number | null;
+  loadStatus: ManualEvalLoadStatus;
+  loadError: string | null;
+}): Promise<{ id: number }> {
+  const result = await sql<{ id: number | string }>`
+    INSERT INTO manual_job_evaluations (
+      task_id, profile_id, score_id, requested_by, load_status, load_error
+    ) VALUES (
+      ${args.taskId},
+      ${args.profileId},
+      ${args.scoreId},
+      ${args.requestedBy},
+      ${args.loadStatus},
+      ${args.loadError}
+    )
+    RETURNING id
+  `;
+  return { id: Number(result.rows[0].id) };
+}
+
+export interface ManualEvalRateLimitResult {
+  allowed: boolean;
+  exceeded: "hourly" | "daily" | null;
+  hourlyCount: number;
+  dailyCount: number;
+  retryAfterSeconds: number;
+}
+
+// Postgres-backed rate limiter for the manual evaluator (plan §16.3 R1):
+// 60 evals/hour and 300/day per admin. Derives counts directly from
+// manual_job_evaluations.created_at — no separate counter table needed.
+// `requestedBy` is the session.user.id (TEXT). Two cheap COUNT(*) calls
+// against the partial idx_mje_profile / idx_mje_task indexes; well under
+// 5ms on a populated table.
+export async function checkManualEvalRateLimit(args: {
+  requestedBy: string;
+  perHour?: number;
+  perDay?: number;
+}): Promise<ManualEvalRateLimitResult> {
+  const perHour = args.perHour ?? 60;
+  const perDay = args.perDay ?? 300;
+
+  const result = await sql<{ hourly: number | string; daily: number | string }>`
+    SELECT
+      COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 hour')::int AS hourly,
+      COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 day')::int  AS daily
+    FROM manual_job_evaluations
+    WHERE requested_by = ${args.requestedBy}
+      AND created_at > NOW() - INTERVAL '1 day'
+  `;
+
+  const hourlyCount = Number(result.rows[0]?.hourly ?? 0);
+  const dailyCount = Number(result.rows[0]?.daily ?? 0);
+
+  if (hourlyCount >= perHour) {
+    return {
+      allowed: false,
+      exceeded: "hourly",
+      hourlyCount,
+      dailyCount,
+      retryAfterSeconds: 3600,
+    };
+  }
+  if (dailyCount >= perDay) {
+    return {
+      allowed: false,
+      exceeded: "daily",
+      hourlyCount,
+      dailyCount,
+      retryAfterSeconds: 24 * 3600,
+    };
+  }
+  return {
+    allowed: true,
+    exceeded: null,
+    hourlyCount,
+    dailyCount,
+    retryAfterSeconds: 0,
+  };
+}
+
+// Profile listing for the evaluator's picker: every active profile + a flag
+// indicating whether a current snapshot exists. The UI greys profiles where
+// has_snapshot=false (linkout: /settings → Profiles → upload snapshot).
+export async function listProfilesForManualEval(): Promise<
+  Array<{ profile_id: string; profile_name: string; has_snapshot: boolean }>
+> {
+  const result = await sql<{
+    profile_id: string;
+    profile_name: string;
+    has_snapshot: boolean;
+  }>`
+    SELECT
+      p.profile_id,
+      p.profile_name,
+      EXISTS (
+        SELECT 1 FROM upwork_profile_snapshots_current s
+        WHERE s.profile_id = p.profile_id
+      ) AS has_snapshot
+    FROM profiles p
+    WHERE p.active = TRUE
+    ORDER BY p.profile_name
+  `;
+  return result.rows.map((r) => ({
+    profile_id: r.profile_id,
+    profile_name: r.profile_name,
+    has_snapshot: r.has_snapshot,
+  }));
+}
