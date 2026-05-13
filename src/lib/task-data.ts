@@ -1320,6 +1320,23 @@ export async function moveTask(
       old.column_name as string, newColName as string
     );
     await syncJobStatusFromTask(taskId, newColName as string, old.column_name as string);
+
+    // Phase 15: capture an agent_move override when the move contradicts the
+    // classifier verdict stamped on the card. Non-blocking — failure must never
+    // fail the move; we just log and move on.
+    if (actorId) {
+      try {
+        const { captureAgentMoveOverride } = await import("./data");
+        await captureAgentMoveOverride({
+          taskId,
+          agentId: actorId,
+          oldColumnName: old.column_name as string,
+          newColumnName: newColName as string,
+        });
+      } catch (e) {
+        console.error("[moveTask] override capture failed:", (e as Error).message);
+      }
+    }
   }
 
   return result.rows[0] as Task;
