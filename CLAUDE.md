@@ -60,6 +60,24 @@ Only read these when the task actually touches the area. Each one is self-contai
 | Deployment, Docker, Contabo, CI workflow | `docs/claude/deployment.md` |
 | ClickUp legacy/removal rules (rare — only when touching `clickup_*` columns) | `docs/claude/clickup-removal.md` |
 
+## Maintaining these docs (write-back rule)
+
+When this session yields a durable fact — a new gotcha, an architectural decision, a new migration, a renamed column, a workflow change, a "we tried X and it broke because Y" — **edit the matching `docs/claude/*.md` file**, not this index. Future sessions only load topic files on demand, so that's where the knowledge has to live.
+
+Per-topic update triggers:
+
+| When you… | Update |
+|-----------|--------|
+| Add a migration | `docs/claude/migrations.md` (new row + bump "Latest migration" URL) |
+| Edit the n8n workflow, classifier prompt, or hit a new n8n cloud gotcha | `docs/claude/n8n-integration.md` |
+| Add a Task Board component, change connects logic, or change a "known pattern" | `docs/claude/task-board.md` |
+| Change ingestion shape, dashboard count semantics, or funnel KPI rules | `docs/claude/data-flow.md` |
+| Change agent/profile auth, password hashing, or the n8n mapping endpoint | `docs/claude/agent-profile-mgmt.md` |
+| Change Docker, Contabo, CI workflow, or env-var contracts | `docs/claude/deployment.md` |
+| Touch `clickup_*` columns (rare) | `docs/claude/clickup-removal.md` |
+
+Only edit CLAUDE.md itself when adding a **new topic file** (so the index points at it) or changing a top-level rule (architecture, roles, conversation-continuity). Don't trust commit messages to carry the knowledge forward — they rot first.
+
 ## Other reference
 
 | File | Purpose |
