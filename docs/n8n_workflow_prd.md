@@ -555,6 +555,70 @@ mcp__n8n-mcp__n8n_update_partial_workflow with operations:
 
 ## 12. Recent changes
 
+### 2026-05-12 — Reason dropdown sync: extend REASON_OPTIONS arrays to 16 entries (SHIPPED, commit `34d3ae9`)
+
+- **What:** Dashboard-side hand edit (NOT an n8n change). Extended `REASON_OPTIONS` arrays in two TypeScript files to match the classifier's 16-element reason_enum:
+  - `src/components/tasks/task-full-view.tsx` — card detail editor dropdown (N/A reason multi-select on the right rail).
+  - `src/components/tasks/custom-field-filter.tsx` — board filter UI ("filter by reason" picker on the saved-views toolbar).
+  Both arrays appended the same 3 soft-signal labels in the same order as PRD §6.2: `"Client already conducting an interview"`, `"Short term job checks"`, `"Red flag"`. Existing 13 entries unchanged (spelling preserved, including the historical "Low Higher rate" typo).
+- **Why:** The n8n classifier (Mode A prompt on both Gemini + DeepSeek agents in `hi71jhPU8tmq7hEp`) now emits these 3 new labels in its `rejection_reasons` array, and they propagate to the board task as `custom_fields._relevancy_reasons`. Cards that auto-rejected (or got reviewed) under these labels would have shown the value in the read-only badge but agents couldn't have **selected** them when editing the card or filtering the board until the dropdown caught up. Mentioning here (in the n8n parent PRD) because the n8n classifier emits these reasons; the human flow needs the dropdown in sync. See also: PRD §6.2 and `docs/job_relevancy_criteria_prd.md` §17 v0.2.1 changelog.
+- **How:** Plain TypeScript edit, no schema migration, no n8n change. The arrays are NOT auto-derived from `criteria_versions.reason_enum` or from any n8n config — they are hardcoded literals. CLAUDE.md "Known Patterns & Gotchas" now flags this manual-sync requirement explicitly.
+- **Verification:** Built locally + visual check of the dropdown on a card; Contabo deploy is automatic on push.
+- **Rollback:** revert commit `34d3ae9` if production volume of the new labels turns out to be noise.
+
+### 2026-05-12 — Create Board Task - Self-Hosted: added `_relevancy_gates` + `_relevancy_components` (15th + 16th fields ... 15 keys total because the count starts at `_relevancy_score`) (SHIPPED, commit `1cabaaa`)
+
+- **What:** Added two key/value entries to `Create Board Task - Self-Hosted.parameters.jsonBody` (node id `a55e6692-843c-4ef6-ba9b-e62a3ddab7b6`):
+  - `_relevancy_gates: ($json.relevancyVerdict && $json.relevancyVerdict.gates) || null` — an object mapping `gate_id` (e.g. `"1_stack_match"`, `"4_freshness"`) → `{status: "pass"|"fail"|"skipped_deterministic", evidence: string}`.
+  - `_relevancy_components: ($json.relevancyVerdict && $json.relevancyVerdict.components) || null` — an object mapping component name (e.g. `"skill_match"`, `"portfolio_evidence"`, `"client_quality"`) → `{value: number, reason: string}` with hardcoded maxes (skill_match=30, portfolio_evidence=20, client_quality=15, competition_position=10, domain_match=10, experience_level_fit=10, red_flags=5; total=100).
+  Brings the `_relevancy_*` stamp count from 13 → 15 keys. Inserted directly after the existing 13 keys in the `custom_fields` object literal.
+- **Why:** Phase B of the post-Phase-7 "show the work" rollout. Before this stamp, the RelevancyPanel UI on the task card only had score / tier / decision / reasons / summary — the per-gate evidence and per-component score breakdown that the classifier already produces in its verdict object were not surfaced. Stamping them as custom_fields lets the dashboard render gate pass/fail badges + a component breakdown table directly from the card, no extra fetch needed.
+- **How:** Single atomic `n8n_update_partial_workflow` call, 1 `patchNodeField` op on `Create Board Task - Self-Hosted.parameters.jsonBody`. Defensive `(a && a.b) || null` pattern matches the other 13 fields (n8n expression engine doesn't support `?.`). No other node touched.
+- **Verification:** `n8n_validate_workflow profile=runtime` → `valid: true`, 0 errors, warning count unchanged from prior baseline. Node count still 34. Re-read of live workflow confirms both keys present. UI side: RelevancyPanel now renders gate badges + component table from these two fields on every Shadow-mode card.
+- **Rollback baseline:** `docs/multiple webhooks (working flow).json` (refreshed post-patch).
+- **Rollback op (single inverse `patchNodeField`):**
+  ```json
+  {
+    "type": "patchNodeField",
+    "nodeName": "Create Board Task - Self-Hosted",
+    "fieldPath": "parameters.jsonBody",
+    "patches": [{
+      "find": ", _relevancy_gates: ($json.relevancyVerdict && $json.relevancyVerdict.gates) || null, _relevancy_components: ($json.relevancyVerdict && $json.relevancyVerdict.components) || null",
+      "replace": ""
+    }]
+  }
+  ```
+
+### 2026-05-12 — Create Board Task - Self-Hosted: added `_relevancy_model` (13th relevancy field) (SHIPPED, commit `f2c89b3`)
+
+- **What:** Added one key/value to `Create Board Task - Self-Hosted.parameters.jsonBody` (node id `a55e6692-843c-4ef6-ba9b-e62a3ddab7b6`) — `_relevancy_model: ($json.relevancyVerdict && $json.relevancyVerdict.model) || null`. Inserted in the `custom_fields` object literal in the same defensive pattern as the other relevancy keys.
+- **Why:** Phase B of the DeepSeek R1 failover ship (sub-workflow side covered in `docs/n8n_relevancy_classifier_core_prd.md` §12 same-day entry). Sub-workflow now stamps `verdict.model = "gemini-2.5-flash"` (primary path) or `"deepseek-r1"` (failover path) in the Validate Output nodes. Surfacing it as `custom_fields._relevancy_model` lets the RelevancyPanel UI show a "via Gemini 2.5 Flash" or "via DeepSeek R1" badge in the panel header, so reviewers can tell which LLM produced any given verdict at a glance (relevant for calibration spot-checks and for tracking failover rate under sustained-load conditions).
+- **How:** Single atomic `n8n_update_partial_workflow` call, 1 `patchNodeField` op on `Create Board Task - Self-Hosted.parameters.jsonBody`. No other node touched.
+- **Verification:** `n8n_validate_workflow profile=runtime` → `valid: true`, 0 errors. Node count still 34.
+- **Rollback baseline:** `docs/multiple webhooks (working flow).json`.
+
+### 2026-05-12 — Bulk-payload guard splice: halt Vollna POSTs >5 jobs at the boundary (SHIPPED, commit `1c7e48a`)
+
+- **What:** Spliced a new Code node `Guard - Reject Bulk Payloads` between `Merge All Webhooks` and `Process Job`. Throws an error if a single Vollna webhook payload contains more than **5 jobs** (`max(body.total, body.projects.length) > 5`). Threshold lives as inline literal `BULK_THRESHOLD = 5` in the node's `parameters.jsCode` — edit there to retune. Parent workflow node count: 34 → **35**.
+- **Why:** Vollna's Rebekah filter delivered 466 jobs in one POST on 2026-05-12 (execution 13433). `Process Job` iterated and each item fired Gemini sub-workflow serially — at ~22s/call under the rate-limit experiment in place at the time, the execution had 2.5+ hours of runway and saturated Gemini's API, cascading rate-limit failures across all 7 other profiles. The guard short-circuits the iteration so no Gemini calls or board cards are created from a bulk dump. Vollna already got its 200 OK from `Respond - X` upstream (the webhook node responds before the merge), so the throw doesn't reach Vollna and it won't retry. Halted executions appear red in the n8n executions list with a clear error message — easy to spot.
+- **How:** Single atomic `n8n_update_partial_workflow` call: `addNode` (the new Code node), `removeConnection` (Merge → Process Job), `addConnection` × 2 (Merge → Guard, Guard → Process Job). No other node touched.
+- **Verification:** `n8n_validate_workflow profile=runtime` → `valid: true`, 0 errors. Live verification deferred to the next Vollna bulk-burst — none observed since the guard was spliced (the underlying retry experiment was also reverted same day, so the cascade root cause is gone too).
+- **Note on threshold choice:** 5 was picked as a value that's large enough to absorb normal-burst behavior (single user posting a handful of jobs at once is fine), small enough to catch any large dump. Bumped from "unlimited" → 5 in one step; if false positives ever surface (e.g., a profile-filter widening produces 6-job bursts), revisit.
+- **Companion change in `n8n_multiple_webhooks_workflow.md` memory:** the topology section now shows `Merge All Webhooks → Guard - Reject Bulk Payloads → Process Job` as the standard pipeline.
+
+### 2026-05-12 — AI Agent - Proposal Writer: NEVER REFUSE patch (SHIPPED, commit `3564d2b`)
+
+- **What:** Two `patchNodeField` ops applied atomically:
+  - (a) Prepended a `CRITICAL — ALWAYS DRAFT, NEVER REFUSE` block to `AI Agent - Proposal Writer.parameters.options.systemMessage`. The block explicitly forbids refusal, mandates `_proposalOk: true` always, and instructs Claude to bridge adjacent skills when the stack doesn't match (e.g., "we don't do React but we do similar SPA work in Vue / Angular / Svelte; here's our portfolio entry that maps").
+  - (b) Patched `Structured Output Parser.parameters.inputSchema` `_proposalOk` description from "Whether the proposal was successfully generated" (Claude was reading this as a fit-gate) → "ALWAYS true. This is not a fit gate. Never set to false."
+- **Why:** Pre-patch, Claude was self-refusing wrong-stack jobs and emitting `_proposalOk: false`, which routed through the `Proposal OK?` IF → Extract Error → dashboard `outcome: gpt_error`. **No board card was created** for those rejections — they were invisible to the Task Board and would have been invisible to the upcoming Relevancy Audit page. Example: exec 13406 (Saim profile + Smartsheet job; Claude wrote "Dear Hiring Manager / I must be transparent" → set `_proposalOk: false` → dashboard logged `gpt_error`, no card). This duplicated the relevancy classifier's job: rejection decisions belong **solely** to the classifier (Shadow now, Active later), not the proposal writer.
+- **Post-patch semantics:** every job that reaches Build GPT Input gets a Claude-drafted proposal. The proposal lands on the board (in Todo) with `_relevancy_*` custom_fields stamped. The classifier's verdict — independently — drives whether downstream operators auto-reject (Active mode) or just observe (Shadow mode). Two judgments, two records, both visible.
+- **How:** Single atomic `n8n_update_partial_workflow` call, 2 `patchNodeField` ops, no node adds/removes, 34 nodes preserved. (This entry is from before the bulk-payload guard splice, so 34 here is correct for the as-of state of this patch.)
+- **Verification:** `n8n_validate_workflow profile=runtime` → `valid: true`, 0 errors. Live verification on the next Vollna fire for a stack-mismatched profile pair: card lands with proposal + `_relevancy_*` fields populated; no `gpt_error` outcome on the dashboard webhook.
+- **Rollback baseline:** `docs/multiple webhooks (working flow).json`.
+- **Rollback ops (inverse `patchNodeField` × 2 — restore the previous systemMessage prefix and the previous `_proposalOk` schema description). Snapshot baseline carries the verbatim pre-patch text; consult workflow versions in n8n cloud history for surgical revert if needed.**
+- **Preservation contract (per `n8n_multiple_webhooks_workflow.md` memory):** if you ever edit the proposal-writer system prompt or its parser schema, preserve both patches. Claude flips back to refusing within hours of those rules being relaxed.
+
 ### 2026-05-12 — Process Job + Build GPT Input: propagate Upwork snapshot into Claude prompt (SHIPPED)
 - **What:**
   - `Process Job` (node id `a064f102-37a6-47ec-bfcb-f47bbd95dc6c`) `parameters.jsCode`: added one line — `upwork: profile.upwork || null` — to the `_result: 'proceed'` emit object literal, immediately after `custom_gpt_instructions: ''`. All other lines unchanged. The `custom_gpt_instructions: ''` placeholder is intentionally retained for backward compat.
