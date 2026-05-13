@@ -3,6 +3,7 @@ import { Separator } from "@/components/ui/separator";
 import { getAllAgents, getAllProfiles, listRelevancyAuditRejects } from "@/lib/data";
 import { AuditFilters } from "@/components/relevancy-audit/audit-filters";
 import { RejectsTable } from "@/components/relevancy-audit/rejects-table";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,10 @@ export default async function RelevancyAuditPage({
 
   return (
     <>
+      {/* Auto-refresh every 15s so newly classified rejects appear without a
+          manual reload. Pauses when the tab is hidden (default) so we don't
+          burn the DB doing nothing useful. */}
+      <AutoRefresh interval={15000} />
       <Header
         title="Relevancy Audit"
         agents={agents}
