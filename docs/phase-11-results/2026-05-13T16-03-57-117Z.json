@@ -1,0 +1,1813 @@
+{
+  "run_meta": {
+    "timestamp": "2026-05-13T16-03-57-117Z",
+    "webhook_url": "https://ikonicdev.app.n8n.cloud/webhook/job-evaluate-manual",
+    "fixtures_path": "docs/phase-11-fixtures.json",
+    "concurrency": 1,
+    "fixture_ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ]
+  },
+  "results": [
+    {
+      "fixture": {
+        "id": 1,
+        "task_id": "d2aeea13-d4d3-4e66-ac13-5b0d53f49a99",
+        "profile_id": "craig",
+        "title": "iOS App UX and UI Review",
+        "captured_reasons": [
+          "Already hired"
+        ],
+        "client_signal": {
+          "spent": 2100,
+          "rating": 4.93
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          7
+        ],
+        "expected_reasons": [
+          "Already hired"
+        ],
+        "notes": "Gate 7 — job_availability (already hired)."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 3516,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "craig",
+        "job_external_id": "022051374399967192019",
+        "snapshot_id": "790e501e-6adc-41c6-8d7c-d3f1776e830c",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "d2aeea13-d4d3-4e66-ac13-5b0d53f49a99",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "d2aeea13-d4d3-4e66-ac13-5b0d53f49a99",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "9bdb32c8-c6ee-4b74-a48d-3d3970d3ddd3",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 454,
+        "_dlq_id": null,
+        "task": {
+          "title": "iOS App UX and UI Review",
+          "raw_title": "[Craig] iOS App UX and UI Review",
+          "current_column": "N/A",
+          "current_assignee_name": "Mubashir",
+          "created_at": "2026-05-04T18:56:20.929Z",
+          "stage_entered_at": "2026-05-04T19:20:56.879Z"
+        },
+        "_task_id": "d2aeea13-d4d3-4e66-ac13-5b0d53f49a99"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 2,
+        "task_id": "8c9e2288-8cdf-48dc-9f75-c266de740deb",
+        "profile_id": "khansa",
+        "title": "Proactive Funnel & Website Assistant for Showit + Systeme.io",
+        "captured_reasons": [
+          "Bad rating client"
+        ],
+        "client_signal": {
+          "spent": 1000,
+          "rating": 1.52
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          6
+        ],
+        "expected_reasons": [
+          "Bad rating client"
+        ],
+        "notes": "Gate 6 — client_rating_floor (rating 1.52 < 4.0)."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 743,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job",
+          "Low Higher rate"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job, Low Higher rate",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "khansa",
+        "job_external_id": "022047333826334619399",
+        "snapshot_id": "7028d70e-d25d-4c72-ba84-5448676359f2",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "8c9e2288-8cdf-48dc-9f75-c266de740deb",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "8c9e2288-8cdf-48dc-9f75-c266de740deb",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "9fd130e9-0ce7-4da3-9cd1-665c7b6a6ce5",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 455,
+        "_dlq_id": null,
+        "task": {
+          "title": "Proactive Funnel & Website Assistant for Showit + Systeme.io",
+          "raw_title": "[Khansa] Proactive Funnel & Website Assistant for Showit + Systeme.io",
+          "current_column": "N/A",
+          "current_assignee_name": "Shayan",
+          "created_at": "2026-04-23T15:20:29.234Z",
+          "stage_entered_at": "2026-04-23T15:32:52.705Z"
+        },
+        "_task_id": "8c9e2288-8cdf-48dc-9f75-c266de740deb"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 3,
+        "task_id": "bfa1eed1-b525-4198-a864-1da119cb891a",
+        "profile_id": "shayan",
+        "title": "Simple Browser Automation Script to Save Pages as PDFs",
+        "captured_reasons": [
+          "Client Low spending"
+        ],
+        "client_signal": {
+          "spent": 154,
+          "rating": 4.75
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          5
+        ],
+        "expected_reasons": [
+          "Client Low spending"
+        ],
+        "notes": "Gate 5 — client_spend_floor (spent $154 < $1k)."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 694,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job",
+          "Low Higher rate"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job, Low Higher rate",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "shayan",
+        "job_external_id": "022052462555045466766",
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "bfa1eed1-b525-4198-a864-1da119cb891a",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "bfa1eed1-b525-4198-a864-1da119cb891a",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "8a4cbc70-9e3c-40eb-8d8a-76143b64b78c",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 456,
+        "_dlq_id": null,
+        "task": {
+          "title": "Simple Browser Automation Script to Save Pages as PDFs",
+          "raw_title": "[Shayan] Simple Browser Automation Script to Save Pages as PDFs",
+          "current_column": "N/A",
+          "current_assignee_name": "Abu Bakher",
+          "created_at": "2026-05-07T19:03:25.120Z",
+          "stage_entered_at": "2026-05-07T19:04:39.696Z"
+        },
+        "_task_id": "bfa1eed1-b525-4198-a864-1da119cb891a"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 4,
+        "task_id": "68795ef9-8073-47e2-889b-439ae9e5255b",
+        "profile_id": "shayan",
+        "title": "Joomla Web Maintenance",
+        "captured_reasons": [
+          "Job unavailable"
+        ],
+        "client_signal": {
+          "spent": 28800,
+          "rating": 4.99
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          7
+        ],
+        "expected_reasons": [
+          "Job unavailable"
+        ],
+        "notes": "Gate 7 — semantic: marked closed/unavailable in description."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 784,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "shayan",
+        "job_external_id": "022052826400494668047",
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "68795ef9-8073-47e2-889b-439ae9e5255b",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "68795ef9-8073-47e2-889b-439ae9e5255b",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "04b3ccce-86e7-4b94-8d88-e8c8cd36ee14",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 457,
+        "_dlq_id": null,
+        "task": {
+          "title": "Joomla Web Maintenance",
+          "raw_title": "[Shayan] Joomla Web Maintenance",
+          "current_column": "N/A",
+          "current_assignee_name": "Abu Bakher",
+          "created_at": "2026-05-08T19:07:18.202Z",
+          "stage_entered_at": "2026-05-08T19:30:12.422Z"
+        },
+        "_task_id": "68795ef9-8073-47e2-889b-439ae9e5255b"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 5,
+        "task_id": "bdae7586-c8b0-4ab1-8fa8-cbb3e65adb04",
+        "profile_id": "shayan",
+        "title": "Przebudowa 2 serwisów + migracja + SEO (WordPress) (Polish)",
+        "captured_reasons": [
+          "Language barrier"
+        ],
+        "client_signal": {},
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [],
+        "expected_reasons": [
+          "Language barrier"
+        ],
+        "notes": "Soft signal — non-English description. May land in 'review' if classifier doesn't flag the soft signal as hard reject."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 733,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "shayan",
+        "job_external_id": "022047368387398672341",
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "bdae7586-c8b0-4ab1-8fa8-cbb3e65adb04",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "bdae7586-c8b0-4ab1-8fa8-cbb3e65adb04",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "0df466f7-6fb3-4ad1-b09c-a92dd32a035b",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 458,
+        "_dlq_id": null,
+        "task": {
+          "title": "Przebudowa 2 serwisów + migracja + SEO (WordPress)",
+          "raw_title": "[Shayan] Przebudowa 2 serwisów + migracja + SEO (WordPress)",
+          "current_column": "N/A",
+          "current_assignee_name": "Abu Bakher",
+          "created_at": "2026-04-23T17:40:27.267Z",
+          "stage_entered_at": "2026-04-23T18:26:38.553Z"
+        },
+        "_task_id": "bdae7586-c8b0-4ab1-8fa8-cbb3e65adb04"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 6,
+        "task_id": "99ab1646-87b3-4736-8c79-c2ccaba3ae97",
+        "profile_id": "shayan",
+        "title": "Peptide Website Development",
+        "captured_reasons": [
+          "Location loc"
+        ],
+        "client_signal": {
+          "budget_min": 15,
+          "budget_max": 25
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          8
+        ],
+        "expected_reasons": [
+          "Location loc"
+        ],
+        "notes": "Gate 8 — no_location_lockin (residency requirement in description)."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 653,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job",
+          "Low Higher rate"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job, Low Higher rate",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "shayan",
+        "job_external_id": "022052824379936864364",
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "99ab1646-87b3-4736-8c79-c2ccaba3ae97",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "99ab1646-87b3-4736-8c79-c2ccaba3ae97",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "ff6a82de-435b-46cb-872c-28fcd3f950e8",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 459,
+        "_dlq_id": null,
+        "task": {
+          "title": "Peptide Website Development",
+          "raw_title": "[Shayan] Peptide Website Development",
+          "current_column": "N/A",
+          "current_assignee_name": "Abu Bakher",
+          "created_at": "2026-05-08T18:57:21.553Z",
+          "stage_entered_at": "2026-05-08T18:58:31.806Z"
+        },
+        "_task_id": "99ab1646-87b3-4736-8c79-c2ccaba3ae97"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 7,
+        "task_id": "520f74af-1e4a-4c96-8c9f-5f8ff993bf74",
+        "profile_id": "shayan",
+        "title": "WordPress Speed Optimization Expert",
+        "captured_reasons": [
+          "Low Higher rate"
+        ],
+        "client_signal": {
+          "spent": 5200,
+          "rating": 3.81,
+          "budget": "Not specified"
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          4,
+          6
+        ],
+        "expected_reasons": [
+          "Low Higher rate",
+          "Bad rating client"
+        ],
+        "notes": "Primary gate 4 (hourly_floor) but rating 3.81 < 4.0 also fires gate 6. Either reason qualifies."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 688,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "shayan",
+        "job_external_id": "022052456305716268641",
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "520f74af-1e4a-4c96-8c9f-5f8ff993bf74",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "520f74af-1e4a-4c96-8c9f-5f8ff993bf74",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "02219b5b-092d-40cf-9004-8c2ec64001cd",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 460,
+        "_dlq_id": null,
+        "task": {
+          "title": "WordPress Speed Optimization Expert",
+          "raw_title": "[Shayan] WordPress Speed Optimization Expert",
+          "current_column": "N/A",
+          "current_assignee_name": "Abu Bakher",
+          "created_at": "2026-05-07T18:37:17.860Z",
+          "stage_entered_at": "2026-05-07T18:42:56.288Z"
+        },
+        "_task_id": "520f74af-1e4a-4c96-8c9f-5f8ff993bf74"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 8,
+        "task_id": "34d3baac-bc20-4873-9d4c-26a086ac182c",
+        "profile_id": "saim",
+        "title": "Operations Specialist wanted for busy Founder",
+        "captured_reasons": [
+          "Old job"
+        ],
+        "client_signal": {
+          "spent": 29000,
+          "rating": 4.72,
+          "budget_min": 25
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          2
+        ],
+        "expected_reasons": [
+          "Old job"
+        ],
+        "notes": "Gate 2 — freshness (>24h posted)."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 771,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "saim",
+        "job_external_id": "022049497531759276401",
+        "snapshot_id": "8d841d0b-84ae-4b95-b471-c1cb6c4d6bff",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "34d3baac-bc20-4873-9d4c-26a086ac182c",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "34d3baac-bc20-4873-9d4c-26a086ac182c",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "a38803b2-2692-497e-aa23-d777427b3751",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 461,
+        "_dlq_id": null,
+        "task": {
+          "title": "Operations Specialist wanted for busy Founder",
+          "raw_title": "[Saim] Operations Specialist wanted for busy Founder",
+          "current_column": "N/A",
+          "current_assignee_name": "Shayan",
+          "created_at": "2026-04-29T17:48:21.524Z",
+          "stage_entered_at": "2026-04-29T21:36:55.887Z"
+        },
+        "_task_id": "34d3baac-bc20-4873-9d4c-26a086ac182c"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": true,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 9,
+        "task_id": "18b996e2-1bb3-42e1-8c1b-174218d2f1d2",
+        "profile_id": "shayan",
+        "title": "Kartra Central Hub + GoHighLevel Funnel Builder",
+        "captured_reasons": [
+          "Out of stack"
+        ],
+        "client_signal": {
+          "spent": 8900,
+          "rating": 4.53,
+          "budget_min": 16,
+          "budget_max": 20
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          1
+        ],
+        "expected_reasons": [
+          "Out of stack"
+        ],
+        "notes": "Gate 1 — stack_match (Kartra/GHL not in Shayan's Laravel/WP stack)."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 801,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job",
+          "Low Higher rate"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job, Low Higher rate",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "shayan",
+        "job_external_id": "022052450736533956260",
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "18b996e2-1bb3-42e1-8c1b-174218d2f1d2",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "18b996e2-1bb3-42e1-8c1b-174218d2f1d2",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "275ed617-74f2-4ff3-ade7-f5bc69584dab",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 462,
+        "_dlq_id": null,
+        "task": {
+          "title": "Kartra Central Hub + GoHighLevel Funnel Builder for Network Marketing Travel Business",
+          "raw_title": "[Shayan] Kartra Central Hub + GoHighLevel Funnel Builder for Network Marketing Travel Business",
+          "current_column": "N/A",
+          "current_assignee_name": "Abu Bakher",
+          "created_at": "2026-05-07T19:13:21.368Z",
+          "stage_entered_at": "2026-05-07T19:29:45.549Z"
+        },
+        "_task_id": "18b996e2-1bb3-42e1-8c1b-174218d2f1d2"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 10,
+        "task_id": "d1de1bfc-5d21-405e-983e-a693a43d9101",
+        "profile_id": "khansa",
+        "title": "AI-Augmented Software Engineer (Contract) — Claude Code",
+        "captured_reasons": [
+          "Portfolio unavailable"
+        ],
+        "client_signal": {
+          "spent": 10400,
+          "budget_min": 30,
+          "budget_max": 45
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          10
+        ],
+        "expected_reasons": [
+          "Portfolio unavailable"
+        ],
+        "borderline": true,
+        "notes": "Gate 10 with soft-pass for top_rated (Khansa qualifies). Classifier may SOFT-PASS → proceed. Calibration case — half-credit on borderline outcome."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 675,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "khansa",
+        "job_external_id": "022047411149663763034",
+        "snapshot_id": "7028d70e-d25d-4c72-ba84-5448676359f2",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "d1de1bfc-5d21-405e-983e-a693a43d9101",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "d1de1bfc-5d21-405e-983e-a693a43d9101",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "159ad72d-e182-4abf-b2e2-34913b04383b",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 463,
+        "_dlq_id": null,
+        "task": {
+          "title": "AI-Augmented Software Engineer (Contract) — Ship Features Fast with Claude Code (Or equival",
+          "raw_title": "[Khansa] AI-Augmented Software Engineer (Contract) — Ship Features Fast with Claude Code (Or equival",
+          "current_column": "N/A",
+          "current_assignee_name": "Shayan",
+          "created_at": "2026-04-23T20:27:30.059Z",
+          "stage_entered_at": "2026-04-23T20:40:05.773Z"
+        },
+        "_task_id": "d1de1bfc-5d21-405e-983e-a693a43d9101"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 1,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 11,
+        "task_id": "731abf6b-79f3-4cba-a464-61d2e4649318",
+        "profile_id": "shayan",
+        "title": "Website Re-Theming and Design",
+        "captured_reasons": [
+          "Too many invites"
+        ],
+        "client_signal": {
+          "budget_min": 20,
+          "budget_max": 50
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          3
+        ],
+        "expected_reasons": [
+          "Too many invites"
+        ],
+        "notes": "Gate 3 — proposal_saturation (≥30 proposals)."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 922,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job",
+          "Low Higher rate"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job, Low Higher rate",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "shayan",
+        "job_external_id": "022052433749064716942",
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "731abf6b-79f3-4cba-a464-61d2e4649318",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "731abf6b-79f3-4cba-a464-61d2e4649318",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "2ed0c684-d0d9-4328-b85a-9b8260823a69",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 464,
+        "_dlq_id": null,
+        "task": {
+          "title": "Website Re-Theming and Design",
+          "raw_title": "[Shayan] Website Re-Theming and Design",
+          "current_column": "N/A",
+          "current_assignee_name": "Abu Bakher",
+          "created_at": "2026-05-07T17:06:22.480Z",
+          "stage_entered_at": "2026-05-07T17:07:19.241Z"
+        },
+        "_task_id": "731abf6b-79f3-4cba-a464-61d2e4649318"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 12,
+        "task_id": "c10162c1-2d27-4a40-a3b2-8cbdca319a64",
+        "profile_id": "sana",
+        "title": "Product Engineer (Next.js / Node) - AI Encouraged",
+        "captured_reasons": [
+          "Video Proposal"
+        ],
+        "client_signal": {
+          "spent": 1200000,
+          "rating": 4.97,
+          "budget_min": 40,
+          "budget_max": 65
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          9
+        ],
+        "expected_reasons": [
+          "Video Proposal"
+        ],
+        "notes": "Gate 9 — no_video_proposal. STRONG calibration case — every other signal excellent ($1.2M spent, 4.97). The verifier in C6 must flip this to reject if the LLM misses the video requirement."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 739,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "sana",
+        "job_external_id": "022049182128138297301",
+        "snapshot_id": "6ce8bae8-7d39-435f-a1a2-5101799263e4",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "c10162c1-2d27-4a40-a3b2-8cbdca319a64",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "c10162c1-2d27-4a40-a3b2-8cbdca319a64",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "028eb9ba-5d61-4581-ad63-2d2a4ad9becf",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 465,
+        "_dlq_id": null,
+        "task": {
+          "title": "Product Engineer (Next.js / Node) - AI Encouraged",
+          "raw_title": "[Sana] Product Engineer (Next.js / Node) - AI Encouraged",
+          "current_column": "N/A",
+          "current_assignee_name": "Saba",
+          "created_at": "2026-04-28T17:44:20.646Z",
+          "stage_entered_at": "2026-04-28T17:47:38.314Z"
+        },
+        "_task_id": "c10162c1-2d27-4a40-a3b2-8cbdca319a64"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 13,
+        "task_id": "746aa467-d495-49a3-8dc1-5756bfcb57da",
+        "profile_id": "shayan",
+        "title": "Landing Page Designer for Physiotherapy Clinics",
+        "captured_reasons": [
+          "Low Higher rate",
+          "Client Low spending"
+        ],
+        "client_signal": {
+          "spent": 255,
+          "rating": 5
+        },
+        "category": "multi_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          4,
+          5
+        ],
+        "expected_reasons": [
+          "Low Higher rate",
+          "Client Low spending"
+        ],
+        "notes": "Gates 4 + 5 fire together. Either reason in output is acceptable."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 668,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "shayan",
+        "job_external_id": "022052820825468440295",
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "746aa467-d495-49a3-8dc1-5756bfcb57da",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "746aa467-d495-49a3-8dc1-5756bfcb57da",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "c314ca63-7303-4680-a28d-d987ff03f3ee",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 466,
+        "_dlq_id": null,
+        "task": {
+          "title": "Landing Page Designer for Physiotherapy Clinics",
+          "raw_title": "[Shayan] Landing Page Designer for Physiotherapy Clinics",
+          "current_column": "N/A",
+          "current_assignee_name": "Abu Bakher",
+          "created_at": "2026-05-08T18:44:23.517Z",
+          "stage_entered_at": "2026-05-08T18:45:23.730Z"
+        },
+        "_task_id": "746aa467-d495-49a3-8dc1-5756bfcb57da"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 14,
+        "task_id": "61f61a79-3abe-4e76-aaf6-d8b0fd5879eb",
+        "profile_id": "shayan",
+        "title": "Ai calling agent",
+        "captured_reasons": [
+          "Out of stack",
+          "Too many invites"
+        ],
+        "client_signal": {
+          "spent": 9800,
+          "rating": 5
+        },
+        "category": "multi_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          1,
+          3
+        ],
+        "expected_reasons": [
+          "Out of stack",
+          "Too many invites"
+        ],
+        "notes": "Gates 1 + 3."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 675,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "shayan",
+        "job_external_id": "022052402888939572833",
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "61f61a79-3abe-4e76-aaf6-d8b0fd5879eb",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "61f61a79-3abe-4e76-aaf6-d8b0fd5879eb",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "f9af1d12-95be-449b-9333-e136413296a3",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 467,
+        "_dlq_id": null,
+        "task": {
+          "title": "Ai calling agent",
+          "raw_title": "[Shayan] Ai calling agent",
+          "current_column": "N/A",
+          "current_assignee_name": "Abu Bakher",
+          "created_at": "2026-05-07T18:02:21.299Z",
+          "stage_entered_at": "2026-05-07T18:16:45.151Z"
+        },
+        "_task_id": "61f61a79-3abe-4e76-aaf6-d8b0fd5879eb"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 15,
+        "task_id": "fd765ae2-8c6d-4ed6-87aa-38ee9dafb03e",
+        "profile_id": "saim",
+        "title": "Senior Node.js/NestJS Engineer – 7-Day SaaS Deployment",
+        "captured_reasons": [
+          "Old job",
+          "Low Higher rate"
+        ],
+        "client_signal": {
+          "spent": 149,
+          "rating": 5,
+          "fixed_amount": 3500
+        },
+        "category": "multi_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          2,
+          4,
+          5
+        ],
+        "expected_reasons": [
+          "Old job",
+          "Low Higher rate",
+          "Client Low spending"
+        ],
+        "notes": "Gates 2 + 4 (fixed budget interpretation) + low client spend. Any matching reason counts."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 737,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "saim",
+        "job_external_id": "022049510575006298321",
+        "snapshot_id": "8d841d0b-84ae-4b95-b471-c1cb6c4d6bff",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "fd765ae2-8c6d-4ed6-87aa-38ee9dafb03e",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "fd765ae2-8c6d-4ed6-87aa-38ee9dafb03e",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "32c39322-d552-4373-94be-bac894b27184",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 468,
+        "_dlq_id": null,
+        "task": {
+          "title": "Senior Node.js/NestJS Engineer – 7-Day SaaS Deployment & API Integration",
+          "raw_title": "[Saim] Senior Node.js/NestJS Engineer – 7-Day SaaS Deployment & API Integration",
+          "current_column": "N/A",
+          "current_assignee_name": "Shayan",
+          "created_at": "2026-04-29T15:38:18.331Z",
+          "stage_entered_at": "2026-04-29T15:58:50.161Z"
+        },
+        "_task_id": "fd765ae2-8c6d-4ed6-87aa-38ee9dafb03e"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": true,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 16,
+        "task_id": "7b505a3a-1e62-476e-a5a4-86da99346aa3",
+        "profile_id": "shayan",
+        "title": "Small Website Changes Needed",
+        "captured_reasons": [
+          "Old job",
+          "Client Low spending"
+        ],
+        "client_signal": {
+          "spent": 315,
+          "rating": 5,
+          "budget_min": 12,
+          "budget_max": 25
+        },
+        "category": "multi_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          2,
+          5
+        ],
+        "expected_reasons": [
+          "Old job",
+          "Client Low spending"
+        ],
+        "notes": "Gates 2 + 5."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 672,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job",
+          "Low Higher rate"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job, Low Higher rate",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "shayan",
+        "job_external_id": "022051735660332972140",
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "7b505a3a-1e62-476e-a5a4-86da99346aa3",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "7b505a3a-1e62-476e-a5a4-86da99346aa3",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "649c47de-d979-48ad-9811-948252f4ad5d",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 469,
+        "_dlq_id": null,
+        "task": {
+          "title": "Small Website Changes Needed",
+          "raw_title": "[Shayan] Small Website Changes Needed",
+          "current_column": "N/A",
+          "current_assignee_name": "Abu Bakher",
+          "created_at": "2026-05-05T21:53:19.694Z",
+          "stage_entered_at": "2026-05-05T22:01:42.891Z"
+        },
+        "_task_id": "7b505a3a-1e62-476e-a5a4-86da99346aa3"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": true,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 17,
+        "task_id": "86641e0f-0f95-4030-86a6-d051e927b87d",
+        "profile_id": "khansa",
+        "title": "Supabase + Clay backend integration for Lovable-built SaaS",
+        "captured_reasons": [],
+        "client_signal": {
+          "spent": 137900,
+          "rating": 4.88,
+          "budget_min": 50,
+          "budget_max": 100
+        },
+        "category": "candidate_false_reject",
+        "expected_decision": "proceed",
+        "expected_gates": [],
+        "expected_reasons": [],
+        "notes": "CANDIDATE FALSE REJECT — every gate should pass. If classifier says PROCEED → positive calibration signal. If reject → the reason itself is informative."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 672,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "khansa",
+        "job_external_id": "022047657690831911514",
+        "snapshot_id": "7028d70e-d25d-4c72-ba84-5448676359f2",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "86641e0f-0f95-4030-86a6-d051e927b87d",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "86641e0f-0f95-4030-86a6-d051e927b87d",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "cd355fb6-56b5-4de6-ab6f-66b4a60747a6",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 470,
+        "_dlq_id": null,
+        "task": {
+          "title": "Supabase + Clay backend integration for Lovable-built SaaS app",
+          "raw_title": "[Khansa] Supabase + Clay backend integration for Lovable-built SaaS app",
+          "current_column": "N/A",
+          "current_assignee_name": "Shayan",
+          "created_at": "2026-04-24T12:46:24.917Z",
+          "stage_entered_at": "2026-04-24T15:33:02.472Z"
+        },
+        "_task_id": "86641e0f-0f95-4030-86a6-d051e927b87d"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": false,
+        "reason_overlap": null,
+        "borderline_credit": 0,
+        "points": 0
+      }
+    },
+    {
+      "fixture": {
+        "id": 18,
+        "task_id": "c8e6ead1-283d-4cc0-aef9-e6638eb94854",
+        "profile_id": "sana",
+        "title": "(lra) Website development (in React/NextJS 16) w/ Sliders, Animations",
+        "captured_reasons": [],
+        "client_signal": {
+          "spent": 189800,
+          "rating": 4.81,
+          "fixed_amount": 2300
+        },
+        "category": "candidate_false_reject",
+        "expected_decision": "proceed",
+        "expected_gates": [],
+        "expected_reasons": [],
+        "notes": "CANDIDATE FALSE REJECT — Next.js is Sana's stack, client is excellent. Expected: PROCEED."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 752,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "sana",
+        "job_external_id": "022048755386427826837",
+        "snapshot_id": "6ce8bae8-7d39-435f-a1a2-5101799263e4",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "c8e6ead1-283d-4cc0-aef9-e6638eb94854",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "c8e6ead1-283d-4cc0-aef9-e6638eb94854",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "5892c1f1-8885-4da7-b549-f8de63d12c1f",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 471,
+        "_dlq_id": null,
+        "task": {
+          "title": "(lra) Website development (in React/NextJS 16)  w/ Sliders, Animations",
+          "raw_title": "[Sana] (lra) Website development (in React/NextJS 16)  w/ Sliders, Animations",
+          "current_column": "N/A",
+          "current_assignee_name": "Saba",
+          "created_at": "2026-04-27T13:29:19.967Z",
+          "stage_entered_at": "2026-04-27T13:32:00.740Z"
+        },
+        "_task_id": "c8e6ead1-283d-4cc0-aef9-e6638eb94854"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": false,
+        "reason_overlap": null,
+        "borderline_credit": 0,
+        "points": 0
+      }
+    },
+    {
+      "fixture": {
+        "id": 19,
+        "task_id": "b206db0f-564a-4ed8-be53-31d60dc4d23b",
+        "profile_id": "craig",
+        "title": "Zoho Creator App Development",
+        "captured_reasons": [],
+        "client_signal": {
+          "spent": 145800,
+          "rating": 5,
+          "fixed_amount": 1500
+        },
+        "category": "candidate_borderline",
+        "expected_decision": "reject",
+        "expected_gates": [
+          1
+        ],
+        "expected_reasons": [
+          "Out of stack"
+        ],
+        "borderline": true,
+        "notes": "Zoho Creator not in Craig's mobile-dev stack. Expected reject (gate 1); agent may have forgotten to tag. Half-credit on borderline."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 700,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "craig",
+        "job_external_id": "022046696517819038298",
+        "snapshot_id": "790e501e-6adc-41c6-8d7c-d3f1776e830c",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "b206db0f-564a-4ed8-be53-31d60dc4d23b",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "b206db0f-564a-4ed8-be53-31d60dc4d23b",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "b4553c59-4a6e-48fe-b638-f88988669829",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 472,
+        "_dlq_id": null,
+        "task": {
+          "title": "Zoho Creator App Development",
+          "raw_title": "[Craig] Zoho Creator App Development",
+          "current_column": "N/A",
+          "current_assignee_name": "Mubashir",
+          "created_at": "2026-04-21T21:13:22.426Z",
+          "stage_entered_at": "2026-04-21T21:15:21.128Z"
+        },
+        "_task_id": "b206db0f-564a-4ed8-be53-31d60dc4d23b"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": null,
+        "borderline_credit": 1,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 20,
+        "task_id": "db37076e-4750-4be6-8d15-b19efb315d25",
+        "profile_id": "sana",
+        "title": "Elementor WordPress Page Builder (Execution Only – No Design Required)",
+        "captured_reasons": [],
+        "client_signal": {
+          "spent": 11900,
+          "rating": 4.95,
+          "budget_min": 12,
+          "budget_max": 22
+        },
+        "category": "candidate_borderline",
+        "expected_decision": "reject",
+        "expected_gates": [
+          4
+        ],
+        "expected_reasons": [
+          "Low Higher rate"
+        ],
+        "borderline": true,
+        "notes": "Elementor in Sana's stack but budget at/below hourly floor. Expected reject (gate 4) OR proceed if Sana's hourly < $22. Half-credit on borderline."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 688,
+      "verdict": {
+        "decision": "reject",
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "rejection_reasons": [
+          "Old job",
+          "Low Higher rate"
+        ],
+        "gates": {},
+        "components": null,
+        "total_score": null,
+        "tier": "reject",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "proposal_angles": [],
+        "summary": "Deterministic reject: Old job, Low Higher rate",
+        "missing_signals": [],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "prompt_mode": "A_full",
+        "evaluation_path": "deterministic",
+        "classifier_mode_at_decision": "shadow",
+        "min_score_at_decision": 50,
+        "profile_id": "sana",
+        "job_external_id": "022048780408901848017",
+        "snapshot_id": "6ce8bae8-7d39-435f-a1a2-5101799263e4",
+        "model": "deterministic",
+        "source": "manual_url",
+        "task_id": "db37076e-4750-4be6-8d15-b19efb315d25",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "db37076e-4750-4be6-8d15-b19efb315d25",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "da02469c-8297-4c14-b341-6f2533d09745",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 473,
+        "_dlq_id": null,
+        "task": {
+          "title": "Elementor WordPress Page Builder (Execution Only – No Design Required)",
+          "raw_title": "[Sana] Elementor WordPress Page Builder (Execution Only – No Design Required)",
+          "current_column": "N/A",
+          "current_assignee_name": "Saba",
+          "created_at": "2026-04-27T15:08:19.448Z",
+          "stage_entered_at": "2026-04-27T15:32:41.764Z"
+        },
+        "_task_id": "db37076e-4750-4be6-8d15-b19efb315d25"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": null,
+        "borderline_credit": 1,
+        "points": 1
+      }
+    }
+  ]
+}

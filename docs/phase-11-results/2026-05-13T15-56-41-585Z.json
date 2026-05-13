@@ -1,0 +1,3434 @@
+{
+  "run_meta": {
+    "timestamp": "2026-05-13T15-56-41-585Z",
+    "webhook_url": "https://ikonicdev.app.n8n.cloud/webhook/job-evaluate-manual",
+    "fixtures_path": "docs/phase-11-fixtures.json",
+    "concurrency": 1,
+    "fixture_ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ]
+  },
+  "results": [
+    {
+      "fixture": {
+        "id": 1,
+        "task_id": "d2aeea13-d4d3-4e66-ac13-5b0d53f49a99",
+        "profile_id": "craig",
+        "title": "iOS App UX and UI Review",
+        "captured_reasons": [
+          "Already hired"
+        ],
+        "client_signal": {
+          "spent": 2100,
+          "rating": 4.93
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          7
+        ],
+        "expected_reasons": [
+          "Already hired"
+        ],
+        "notes": "Gate 7 — job_availability (already hired)."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 8546,
+      "verdict": {
+        "decision": "reject",
+        "total_score": 24,
+        "tier": "reject",
+        "rejection_reasons": [
+          "Out of stack",
+          "Old job",
+          "Too many invites",
+          "Client Low spending",
+          "Portfolio unavailable"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "Job description is focused on 'Rising Lions' dashboard sign-in, not mobile app development. Profile is a mobile app developer."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "Job data is an HTML snippet for a login page, not a job posting. This input cannot be a fresh job."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "Job data is a login page, not a job posting with proposal count. Assumed saturation as it's not a real job."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic",
+            "evidence": "Determined by deterministic checker. N/A for this type of input."
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "No client information available in the provided input (it's a login page HTML)."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "No client information available in the provided input (it's a login page HTML)."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The input is HTML for a login page, not an actual job posting. Thus, the job is not available."
+          },
+          "8_no_location_lockin": {
+            "status": "pass",
+            "evidence": "No location lock-in mentioned in the login page HTML."
+          },
+          "9_no_video_proposal": {
+            "status": "pass",
+            "evidence": "No video proposal requirement found in the login page HTML."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The job content is a login page, not a project description to match with a portfolio."
+          },
+          "11_no_duplicate": {
+            "status": "pending_for_llm",
+            "evidence": "This gate is handled by the deterministic checker. Skipping LLM evaluation."
+          }
+        },
+        "components": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The input is an HTML login page for 'Rising Lions', not a job requiring mobile app development."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "The job is an HTML login page, there is no relevant work to match to the profile's portfolio items."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "No client information (spent, hires, rating) is available in the provided input, as it's a login page."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "This is a login page, not a job posting, so there's no competition position to evaluate."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "The job (a login page for 'Rising Lions') does not align with mobile app development domains."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "The input is an irrelevant HTML page, making it impossible to assess experience level fit."
+          },
+          "red_flags": {
+            "value": 0,
+            "reason": "The input is entirely malformed (looks like an HTML login page instead of a job, missing all job fields)."
+          }
+        },
+        "summary": "This job is rejected because the input provided is an HTML login page and not an actual Upwork job posting. There is no stack match, no client information, and the job itself isn't available. This appears to be a malformed input.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "job_description",
+          "job_title",
+          "budget_type",
+          "budget_amount",
+          "proposals_count"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [
+          "sparse_client_metadata",
+          "missing_skills_tags"
+        ],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "craig",
+        "job_external_id": null,
+        "snapshot_id": "790e501e-6adc-41c6-8d7c-d3f1776e830c",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "d2aeea13-d4d3-4e66-ac13-5b0d53f49a99",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "d2aeea13-d4d3-4e66-ac13-5b0d53f49a99",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "ae58e440-8ec2-4b45-9028-f61d22f03c19",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 434,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "d2aeea13-d4d3-4e66-ac13-5b0d53f49a99"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 2,
+        "task_id": "8c9e2288-8cdf-48dc-9f75-c266de740deb",
+        "profile_id": "khansa",
+        "title": "Proactive Funnel & Website Assistant for Showit + Systeme.io",
+        "captured_reasons": [
+          "Bad rating client"
+        ],
+        "client_signal": {
+          "spent": 1000,
+          "rating": 1.52
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          6
+        ],
+        "expected_reasons": [
+          "Bad rating client"
+        ],
+        "notes": "Gate 6 — client_rating_floor (rating 1.52 < 4.0)."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 12512,
+      "verdict": {
+        "decision": "reject",
+        "total_score": 12,
+        "tier": "reject",
+        "rubric": {
+          "skill_match": {
+            "value": 0,
+            "reason": "Job description is not related to software development or Khansa's skills; it describes a login page for 'Rising Lions'."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "The job is for a login page, which does not align with any specific portfolio projects in Khansa's profile like 'Luxury Villas' or 'Booking Website'."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "Client metadata is completely missing from the input, indicating an inability to assess client quality."
+          },
+          "competition_position": {
+            "value": 5,
+            "reason": "No data on proposals count, but the job itself is not relevant."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "The job describes a login page for 'Rising Lions', which is not a domain Khansa has experience in."
+          },
+          "experience_level_fit": {
+            "value": 5,
+            "reason": "The job description is for a basic login page, not indicative of a senior/lead role that matches Khansa's profile."
+          },
+          "red_flags": {
+            "value": 2,
+            "reason": "The job data provided is HTML for a login page, not an actual job description, which is highly suspicious and vague. Missing client details are also a red flag."
+          }
+        },
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "The job description is an HTML rendering of a login page for 'Rising Lions', not a software development task aligned with Khansa's MERN/React/Node.js stack."
+          },
+          "2_freshness": {
+            "status": "pass",
+            "evidence": "Job input does not contain a 'posted_at' timestamp, so freshness cannot be determined. Assuming it's within 24 hours for evaluation."
+          },
+          "3_proposal_saturation": {
+            "status": "pass",
+            "evidence": "No 'proposals_count' found in the job data. Cannot determine saturation."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic",
+            "evidence": "Deterministic checker found the hourly floor condition passed or was not applicable."
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "Client total spent is null, which is below the $1,000 lifetime floor."
+          },
+          "6_client_rating_floor": {
+            "status": "pass",
+            "evidence": "Client rating is null, and client hires are null, so it's treated as a new client with no rating yet."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The job description is an HTML page source, not an actual job posting. It describes a 'Sign in to access your dashboard' page, indicating no actual open role."
+          },
+          "8_no_location_lockin": {
+            "status": "pass",
+            "evidence": "The job description does not specify any geographical location requirements for the freelancer."
+          },
+          "9_no_video_proposal": {
+            "status": "pass",
+            "evidence": "The job description does not contain any keywords or phrases requiring a video introduction or pitch."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The job data is an HTML login page; there's no project that 'mirrors' this pseudo-job's requirements in Khansa's portfolio."
+          },
+          "11_no_duplicate": {
+            "status": "pass",
+            "evidence": "Deterministic checker did not flag this as a duplicate."
+          }
+        },
+        "rejection_reasons": [
+          "Out of stack",
+          "Client Low spending",
+          "Job unavailable",
+          "Portfolio unavailable"
+        ],
+        "summary": "This job is rejected because it is completely out of stack, appearing as an HTML login page rather than a development task. The client metadata is missing, and no relevant portfolio items can be matched. There appears to be no actual job available. ",
+        "proposal_angles": [],
+        "missing_signals": [
+          "client_payment_verified",
+          "client_member_since",
+          "full_job_description",
+          "job_budget_type",
+          "job_skills"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 0.9,
+        "confidence_warnings": [
+          "sparse_client_metadata",
+          "missing_skills_tags",
+          "description_truncated"
+        ],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "khansa",
+        "job_external_id": null,
+        "snapshot_id": "7028d70e-d25d-4c72-ba84-5448676359f2",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "8c9e2288-8cdf-48dc-9f75-c266de740deb",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "8c9e2288-8cdf-48dc-9f75-c266de740deb",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "57a19b57-c08e-487e-8541-097a2f5e6534",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 435,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "8c9e2288-8cdf-48dc-9f75-c266de740deb"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 3,
+        "task_id": "bfa1eed1-b525-4198-a864-1da119cb891a",
+        "profile_id": "shayan",
+        "title": "Simple Browser Automation Script to Save Pages as PDFs",
+        "captured_reasons": [
+          "Client Low spending"
+        ],
+        "client_signal": {
+          "spent": 154,
+          "rating": 4.75
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          5
+        ],
+        "expected_reasons": [
+          "Client Low spending"
+        ],
+        "notes": "Gate 5 — client_spend_floor (spent $154 < $1k)."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 7963,
+      "verdict": {
+        "decision": "reject",
+        "total_score": 12,
+        "tier": "reject",
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "Job description contains no relevant keywords or project details to match Shayan's stack, only login UI elements."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "Job description is a static HTML snippet of a login page (Rising Lions dashboard), not a real job posting. It has no date."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "No proposal count available; the input is a static login page HTML, not an Upwork job listing."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic",
+            "evidence": "Job budget type and amount are not specified in the input. Deterministic checker passed as cannot evaluate."
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "No client information available in the input, which is a static login page."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "No client information available, especially client rating, from the provided login page HTML."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The input is a static HTML page for 'Rising Lions' login portal, not an active Upwork job posting."
+          },
+          "8_no_location_lockin": {
+            "status": "fail",
+            "evidence": "The input HTML is a login page, not a job description, so no location requirements can be assessed."
+          },
+          "9_no_video_proposal": {
+            "status": "fail",
+            "evidence": "The input is a login page HTML. It does not contain any job description or proposal requirements."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The input is a static HTML for a login page; there are no job requirements to match against Shayan's portfolio."
+          },
+          "11_no_duplicate": {
+            "status": "fail",
+            "evidence": "The provided input is not a real job, but a static HTML response. It's a duplicate of a test pattern."
+          }
+        },
+        "rejection_reasons": [
+          "Out of stack",
+          "Old job",
+          "Too many invites",
+          "Client Low spending",
+          "Bad rating client",
+          "Job unavailable",
+          "Location loc",
+          "Video Proposal",
+          "Portfolio unavailable",
+          "Duplicate",
+          "Red flag"
+        ],
+        "rubric": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job's content is the HTML of a static login page; no skills or project requirements are mentioned to match Shayan's profile."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "There is no job description to connect with Shayan's portfolio items like 'Landscale management platform'."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "No client information (spend, hires, rating) is available in the provided HTML input, making quality assessment impossible."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "No proposal count or posting date information is available from the login page HTML to gauge competition or freshness."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "The job description is missing; no industry or problem domain can be inferred to match Shayan's past work."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "No job seniority cues or specific requirements are present in the provided HTML to assess fit."
+          },
+          "red_flags": {
+            "value": 2,
+            "reason": "The input is not a job posting but a static HTML login page, indicating a significant data ingestion issue or test pattern."
+          }
+        },
+        "summary": "This input is not an Upwork job posting but rather the static HTML of a 'Rising Lions' login page. It fails all LLM-evaluated hard gates due to a complete lack of job-specific data. It's broadly irrelevant and contains multiple red flags.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "client_payment_verified",
+          "client_member_since",
+          "full_job_description",
+          "job_title",
+          "job_skills",
+          "job_budget_type",
+          "job_budget_amount",
+          "job_proposals_count",
+          "job_posted_at"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "shayan",
+        "job_external_id": null,
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "bfa1eed1-b525-4198-a864-1da119cb891a",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "bfa1eed1-b525-4198-a864-1da119cb891a",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "eeae2144-1f5d-4459-a36c-57caa4d925b1",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 436,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "bfa1eed1-b525-4198-a864-1da119cb891a"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": true,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 4,
+        "task_id": "68795ef9-8073-47e2-889b-439ae9e5255b",
+        "profile_id": "shayan",
+        "title": "Joomla Web Maintenance",
+        "captured_reasons": [
+          "Job unavailable"
+        ],
+        "client_signal": {
+          "spent": 28800,
+          "rating": 4.99
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          7
+        ],
+        "expected_reasons": [
+          "Job unavailable"
+        ],
+        "notes": "Gate 7 — semantic: marked closed/unavailable in description."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 7448,
+      "verdict": {
+        "decision": "reject",
+        "total_score": 26,
+        "tier": "reject",
+        "rejection_reasons": [
+          "Out of stack",
+          "Old job",
+          "Client Low spending",
+          "Bad rating client"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "Job description is a generic HTML login page for 'Rising Lions' with no discernible tech stack or actual job requirements. Does not match Shayan's profile."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "Job posted multiple days ago, outside the 24-hour freshness window. The page is a static HTML snapshot."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "Not enough job data to determine proposal count reliably from the HTML. The job appears to be a static page, not an actual Upwork listing."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic"
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "Client data is entirely absent, indicating a total spent of $0 which is below the $1,000 floor."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "Client rating data is not available, which fails the rating floor. No hires means a new client, but missing rating data is still a flag."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The job data provided is an HTML snippet of a sign-in page, not an active job posting. The job is clearly unavailable for proposal."
+          },
+          "8_no_location_lockin": {
+            "status": "pass",
+            "evidence": "No explicit location lock-in phrases found in the provided HTML."
+          },
+          "9_no_video_proposal": {
+            "status": "pass",
+            "evidence": "No mention of video proposal requirement in the provided HTML."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The job is a generic HTML login page with no specified skills or requirements to match any portfolio item."
+          },
+          "11_no_duplicate": {
+            "status": "pass",
+            "evidence": "Deterministic check for duplicates cannot be performed with the provided data, assumed pass."
+          }
+        },
+        "components": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job description is an HTML login page with no discernible technical skills or requirements, hence no match to Shayan's profile."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "The job details are a generic HTML login page, providing no context for portfolio alignment."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "Client data (total spent, hires, rating) is completely missing, indicating extremely low client quality signals."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "Job appears to be a static HTML page, not an active Upwork listing, thus impossible to assess competition or freshness."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "The job is a generic login page for 'Rising Lions', offering no specific domain or industry to match Shayan's prior work."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "No seniority or experience level is indicated in the generic HTML snippet provided as the job description."
+          },
+          "red_flags": {
+            "value": 6,
+            "reason": "The job data is an HTML snippet of a login page for 'Rising Lions' which is extremely vague, suspicious, and likely not a real job posting. Client metadata is completely absent."
+          }
+        },
+        "summary": "Rejected: This is not a valid job posting. The provided 'job data' is an HTML snippet of a generic login page for 'Rising Lions', lacking any actual job description, skills, budget, or client metadata. It would fail on stack match, freshness, client quality, and availability.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "client_payment_verified",
+          "client_member_since",
+          "full_job_description"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 0.9,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "shayan",
+        "job_external_id": null,
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "68795ef9-8073-47e2-889b-439ae9e5255b",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "68795ef9-8073-47e2-889b-439ae9e5255b",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "21240905-9361-4126-9e0e-d5242c7d0a87",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 437,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "68795ef9-8073-47e2-889b-439ae9e5255b"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 5,
+        "task_id": "bdae7586-c8b0-4ab1-8fa8-cbb3e65adb04",
+        "profile_id": "shayan",
+        "title": "Przebudowa 2 serwisów + migracja + SEO (WordPress) (Polish)",
+        "captured_reasons": [
+          "Language barrier"
+        ],
+        "client_signal": {},
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [],
+        "expected_reasons": [
+          "Language barrier"
+        ],
+        "notes": "Soft signal — non-English description. May land in 'review' if classifier doesn't flag the soft signal as hard reject."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 5845,
+      "verdict": {
+        "decision": "reject",
+        "total_score": 1,
+        "tier": "reject",
+        "rejection_reasons": [
+          "Out of stack",
+          "Job unavailable"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "The job description contains no discernible project details or required tech stack. It's a login page for 'Rising Lions', not a development job."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "The job data provided is an HTML snippet of a login page for 'Rising Lions', indicating it was not a job posting found on Upwork within the last 24 hours."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "The input is a login page, not an Upwork job posting, so there is no proposals count."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic"
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "The input is a login page, not an Upwork job posting, so no client spend information is available."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "The input is a login page, not an Upwork job posting, so no client rating information is available."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The job data is an HTML snippet for a login page, not an actual job posting, indicating it's unavailable or not a real job."
+          },
+          "8_no_location_lockin": {
+            "status": "fail",
+            "evidence": "The input is a login page, not an Upwork job posting, so there's no location requirement."
+          },
+          "9_no_video_proposal": {
+            "status": "fail",
+            "evidence": "The input is a login page, not an Upwork job posting, so there's no mention of a video proposal."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The job description is a login page and does not contain any core technology requirements to match against the profile's portfolio."
+          },
+          "11_no_duplicate": {
+            "status": "pass",
+            "evidence": "N/A - Not a duplicate as this is not an actual job posting."
+          }
+        },
+        "rubric": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job description is a login page and contains no relevant skills to match with the profile."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "The job description is a login page and provides no scope to reference against portfolio items."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "No client information available as the input is a login page, not a job posting."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "Not a valid job posting; freshness and proposal counts are irrelevant."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "No domain specified in the provided login page data."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "No experience level can be inferred from a login page."
+          },
+          "red_flags": {
+            "value": 1,
+            "reason": "The input is an HTML snippet of a login page for 'Rising Lions' which is effectively empty job data, posing a significant red flag."
+          }
+        },
+        "summary": "This input is an HTML snippet for a login page for 'Rising Lions', not an actual Upwork job posting. It fails all LLM-evaluated gates as there is no job data to analyze, leading to a rejection due to 'Out of stack' and 'Job unavailable'.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "client_payment_verified",
+          "client_member_since",
+          "full_job_description"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "shayan",
+        "job_external_id": null,
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "bdae7586-c8b0-4ab1-8fa8-cbb3e65adb04",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "bdae7586-c8b0-4ab1-8fa8-cbb3e65adb04",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "19c49f6b-dc00-495c-87ad-529d8eb6a28e",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 438,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "bdae7586-c8b0-4ab1-8fa8-cbb3e65adb04"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 6,
+        "task_id": "99ab1646-87b3-4736-8c79-c2ccaba3ae97",
+        "profile_id": "shayan",
+        "title": "Peptide Website Development",
+        "captured_reasons": [
+          "Location loc"
+        ],
+        "client_signal": {
+          "budget_min": 15,
+          "budget_max": 25
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          8
+        ],
+        "expected_reasons": [
+          "Location loc"
+        ],
+        "notes": "Gate 8 — no_location_lockin (residency requirement in description)."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 14434,
+      "verdict": {
+        "decision": "reject",
+        "total_score": 12,
+        "tier": "reject",
+        "rubric": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job description is an HTML document for a login page, not a job posting. No relevant skills are available."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "No job description, so no portfolio match can be made."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "External job post, client metadata is missing."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "External job post, no proposal count or freshness metrics available."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "No job description, no domain match can be made."
+          },
+          "experience_level_fit": {
+            "value": 2,
+            "reason": "Cannot assess experience level fit without a job description. Profile is Top Rated Plus."
+          },
+          "red_flags": {
+            "value": 10,
+            "reason": "The job data is an HTML document of a login page for 'Rising Lions', indicating a severe parsing error and not a legitimate job."
+          }
+        },
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "Job data is an HTML login page, not a job description, therefore no stack can be matched.",
+            "reason_label": "Out of stack"
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "The job data is a static HTML page, not a live job posting with a 'posted_at' timestamp. Impossible to determine freshness.",
+            "reason_label": "Old job"
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "The job data is an HTML login page, not an Upwork job posting. No `proposals_count` available.",
+            "reason_label": "Too many invites"
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic",
+            "evidence": "Passed by deterministic criteria.",
+            "reason_label": null
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "The job data is an HTML login page, not an Upwork job posting. `client_total_spent` is null.",
+            "reason_label": "Client Low spending"
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "The job data is an HTML login page, not an Upwork job posting. `client_rating` is null.",
+            "reason_label": "Bad rating client"
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The job data is an HTML login page, indicating it is not a live job posting.",
+            "reason_label": "Job unavailable"
+          },
+          "8_no_location_lockin": {
+            "status": "fail",
+            "evidence": "The job data is an HTML login page; no job description to check for location lock-in.",
+            "reason_label": "Location loc"
+          },
+          "9_no_video_proposal": {
+            "status": "fail",
+            "evidence": "The job data is an HTML login page; no job description to check for video proposal requirements.",
+            "reason_label": "Video Proposal"
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "No actual job description to match against profile portfolio items.",
+            "reason_label": "Portfolio unavailable"
+          },
+          "11_no_duplicate": {
+            "status": "fail",
+            "evidence": "This is not a valid job posting, but an HTML page for Rising Lions (our own UI). This is a duplicate of a specific internal-use artifact, not a job. Rejection is for job validity, not strictly _actual duplicate job_.",
+            "reason_label": "Duplicate"
+          }
+        },
+        "rejection_reasons": [
+          "Out of stack",
+          "Old job",
+          "Too many invites",
+          "Client Low spending",
+          "Bad rating client",
+          "Job unavailable",
+          "Location loc",
+          "Video Proposal",
+          "Portfolio unavailable",
+          "Duplicate"
+        ],
+        "summary": "This job is rejected because the provided 'job data' is an HTML document for the Rising Lions login page, not an actual job posting. This indicates a parsing error or misrouted data, making it impossible to evaluate any job-specific criteria.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "job_title",
+          "job_description",
+          "job_type",
+          "budget_type",
+          "budget_min",
+          "budget_max",
+          "skills_required",
+          "proposals_count",
+          "posted_at",
+          "client_total_spent",
+          "client_total_feedback",
+          "client_total_jobs_posted",
+          "client_avg_hourly_rate_paid",
+          "client_hires",
+          "client_active_hires",
+          "client_country",
+          "client_city",
+          "client_past_hires",
+          "client_payment_verified",
+          "client_member_since",
+          "client_org_uid",
+          "client_id",
+          "client_last_activity",
+          "url"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [
+          "sparse_client_metadata",
+          "missing_skills_tags"
+        ],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "shayan",
+        "job_external_id": null,
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "99ab1646-87b3-4736-8c79-c2ccaba3ae97",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "99ab1646-87b3-4736-8c79-c2ccaba3ae97",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "676d92dd-4155-4638-b16b-bc253094cc92",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 439,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "99ab1646-87b3-4736-8c79-c2ccaba3ae97"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": true,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 7,
+        "task_id": "520f74af-1e4a-4c96-8c9f-5f8ff993bf74",
+        "profile_id": "shayan",
+        "title": "WordPress Speed Optimization Expert",
+        "captured_reasons": [
+          "Low Higher rate"
+        ],
+        "client_signal": {
+          "spent": 5200,
+          "rating": 3.81,
+          "budget": "Not specified"
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          4,
+          6
+        ],
+        "expected_reasons": [
+          "Low Higher rate",
+          "Bad rating client"
+        ],
+        "notes": "Primary gate 4 (hourly_floor) but rating 3.81 < 4.0 also fires gate 6. Either reason qualifies."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 6933,
+      "verdict": {
+        "decision": "reject",
+        "total_score": 12,
+        "tier": "reject",
+        "rejection_reasons": [
+          "Out of stack",
+          "Old job",
+          "Job unavailable"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "Job description is an HTML login page for 'Rising Lions', not a software development job. It doesn't align with Shayan's stack."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "The job data is an HTML document for a login page, not signaling a fresh job posting."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "Job data is an HTML login page; no information on proposals count. This is not a job posting."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic",
+            "evidence": "Budget is not specified in the job data. Deterministic skipped."
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "Job data is an HTML login page; no client information is available to assess spend."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "Job data is an HTML login page; no client information is available to assess rating."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The job data provided is an HTML login page for 'Rising Lions', indicating it's not an active job posting."
+          },
+          "8_no_location_lockin": {
+            "status": "pass",
+            "evidence": "Job data is an HTML login page and contains no text indicating location lock-in."
+          },
+          "9_no_video_proposal": {
+            "status": "pass",
+            "evidence": "Job data is an HTML login page and contains no text requiring a video proposal."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The job description is an HTML login page; no skills or requirements can be inferred to match Shayan's portfolio."
+          },
+          "11_no_duplicate": {
+            "status": "pass",
+            "evidence": "Deterministic check for duplicates passed."
+          }
+        },
+        "components": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job content is an HTML login page, not a project requiring specific development skills. Zero stack alignment."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "Input is an HTML login page, no job requirements to match against Shayan's portfolio items (Laravel, PHP, WordPress projects)."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "No client information (spend, hires, rating) is available in the provided HTML data to assess quality."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "No job posting details (freshness, proposals count) are available in the HTML data to gauge competition."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "The job data is an HTML login page; no industry or problem domain to match with Shayan's prior work."
+          },
+          "experience_level_fit": {
+            "value": 2,
+            "reason": "No job seniority signals available in the HTML login page. Profile is Top Rated Plus."
+          },
+          "red_flags": {
+            "value": 10,
+            "reason": "The entire job 'description' being an HTML login page is a significant red flag for job validity."
+          }
+        },
+        "summary": "This job is rejected because the provided content is an HTML login page for 'Rising Lions', not a valid job posting. It fails to match Shayan's skill stack and lacks any identifiable job details for evaluation.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "job_title",
+          "job_description",
+          "budget_type",
+          "budget_min",
+          "budget_max",
+          "proposals_count",
+          "posted_at",
+          "client_total_spent",
+          "client_hires",
+          "client_rating",
+          "job_type",
+          "client_country"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "shayan",
+        "job_external_id": null,
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "520f74af-1e4a-4c96-8c9f-5f8ff993bf74",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "520f74af-1e4a-4c96-8c9f-5f8ff993bf74",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "e1d18c61-6a6b-4aef-9576-d4688f1eb17d",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 440,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "520f74af-1e4a-4c96-8c9f-5f8ff993bf74"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 8,
+        "task_id": "34d3baac-bc20-4873-9d4c-26a086ac182c",
+        "profile_id": "saim",
+        "title": "Operations Specialist wanted for busy Founder",
+        "captured_reasons": [
+          "Old job"
+        ],
+        "client_signal": {
+          "spent": 29000,
+          "rating": 4.72,
+          "budget_min": 25
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          2
+        ],
+        "expected_reasons": [
+          "Old job"
+        ],
+        "notes": "Gate 2 — freshness (>24h posted)."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 11751,
+      "verdict": {
+        "decision": "reject",
+        "rejection_reasons": [
+          "Out of stack",
+          "Old job",
+          "Job unavailable"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "The job description is an HTML login page for 'Rising Lions' with no relevant job details, skills, or project scope that matches AI/ML or RAG. This is clearly not a job posting."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "The job data is an HTML document for a login page containing copyright information up to 2026, but does not indicate a recent job posting."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "The job data is an HTML login page, not an Upwork job posting, so there are no proposal counts available."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic"
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "The input references an HTML login page; no client spend information is present as it's not a valid job posting."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "The input references an HTML login page; no client rating information is present as it's not a valid job posting."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The job data provided is an HTML login page for 'Rising Lions', not an actual job posting. Therefore, no job is available."
+          },
+          "8_no_location_lockin": {
+            "status": "fail",
+            "evidence": "The job data is an HTML login page and does not contain any job description to evaluate location requirements."
+          },
+          "9_no_video_proposal": {
+            "status": "fail",
+            "evidence": "The job data is an HTML login page and does not contain any job description to evaluate video proposal requirements."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The job data is an HTML login page for 'Rising Lions' with no relevant job details, skills, or project scope to match against portfolio items."
+          },
+          "11_no_duplicate": {
+            "status": "pending_for_llm",
+            "evidence": "The provided job content is an HTML login page, not a job, making duplicate detection impossible."
+          }
+        },
+        "rubric": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job data is an HTML login page, not a job posting with any skills to match against."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "The job data is an HTML login page, so there is no relevant job content to relate to the freelancer's portfolio."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "The input is an HTML login page, not a job posting, and thus contains no client information (spend, hires, rating)."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "The job data is an HTML login page, not a job posting, so there's no information on proposals or freshness."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "The job data is an HTML login page and provides no information about the industry or problem domain."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "The job data is an HTML login page and provides no information on required experience level."
+          },
+          "red_flags": {
+            "value": 0,
+            "reason": "The entire job data is an HTML login page and not an actual job post, which is a major red flag as it's not a valid job."
+          }
+        },
+        "total_score": 0,
+        "tier": "reject",
+        "summary": "This job is completely irrelevant as the provided 'job data' is an HTML login page for 'Rising Lions' and not an actual job posting. It fails all content-based gates, including stack match, freshness, client quality, and availability. Rejection is due to the job not existing in a recognized format.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "job_title",
+          "job_description",
+          "skills_required",
+          "job_type",
+          "budget_type",
+          "client_total_spent",
+          "client_hires",
+          "client_rating",
+          "proposals_count",
+          "posted_at"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "saim",
+        "job_external_id": null,
+        "snapshot_id": "8d841d0b-84ae-4b95-b471-c1cb6c4d6bff",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "34d3baac-bc20-4873-9d4c-26a086ac182c",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "34d3baac-bc20-4873-9d4c-26a086ac182c",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "5bcfbf70-f190-49ed-9d68-30ec898cb16c",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 441,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "34d3baac-bc20-4873-9d4c-26a086ac182c"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": true,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 9,
+        "task_id": "18b996e2-1bb3-42e1-8c1b-174218d2f1d2",
+        "profile_id": "shayan",
+        "title": "Kartra Central Hub + GoHighLevel Funnel Builder",
+        "captured_reasons": [
+          "Out of stack"
+        ],
+        "client_signal": {
+          "spent": 8900,
+          "rating": 4.53,
+          "budget_min": 16,
+          "budget_max": 20
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          1
+        ],
+        "expected_reasons": [
+          "Out of stack"
+        ],
+        "notes": "Gate 1 — stack_match (Kartra/GHL not in Shayan's Laravel/WP stack)."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 8569,
+      "verdict": {
+        "decision": "reject",
+        "rejection_reasons": [
+          "Out of stack",
+          "Job unavailable"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "The job description is for a website login page which is not a deliverable project that aligns with the profile's stack."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "The job description contains HTML of a static login page for an internal tool, not a job posting with a 'posted_at' timestamp."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "The job description is for a website login page and does not contain proposal counts. It is not an Upwork job posting."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic"
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "The job description is for a website login page and does not contain client metadata such as client_total_spent."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "The job description is for a website login page and does not contain client metadata such as client_rating."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The job description is a static HTML page for a login portal, not an active job posting. It describes a 'Sign in to access your dashboard' feature."
+          },
+          "8_no_location_lockin": {
+            "status": "fail",
+            "evidence": "The job description is a static HTML page, not a job posting. It does not contain any location requirements."
+          },
+          "9_no_video_proposal": {
+            "status": "fail",
+            "evidence": "The job description is a static HTML page, not a job posting. It does not contain any video proposal requirements."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The job description is a static HTML login page, there are no core technologies or project requirements to match with portfolio items."
+          },
+          "11_no_duplicate": {
+            "status": "fail",
+            "evidence": "Not an actual job posting; cannot determine if it's a duplicate of a legitimate job."
+          }
+        },
+        "rubric": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job is a static HTML login page for an internal tool, not a development project. No skills match."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "The job is a static HTML login page, not a project to which portfolio items can be matched."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "No client information available in the provided job description as it is an HTML page."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "Not a job posting; no competition or freshness metrics apply."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "The input is a login page, not a job in a specific industry or problem domain."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "Not a job posting with an experience level."
+          },
+          "red_flags": {
+            "value": 0,
+            "reason": "The entire job description is a login page, indicating a data ingestion error or misclassification as a job."
+          }
+        },
+        "total_score": 0,
+        "tier": "reject",
+        "summary": "This job is rejected because the provided data is not an Upwork job posting; it appears to be a static HTML login page. Therefore, it is out of stack and unavailable.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "client_payment_verified",
+          "client_member_since",
+          "full_job_description"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 0.9,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "shayan",
+        "job_external_id": null,
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "18b996e2-1bb3-42e1-8c1b-174218d2f1d2",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "18b996e2-1bb3-42e1-8c1b-174218d2f1d2",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "c97c84d1-890b-49b4-9810-6f43dbdabfcd",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 442,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "18b996e2-1bb3-42e1-8c1b-174218d2f1d2"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": true,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 10,
+        "task_id": "d1de1bfc-5d21-405e-983e-a693a43d9101",
+        "profile_id": "khansa",
+        "title": "AI-Augmented Software Engineer (Contract) — Claude Code",
+        "captured_reasons": [
+          "Portfolio unavailable"
+        ],
+        "client_signal": {
+          "spent": 10400,
+          "budget_min": 30,
+          "budget_max": 45
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          10
+        ],
+        "expected_reasons": [
+          "Portfolio unavailable"
+        ],
+        "borderline": true,
+        "notes": "Gate 10 with soft-pass for top_rated (Khansa qualifies). Classifier may SOFT-PASS → proceed. Calibration case — half-credit on borderline outcome."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 7177,
+      "verdict": {
+        "decision": "reject",
+        "total_score": 1,
+        "tier": "reject",
+        "rubric_components": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job description is for 'Rising Lions' login page, not a development task. No relevant skills are mentioned."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "The job is an artifact of a web page about Rising Lions, not a project requiring portfolio evidence."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "Client metadata is absent, which cannot be assessed as a real client."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "This is a web page, not a job posting. Competition is not applicable."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "The job is a web page, not a project within a specific domain."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "No experience level can be inferred from a web page."
+          },
+          "red_flags": {
+            "value": 1,
+            "reason": "The 'job' itself is a red flag as it appears to be a parsed HTML page rather than a legitimate job posting on an external platform."
+          }
+        },
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "The job description contains HTML for a login page for 'Rising Lions' and does not describe actual development skills."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "The job input is an HTML document, not a job posting with a 'posted_at' timestamp. No freshness can be determined."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "This is an HTML page, not an Upwork job with a 'proposals_count'."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic"
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "No client spend data is present in the provided HTML job description."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "No client rating data is present in the provided HTML job description."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "This is an HTML page and not a job posting. It cannot be determined if the 'job' is available or closed."
+          },
+          "8_no_location_lockin": {
+            "status": "fail",
+            "evidence": "The 'job' is an HTML page, not a job posting with location requirements. No location lock-in is mentioned."
+          },
+          "9_no_video_proposal": {
+            "status": "fail",
+            "evidence": "The 'job' is an HTML page, not a job posting. No video proposal requirement is specified."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The 'job' is an HTML page for a login portal, not a project that requires specific portfolio items."
+          },
+          "11_no_duplicate": {
+            "status": "fail",
+            "evidence": "This is a web page and not a job posting which would have a job ID. Not a duplicate in the context of job postings."
+          }
+        },
+        "rejection_reasons": [
+          "Out of stack",
+          "Old job",
+          "Too many invites",
+          "Client Low spending",
+          "Bad rating client",
+          "Job unavailable",
+          "Location loc",
+          "Video Proposal",
+          "Portfolio unavailable",
+          "Duplicate",
+          "Red flag"
+        ],
+        "summary": "This input is an HTML representation of a 'Rising Lions' login page, not an Upwork job posting. It lacks all the necessary metadata to be evaluated as a job. It is rejected due to being completely out of stack, missing client data, and indicating a red flag.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "client_payment_verified",
+          "client_member_since",
+          "full_job_description",
+          "job_type",
+          "duration",
+          "job_total_hours",
+          "budget_min",
+          "budget_max",
+          "client_country",
+          "job_skills_required",
+          "posted_at",
+          "proposals_count"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "khansa",
+        "job_external_id": null,
+        "snapshot_id": "7028d70e-d25d-4c72-ba84-5448676359f2",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "d1de1bfc-5d21-405e-983e-a693a43d9101",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "d1de1bfc-5d21-405e-983e-a693a43d9101",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "866d1a52-9c0c-457b-96cf-9994b4433351",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 443,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "d1de1bfc-5d21-405e-983e-a693a43d9101"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": true,
+        "borderline_credit": 1,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 11,
+        "task_id": "731abf6b-79f3-4cba-a464-61d2e4649318",
+        "profile_id": "shayan",
+        "title": "Website Re-Theming and Design",
+        "captured_reasons": [
+          "Too many invites"
+        ],
+        "client_signal": {
+          "budget_min": 20,
+          "budget_max": 50
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          3
+        ],
+        "expected_reasons": [
+          "Too many invites"
+        ],
+        "notes": "Gate 3 — proposal_saturation (≥30 proposals)."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 26394,
+      "verdict": {
+        "decision": "reject",
+        "rejection_reasons": [
+          "Out of stack",
+          "Old job"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "Job description is a login page for 'Rising Lions' dashboard, not a job posting. Does not align with any developer stack."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "Job posting is actually an HTML snippet of a login page, not a job. No 'posted_at' field to evaluate freshness."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "Job posting is a login page, not an actual job. No `proposals_count` available."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic"
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "Job posting is a login page, not an actual job. No client information available."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "Job posting is a login page, not an actual job. No client information available."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The job data provided is an HTML snippet of a login page, not a job posting. Therefore, it is not available."
+          },
+          "8_no_location_lockin": {
+            "status": "fail",
+            "evidence": "The job data provided is an HTML snippet of a login page. There is no job description to check for location lock-in."
+          },
+          "9_no_video_proposal": {
+            "status": "fail",
+            "evidence": "The job data provided is an HTML snippet of a login page. There is no job description to check for video proposal requirements."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The job data provided is an HTML snippet of a login page. There are no job skills or requirements to match with the portfolio."
+          },
+          "11_no_duplicate": {
+            "status": "fail",
+            "evidence": "The job data is not a real job posting but an HTML snippet of a login page, making it a unique non-job entry."
+          }
+        },
+        "rubric": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job data provided is an HTML login page, not a job description, so no skills can be matched."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "The job data is a login page, not a project description. No relevant portfolio items can be found."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "No client information is available as the provided data is a login page, not a job."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "No job posting details (freshness, proposals count) are available as the provided data is a login page."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "The 'job' is a login page, with no industry or problem domain to match."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "The 'job' is a login page, so no experience level can be inferred or matched."
+          },
+          "red_flags": {
+            "value": 0,
+            "reason": "The entire job posting is an HTML login page, which constitutes a major red flag as it's not a real job."
+          }
+        },
+        "total_score": 0,
+        "tier": "reject",
+        "summary": "This is not a job posting. The provided 'job data' is an HTML snippet of a login page for 'Rising Lions'. As such, it cannot be classified as a relevant job and is rejected due to being completely out of stack and not a legitimate job opportunity. The 'Old job' reason is also added due to its invalid format.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "job_title",
+          "job_description",
+          "budget",
+          "job_type",
+          "client_total_spent",
+          "client_hires",
+          "client_rating",
+          "skills_required",
+          "proposals_count",
+          "posted_at"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "shayan",
+        "job_external_id": null,
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "731abf6b-79f3-4cba-a464-61d2e4649318",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "731abf6b-79f3-4cba-a464-61d2e4649318",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "29bfb9c9-6212-4e67-be4a-e8dd553bf91d",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 444,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "731abf6b-79f3-4cba-a464-61d2e4649318"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 12,
+        "task_id": "c10162c1-2d27-4a40-a3b2-8cbdca319a64",
+        "profile_id": "sana",
+        "title": "Product Engineer (Next.js / Node) - AI Encouraged",
+        "captured_reasons": [
+          "Video Proposal"
+        ],
+        "client_signal": {
+          "spent": 1200000,
+          "rating": 4.97,
+          "budget_min": 40,
+          "budget_max": 65
+        },
+        "category": "single_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          9
+        ],
+        "expected_reasons": [
+          "Video Proposal"
+        ],
+        "notes": "Gate 9 — no_video_proposal. STRONG calibration case — every other signal excellent ($1.2M spent, 4.97). The verifier in C6 must flip this to reject if the LLM misses the video requirement."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 22002,
+      "verdict": {
+        "decision": "reject",
+        "total_score": 38,
+        "tier": "reject",
+        "rejection_reasons": [
+          "Out of stack",
+          "Old job",
+          "Job unavailable"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "Job description contains HTML source code for an Upwork login page, which does not align with any of the freelancer's technical skills."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "The job data provided is an HTML snippet for a login page, not a job posting. There is no `posted_at` field to determine freshness.",
+            "reason_label": "Old job"
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "Job data is an HTML snippet for a login page; `proposals_count` cannot be extracted."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic"
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "Job data is an HTML snippet for a login page; `client_total_spent` cannot be extracted."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "Job data is an HTML snippet for a login page; `client_rating` cannot be extracted."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The job description is an HTML login page, indicating the actual job posting is unavailable or malformed. Clearly says 'Sign in to access your dashboard'.",
+            "reason_label": "Job unavailable"
+          },
+          "8_no_location_lockin": {
+            "status": "fail",
+            "evidence": "The job description is an HTML login page, no location requirements can be assessed."
+          },
+          "9_no_video_proposal": {
+            "status": "fail",
+            "evidence": "The job description is an HTML login page, no video proposal requirement can be assessed."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The job description is an HTML login page, so there are no skills to match against the profile's portfolio."
+          },
+          "11_no_duplicate": {
+            "status": "pending_for_llm",
+            "evidence": "Unable to check for duplicates as the job content is not a real job posting. Assuming no duplicate for the purpose of a pass. This was NOT checked by a deterministic check."
+          }
+        },
+        "components": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job description is an HTML login page, completely irrelevant to Sana's development skills."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "No actionable job description to find matching portfolio evidence against."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "Client metadata (spend, hires, rating) is unavailable due to the malformed job data."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "`proposals_count` and `posted_at` are unavailable, making it impossible to assess competition."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "The 'job' is an Upwork login page; no industry or problem domain can be identified."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "No job seniority signals available from the malformed job data."
+          },
+          "red_flags": {
+            "value": 0,
+            "reason": "The job data provided is an HTML login page, which is a major red flag indicating a parsing or data ingestion issue."
+          }
+        },
+        "summary": "This job is rejected because the provided job data is an HTML login page, indicating that the job posting itself is unavailable or malformed. It fails multiple critical gates, including stack match, freshness, client quality, and job availability.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "client_payment_verified",
+          "client_member_since",
+          "full_job_description"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "sana",
+        "job_external_id": null,
+        "snapshot_id": "6ce8bae8-7d39-435f-a1a2-5101799263e4",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "c10162c1-2d27-4a40-a3b2-8cbdca319a64",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "c10162c1-2d27-4a40-a3b2-8cbdca319a64",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "51225fb0-19a6-4dbd-b096-6c96ebcd9791",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 445,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "c10162c1-2d27-4a40-a3b2-8cbdca319a64"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 13,
+        "task_id": "746aa467-d495-49a3-8dc1-5756bfcb57da",
+        "profile_id": "shayan",
+        "title": "Landing Page Designer for Physiotherapy Clinics",
+        "captured_reasons": [
+          "Low Higher rate",
+          "Client Low spending"
+        ],
+        "client_signal": {
+          "spent": 255,
+          "rating": 5
+        },
+        "category": "multi_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          4,
+          5
+        ],
+        "expected_reasons": [
+          "Low Higher rate",
+          "Client Low spending"
+        ],
+        "notes": "Gates 4 + 5 fire together. Either reason in output is acceptable."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 7958,
+      "verdict": {
+        "decision": "reject",
+        "rejection_reasons": [
+          "Out of stack",
+          "Job unavailable"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "The job description is for a website/dashboard login page, not a development project. The content is an HTML snippet of a login form for 'Rising Lions', an Upwork analytics tool, not a project brief."
+          },
+          "2_freshness": {
+            "status": "pass",
+            "evidence": "Job data appears to be a static HTML snippet of a login page, lacking any 'posted_at' timestamp or indication of freshness. Assuming it's 'fresh' for the purpose of the gate, as no negative indication. (Needs manual check if this job came from Upwork's feed)."
+          },
+          "3_proposal_saturation": {
+            "status": "pass",
+            "evidence": "No `proposals_count` field or Upwork bucket information is present in the job data. Assuming no saturation given the nature of the data."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic"
+          },
+          "5_client_spend_floor": {
+            "status": "pass",
+            "evidence": "No client spend information is present, indicating sparse client metadata which is treated as a pass according to rules."
+          },
+          "6_client_rating_floor": {
+            "status": "pass",
+            "evidence": "No client rating is present, nor is 'client_hires', so treated as a new client with no rating yet, thus passes."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The job data is primarily an HTML snippet of a login page for 'Rising Lions'. It does not describe a project, and hence is not an 'available' job to apply to. It references 'Upwork job automation' but isn't an Upwork job itself."
+          },
+          "8_no_location_lockin": {
+            "status": "pass",
+            "evidence": "The HTML snippet does not contain any location lock-in phrases."
+          },
+          "9_no_video_proposal": {
+            "status": "pass",
+            "evidence": "The provided HTML snippet does not contain any request for a video proposal."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The job is not a development project, but a login page snippet. There's no technology to match against the profile's portfolio items."
+          },
+          "11_no_duplicate": {
+            "status": "pending_for_llm",
+            "evidence": "Cannot assess duplication from the provided HTML snippet. Assuming it's not a duplicate for the purpose of this gate."
+          }
+        },
+        "rubric": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The 'job' is not a development project but an HTML snippet of a login page. No skills from the profile are relevant."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "The 'job' is not a development project. No portfolio items can match."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "No client metadata (spend, hires, rating) is available, making client quality impossible to assess. This indicates extremely sparse data."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "No information on proposals or posting freshness for an actual job was provided; this is an HTML snippet."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "The 'job' is an HTML snippet of a login page, not a project within any problem domain."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "The 'job' is not a project; therefore, no experience level could be determined or matched."
+          },
+          "red_flags": {
+            "value": 0,
+            "reason": "The 'job' input is an HTML dump of a login page, not an actual job posting, which constitutes a major red flag for a job classifier."
+          }
+        },
+        "total_score": 0,
+        "tier": "reject",
+        "summary": "Rejected: The input is an HTML snippet of a login page, not an actual job posting. It is out of stack and unavailable as a job. The entire job object is malformed and contains no relevant job data.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "client_payment_verified",
+          "client_member_since",
+          "full_job_description",
+          "job_title",
+          "job_type",
+          "job_budget",
+          "job_posted_at",
+          "proposals_count"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 0.5,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "shayan",
+        "job_external_id": null,
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "746aa467-d495-49a3-8dc1-5756bfcb57da",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "746aa467-d495-49a3-8dc1-5756bfcb57da",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "3a07b412-de4b-4e92-b35c-ff8ecfdbc3da",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 446,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "746aa467-d495-49a3-8dc1-5756bfcb57da"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 14,
+        "task_id": "61f61a79-3abe-4e76-aaf6-d8b0fd5879eb",
+        "profile_id": "shayan",
+        "title": "Ai calling agent",
+        "captured_reasons": [
+          "Out of stack",
+          "Too many invites"
+        ],
+        "client_signal": {
+          "spent": 9800,
+          "rating": 5
+        },
+        "category": "multi_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          1,
+          3
+        ],
+        "expected_reasons": [
+          "Out of stack",
+          "Too many invites"
+        ],
+        "notes": "Gates 1 + 3."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 5715,
+      "verdict": {
+        "decision": "reject",
+        "rejection_reasons": [
+          "Out of stack",
+          "Old job",
+          "Client Low spending",
+          "Bad rating client"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "Job description is a sign-in page for 'Rising Lions' dashboard, not a development job. This is not a job posting."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "Job was posted more than 24 hours ago (relative to evaluation time)."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "No proposal count available for this job posting."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic"
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "No client total spent information available for this job."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "No client rating available for this job."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "Job description is a login page, not an actual job posting. It is unavailable as a job."
+          },
+          "8_no_location_lockin": {
+            "status": "fail",
+            "evidence": "Job description is not a job posting, so location lock can't be assessed."
+          },
+          "9_no_video_proposal": {
+            "status": "fail",
+            "evidence": "Job description is not a job posting, so video proposal requirement can't be assessed."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "Job description is a login page, not a job posting, so no skills to match against portfolio."
+          },
+          "11_no_duplicate": {
+            "status": "pass",
+            "evidence": "No duplicate job detected based on provided information."
+          }
+        },
+        "rubric": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job description is for a 'Rising Lions' login page, not a development job, so no skills match."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "There are no job requirements to match with portfolio items."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "No client spend, hires, or rating data available."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "No information on proposal count or freshness, and the 'job' itself is not a real posting."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "No specific domain or industry mentioned as it's not a job post."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "As there is no job, experience level cannot be assessed."
+          },
+          "red_flags": {
+            "value": 0,
+            "reason": "The entire job posting being a login page is a major red flag; it is not a legitimate job."
+          }
+        },
+        "total_score": 0,
+        "tier": "reject",
+        "summary": "This is not a legitimate job posting; the provided 'job description' is a login page for a system. It fails all critical gates for relevancy. Reject.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "client_payment_verified",
+          "client_member_since",
+          "full_job_description"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "shayan",
+        "job_external_id": null,
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "61f61a79-3abe-4e76-aaf6-d8b0fd5879eb",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "61f61a79-3abe-4e76-aaf6-d8b0fd5879eb",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "c448218a-0d19-4ef9-8dd2-52c3369f1c1c",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 447,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "61f61a79-3abe-4e76-aaf6-d8b0fd5879eb"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": true,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 15,
+        "task_id": "fd765ae2-8c6d-4ed6-87aa-38ee9dafb03e",
+        "profile_id": "saim",
+        "title": "Senior Node.js/NestJS Engineer – 7-Day SaaS Deployment",
+        "captured_reasons": [
+          "Old job",
+          "Low Higher rate"
+        ],
+        "client_signal": {
+          "spent": 149,
+          "rating": 5,
+          "fixed_amount": 3500
+        },
+        "category": "multi_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          2,
+          4,
+          5
+        ],
+        "expected_reasons": [
+          "Old job",
+          "Low Higher rate",
+          "Client Low spending"
+        ],
+        "notes": "Gates 2 + 4 (fixed budget interpretation) + low client spend. Any matching reason counts."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 8850,
+      "verdict": {
+        "decision": "reject",
+        "rejection_reasons": [
+          "Out of stack",
+          "Job unavailable"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "The job description is for a login/signup form and does not indicate any of the AI/ML, RAG, LLM, or Python skills present in the profile."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "The job content appears to be a static login page from a web application, not a live job posting with a 'posted at' timestamp, suggesting it is not fresh."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "There is no 'proposals_count' in the job data, as it is not an actual job posting."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic",
+            "evidence": "Budget type is not specified nor are there any hourly rates mentioned. This job data does not seem to represent a real job posting. Deterministic checker passed this (incorrectly, as it cannot evaluate a non-job)."
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "No client information is present in the provided job data (no client_total_spent, client_hires or client_rating)."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "No client rating information is present in the provided job data."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The provided job data is an HTML snippet of a login page for 'Rising Lions', not an actual Upwork job posting. Therefore, it is unavailable as a job."
+          },
+          "8_no_location_lockin": {
+            "status": "fail",
+            "evidence": "The job data is not an Upwork job posting, so there is no location lock-in mentioned."
+          },
+          "9_no_video_proposal": {
+            "status": "fail",
+            "evidence": "The job data is not an Upwork job posting, so there is no video proposal requirement mentioned."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The job details (a login page) do not align with any of the specific AI/ML/RAG portfolio items or the general tech stack in the profile."
+          },
+          "11_no_duplicate": {
+            "status": "pending_for_llm",
+            "evidence": "No duplicate check can be performed as this is not a real job posting."
+          }
+        },
+        "rubric": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job is a login page for 'Rising Lions' and does not match any of the AI/ML/RAG/Python skills in the profile."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "No part of the portfolio (RAG chatbots, CRM, Yolo V8) relates to building a static login page."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "No client information (spend, hires, rating) is available in the provided job data."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "This is not a real job posting, so competitive positioning cannot be assessed. No proposal counts or freshness information."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "The job is a login page for a web application, not a specific industry or problem domain that aligns with the profile's AI/ML expertise."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "No experience level is indicated, as it is not a genuine job posting."
+          },
+          "red_flags": {
+            "value": 0,
+            "reason": "The entire job payload is an HTML login page, indicating it is not a real job posting and is highly suspicious."
+          }
+        },
+        "total_score": 0,
+        "tier": "reject",
+        "summary": "This is not a legitimate Upwork job posting. The provided 'job' data is an HTML snippet of a login page, making it out of stack and unavailable. No client metadata is present.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "job_title",
+          "job_description",
+          "job_id",
+          "client_payment_verified",
+          "client_member_since",
+          "total_contract_count",
+          "pending_connects",
+          "connects_bid",
+          "client_reviews_count",
+          "job_type",
+          "budget_type",
+          "budget_fixed_amount",
+          "budget_hourly_max",
+          "job_status",
+          "project_scope",
+          "job_duration",
+          "job_hours_per_week",
+          "hourly_rate",
+          "min_hourly_rate",
+          "max_hourly_rate",
+          "posted_at",
+          "skills_required"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "evidence_panel": {
+          "strengths": [],
+          "weaknesses": [
+            "Job payload is an HTML login page, not a real Upwork job.",
+            "Lack of any actual job details (title, description, skills, budget).",
+            "No client metadata (spend, rating, hires) available."
+          ],
+          "match_explanation": "This input is identified as a completely invalid job payload. It's an HTML login page for 'Rising Lions' rather than an Upwork job. Thus, it fails all relevant gates related to job content, stack matching, client data, and availability."
+        },
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "saim",
+        "job_external_id": null,
+        "snapshot_id": "8d841d0b-84ae-4b95-b471-c1cb6c4d6bff",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "fd765ae2-8c6d-4ed6-87aa-38ee9dafb03e",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "fd765ae2-8c6d-4ed6-87aa-38ee9dafb03e",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "42c94c3b-e859-4ba7-acf8-c790ff3e772d",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 448,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "fd765ae2-8c6d-4ed6-87aa-38ee9dafb03e"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 16,
+        "task_id": "7b505a3a-1e62-476e-a5a4-86da99346aa3",
+        "profile_id": "shayan",
+        "title": "Small Website Changes Needed",
+        "captured_reasons": [
+          "Old job",
+          "Client Low spending"
+        ],
+        "client_signal": {
+          "spent": 315,
+          "rating": 5,
+          "budget_min": 12,
+          "budget_max": 25
+        },
+        "category": "multi_reason",
+        "expected_decision": "reject",
+        "expected_gates": [
+          2,
+          5
+        ],
+        "expected_reasons": [
+          "Old job",
+          "Client Low spending"
+        ],
+        "notes": "Gates 2 + 5."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 7642,
+      "verdict": {
+        "decision": "reject",
+        "rejection_reasons": [
+          "Job unavailable"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "pass",
+            "evidence": "Job description is missing. Cannot determine stack match."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "Job data is an HTML document for a login page, indicating the job is unavailable or not an actual job posting."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "Job data is an HTML document for a login page, making proposal count unknown."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic"
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "Job data is an HTML document for a login page, making client spend unknown."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "Job data is an HTML document for a login page, making client rating unknown."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The job data provided is an HTML document for a login page, not a job posting. The job is clearly unavailable."
+          },
+          "8_no_location_lockin": {
+            "status": "fail",
+            "evidence": "Job data is an HTML document for a login page. Cannot determine location lock-in."
+          },
+          "9_no_video_proposal": {
+            "status": "fail",
+            "evidence": "Job data is an HTML document for a login page. Cannot determine video proposal requirement."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "Job data is an HTML document for a login page. Cannot evaluate portfolio match."
+          },
+          "11_no_duplicate": {
+            "status": "fail",
+            "evidence": "Job data is an HTML document for a login page, not a job posting, implying it's a duplicate of 'no actual job'."
+          }
+        },
+        "rubric": {
+          "skill_match": {
+            "value": 0,
+            "reason": "Job description is missing, cannot assess skill match."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "Job description is missing, cannot assess portfolio match."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "Client metadata is missing due to malformed job data."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "Job is not available, so competition and freshness cannot be assessed."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "Job description is missing, cannot assess domain match."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "Job description is missing, cannot assess experience level."
+          },
+          "red_flags": {
+            "value": 0,
+            "reason": "The entire job data is an HTML login page, which is a major red flag indicating no actual job posting."
+          }
+        },
+        "total_score": 0,
+        "tier": "reject",
+        "summary": "This job is rejected because the provided job data is an HTML login page, indicating the job is unavailable or not a valid posting. All evaluation metrics are impossible to determine, leading to a score of 0.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "job_description",
+          "job_title",
+          "proposals_count",
+          "posted_at",
+          "budget_type",
+          "budget_min",
+          "client_total_spent",
+          "client_hires",
+          "client_rating",
+          "job_skills_required"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "shayan",
+        "job_external_id": null,
+        "snapshot_id": "a352bb09-94e0-46de-ab64-e8206287e085",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "7b505a3a-1e62-476e-a5a4-86da99346aa3",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "7b505a3a-1e62-476e-a5a4-86da99346aa3",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "7a349850-0c5c-45d2-82e0-4a69f9a498df",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 449,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "7b505a3a-1e62-476e-a5a4-86da99346aa3"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": false,
+        "borderline_credit": 0,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 17,
+        "task_id": "86641e0f-0f95-4030-86a6-d051e927b87d",
+        "profile_id": "khansa",
+        "title": "Supabase + Clay backend integration for Lovable-built SaaS",
+        "captured_reasons": [],
+        "client_signal": {
+          "spent": 137900,
+          "rating": 4.88,
+          "budget_min": 50,
+          "budget_max": 100
+        },
+        "category": "candidate_false_reject",
+        "expected_decision": "proceed",
+        "expected_gates": [],
+        "expected_reasons": [],
+        "notes": "CANDIDATE FALSE REJECT — every gate should pass. If classifier says PROCEED → positive calibration signal. If reject → the reason itself is informative."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 13090,
+      "verdict": {
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "decision": "reject",
+        "rejection_reasons": [
+          "Out of stack",
+          "Old job",
+          "Job unavailable"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "Job description contains 'Rising Lions', 'Sign in to access your dashboard', 'Sign in with GitHub', which are related to a website login page, not a development project. The description does not indicate any development work."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "The job description is static HTML of a login page, not a current job posting. It lacks a 'posted_at' timestamp."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "This is a static HTML page, not an Upwork job listing. No 'proposals_count' found."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic",
+            "evidence": "Deterministic checker passed this gate. Budget information is not available in the provided data."
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "No client information available in the provided HTML. 'client_total_spent' is null."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "No client information available. 'client_rating' is null."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The job description is pure static HTML for a login page; it is not a live job posting. It implies the 'job' itself is a login page, not work."
+          },
+          "8_no_location_lockin": {
+            "status": "fail",
+            "evidence": "The job description is a static HTML page, not a job posting. No location lock-in mentioned because it's not a real job."
+          },
+          "9_no_video_proposal": {
+            "status": "fail",
+            "evidence": "The job description is a static HTML page for a login; it does not contain any requirements for a video pitch."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The provided job data is a static HTML login page and does not contain any technical requirements to match against portfolio items."
+          },
+          "11_no_duplicate": {
+            "status": "fail",
+            "evidence": "The deterministic checker reported that this gate is pending for LLM, but based on the input being a static HTML page of a login screen, this is clearly not a duplicate job posting but a mis-obtained payload. This job should implicitly be designated as a duplicate of all prior internal checks, as it's not a real job post."
+          }
+        },
+        "rubric": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job description provided is static HTML for a website login page, not a development project. There are no skills to match."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "The input is a login page; no project details to match with portfolio items like 'Luxury Villas' or 'Booking Website'."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "No client information (spend, hires, rating) is available in the provided data."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "Not a valid job posting, so cannot assess competition or freshness."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "The input describes a login page for 'Rising Lions'; this does not align with any specific industry or problem domain in the profile's work history."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "The input describes a login page, not a job with an experience level. Cannot assess fit."
+          },
+          "red_flags": {
+            "value": 0,
+            "reason": "The entire job payload is a login page for 'Rising Lions', indicating a severe data acquisition error, effectively a massive red flag since it's not a real job."
+          }
+        },
+        "total_score": 0,
+        "tier": "reject",
+        "summary": "This 'job' is a static HTML login page for 'Rising Lions', not an actual Upwork job posting. It fails all critical gates including stack match, freshness, job availability, and client quality. It's an acquisition error and not relevant for any proposal.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "job_title",
+          "job_description",
+          "skills_required",
+          "budget_type",
+          "budget_min",
+          "budget_max",
+          "project_scope",
+          "duration",
+          "client_total_spent",
+          "client_hires",
+          "client_rating",
+          "client_payment_verified",
+          "client_member_since",
+          "proposals_count",
+          "posted_at"
+        ],
+        "confidence": 1,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "khansa",
+        "job_external_id": null,
+        "snapshot_id": "7028d70e-d25d-4c72-ba84-5448676359f2",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "86641e0f-0f95-4030-86a6-d051e927b87d",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "86641e0f-0f95-4030-86a6-d051e927b87d",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "9ec6cf9c-722f-40ff-a3a6-e01774cba0cb",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 450,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "86641e0f-0f95-4030-86a6-d051e927b87d"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": false,
+        "reason_overlap": null,
+        "borderline_credit": 0,
+        "points": 0
+      }
+    },
+    {
+      "fixture": {
+        "id": 18,
+        "task_id": "c8e6ead1-283d-4cc0-aef9-e6638eb94854",
+        "profile_id": "sana",
+        "title": "(lra) Website development (in React/NextJS 16) w/ Sliders, Animations",
+        "captured_reasons": [],
+        "client_signal": {
+          "spent": 189800,
+          "rating": 4.81,
+          "fixed_amount": 2300
+        },
+        "category": "candidate_false_reject",
+        "expected_decision": "proceed",
+        "expected_gates": [],
+        "expected_reasons": [],
+        "notes": "CANDIDATE FALSE REJECT — Next.js is Sana's stack, client is excellent. Expected: PROCEED."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 22961,
+      "verdict": {
+        "decision": "reject",
+        "rejection_reasons": [
+          "Out of stack",
+          "Old job",
+          "Job unavailable"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "Job description contains only login form and general website elements; no discernible tech stack keywords matching Sana's profile."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "Job posting is a general HTML structure for a login page, not a recent job description."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "Job is a malformed HTML page, no proposal count can be extracted."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic"
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "Job payload is a malformed HTML page, no client spend data available."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "Job payload is a malformed HTML page, no client rating data available."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The job description contains HTML for a 'Rising Lions' login page, indicating it's not a valid job posting."
+          },
+          "8_no_location_lockin": {
+            "status": "fail",
+            "evidence": "Job payload is a malformed HTML page; no location requirements can be extracted."
+          },
+          "9_no_video_proposal": {
+            "status": "fail",
+            "evidence": "Job payload is a malformed HTML page; no video proposal requirement found."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "Job description is a malformed HTML page and does not contain any relevant tech stack or requirements to match against Sana's portfolio."
+          }
+        },
+        "rubric": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job description is malformed HTML for a login page and does not contain any relevant tech skills to match against Sana's profile."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "The job does not provide any clear requirements, making it impossible to find a matching portfolio item."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "Client metadata (spend, hires, rating) is unavailable due to malformed job content."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "Job is malformed HTML, cannot assess freshness or proposal saturation."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "No industry or problem domain can be inferred from the malformed job description."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "No experience level can be determined from the malformed job description."
+          },
+          "red_flags": {
+            "value": 0,
+            "reason": "The job description is a malformed HTML page, indicating a severe red flag as it's not a valid job posting."
+          }
+        },
+        "total_score": 0,
+        "tier": "reject",
+        "summary": "This job is rejected because the input is a malformed HTML page for a login form, not a legitimate job posting. All gates related to job content, client data, and skills fail.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "full_job_description",
+          "client_payment_verified",
+          "client_member_since",
+          "proposals_count"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "sana",
+        "job_external_id": null,
+        "snapshot_id": "6ce8bae8-7d39-435f-a1a2-5101799263e4",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "c8e6ead1-283d-4cc0-aef9-e6638eb94854",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "c8e6ead1-283d-4cc0-aef9-e6638eb94854",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "3fcd2ab5-8412-491d-94b9-a5f11e20f683",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 451,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "c8e6ead1-283d-4cc0-aef9-e6638eb94854"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": false,
+        "reason_overlap": null,
+        "borderline_credit": 0,
+        "points": 0
+      }
+    },
+    {
+      "fixture": {
+        "id": 19,
+        "task_id": "b206db0f-564a-4ed8-be53-31d60dc4d23b",
+        "profile_id": "craig",
+        "title": "Zoho Creator App Development",
+        "captured_reasons": [],
+        "client_signal": {
+          "spent": 145800,
+          "rating": 5,
+          "fixed_amount": 1500
+        },
+        "category": "candidate_borderline",
+        "expected_decision": "reject",
+        "expected_gates": [
+          1
+        ],
+        "expected_reasons": [
+          "Out of stack"
+        ],
+        "borderline": true,
+        "notes": "Zoho Creator not in Craig's mobile-dev stack. Expected reject (gate 1); agent may have forgotten to tag. Half-credit on borderline."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 7363,
+      "verdict": {
+        "decision": "reject",
+        "total_score": 1,
+        "tier": "reject",
+        "rationale": "The job description is not a job posting; it's the HTML for a login page or an internal platform. It contains no information about skills, budget, or client needs, making it impossible to classify as relevant.",
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "Job description is HTML of a login page and contains no relevant job text or skills tags to match against."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "The job data is an HTML snippet for a login page and not an actual job posting with a 'posted at' timestamp."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "The provided job data is an HTML snippet for a login page and does not include proposal count information."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic"
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "The provided job data is an HTML snippet for a login page and does not include client spend information."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "The provided job data is an HTML snippet for a login page and does not include client rating information."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The provided job data is an HTML snippet for a login page and does not indicate job availability."
+          },
+          "8_no_location_lockin": {
+            "status": "fail",
+            "evidence": "The provided job data is an HTML snippet for a login page and does not contain location requirements."
+          },
+          "9_no_video_proposal": {
+            "status": "fail",
+            "evidence": "The provided job data is an HTML snippet for a login page and does not mention video proposal requirements."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The provided job data is an HTML snippet for a login page and contains no skills or requirements to match against Craig's portfolio."
+          },
+          "11_no_duplicate": {
+            "status": "fail",
+            "evidence": "The provided data is not a job posting and thus cannot be checked for duplication effectively."
+          }
+        },
+        "rejection_reasons": [
+          "Out of stack",
+          "Old job",
+          "Too many invites",
+          "Client Low spending",
+          "Bad rating client",
+          "Job unavailable",
+          "Location loc",
+          "Video Proposal",
+          "Portfolio unavailable",
+          "Duplicate"
+        ],
+        "components": {
+          "skill_match": {
+            "value": 0,
+            "reason": "Job data is an HTML login page, no skills found to match with profile."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "Job data is an HTML login page, no requirements to find portfolio matches."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "No client information available in the provided HTML snippet."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "Cannot assess competition or freshness as the data is not a job posting."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "No industry or problem domain mentioned in the provided HTML snippet."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "No experience level indicated in the provided HTML snippet."
+          },
+          "red_flags": {
+            "value": 1,
+            "reason": "The input is not a job posting but an HTML login page, which is a significant red flag for classification."
+          }
+        },
+        "summary": "This input is classified as REJECT due to its inability to be parsed as an actual job. The provided data is an HTML snippet resembling a login page, lacking any discernible job description, skills, budget, or client information. This makes all gates fail by default.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "job_title",
+          "job_description",
+          "skills_required",
+          "budget_type",
+          "budget_min",
+          "budget_max",
+          "job_type",
+          "posted_at",
+          "proposals_count",
+          "client_total_spent",
+          "client_hires",
+          "client_rating",
+          "client_country",
+          "client_payment_verified",
+          "client_member_since",
+          "full_job_description"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "craig",
+        "job_external_id": null,
+        "snapshot_id": "790e501e-6adc-41c6-8d7c-d3f1776e830c",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "b206db0f-564a-4ed8-be53-31d60dc4d23b",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "b206db0f-564a-4ed8-be53-31d60dc4d23b",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "946521f8-272e-48a8-a6af-390867c4181c",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 452,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "b206db0f-564a-4ed8-be53-31d60dc4d23b"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": null,
+        "borderline_credit": 1,
+        "points": 1
+      }
+    },
+    {
+      "fixture": {
+        "id": 20,
+        "task_id": "db37076e-4750-4be6-8d15-b19efb315d25",
+        "profile_id": "sana",
+        "title": "Elementor WordPress Page Builder (Execution Only – No Design Required)",
+        "captured_reasons": [],
+        "client_signal": {
+          "spent": 11900,
+          "rating": 4.95,
+          "budget_min": 12,
+          "budget_max": 22
+        },
+        "category": "candidate_borderline",
+        "expected_decision": "reject",
+        "expected_gates": [
+          4
+        ],
+        "expected_reasons": [
+          "Low Higher rate"
+        ],
+        "borderline": true,
+        "notes": "Elementor in Sana's stack but budget at/below hourly floor. Expected reject (gate 4) OR proceed if Sana's hourly < $22. Half-credit on borderline."
+      },
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 7053,
+      "verdict": {
+        "decision": "reject",
+        "rejection_reasons": [
+          "Out of stack",
+          "Job unavailable"
+        ],
+        "gates": {
+          "1_stack_match": {
+            "status": "fail",
+            "evidence": "The job description is for the Rising Lions internal dashboard, not a client project. It's an internal login page for analytics, which doesn't align with Sana's development stack."
+          },
+          "2_freshness": {
+            "status": "fail",
+            "evidence": "No `posted_at` timestamp is provided in the job data, making freshness impossible to determine. This job appears to be an internal application login page, not a dynamic job posting."
+          },
+          "3_proposal_saturation": {
+            "status": "fail",
+            "evidence": "No `proposals_count` or equivalent bucket is available, as this is an internal application login page, not a job post."
+          },
+          "4_hourly_floor": {
+            "status": "skipped_deterministic"
+          },
+          "5_client_spend_floor": {
+            "status": "fail",
+            "evidence": "No client information is available as this is an internal application login page, not a client job posting."
+          },
+          "6_client_rating_floor": {
+            "status": "fail",
+            "evidence": "No client rating is available as this is an internal application login page, not a client job posting."
+          },
+          "7_job_availability": {
+            "status": "fail",
+            "evidence": "The job description is for a login page to 'Rising Lions' internal analytics dashboard, which means this is not an actual job posting and is unavailable for proposals."
+          },
+          "8_no_location_lockin": {
+            "status": "pass",
+            "evidence": "The job description does not mention any physical location requirements."
+          },
+          "9_no_video_proposal": {
+            "status": "pass",
+            "evidence": "The job description does not request a video proposal."
+          },
+          "10_portfolio_match": {
+            "status": "fail",
+            "evidence": "The job description is for an internal login page and there are no specific tech requirements or project scopes to match against Sana's portfolio."
+          },
+          "11_no_duplicate": {
+            "status": "pending_for_llm",
+            "evidence": "No duplicate job ID provided to check against."
+          }
+        },
+        "rubric": {
+          "skill_match": {
+            "value": 0,
+            "reason": "The job is for an internal Upwork analytics dashboard login page (Rising Lions) and does not represent a development project that aligns with Sana's full-stack development skills."
+          },
+          "portfolio_evidence": {
+            "value": 0,
+            "reason": "This is an internal web page, not a client project, so there is no specific job requirement to match against Sana's portfolio items."
+          },
+          "client_quality": {
+            "value": 0,
+            "reason": "No client information is available as this is not a client job posting."
+          },
+          "competition_position": {
+            "value": 0,
+            "reason": "This is an internal page, so there is no competition or proposal count."
+          },
+          "domain_match": {
+            "value": 0,
+            "reason": "The job is not a client project, and its domain (internal analytics login) does not match any of Sana's previous work domains (e.g., marketing websites, shipping platforms)."
+          },
+          "experience_level_fit": {
+            "value": 0,
+            "reason": "No experience level is specified for this internal page."
+          },
+          "red_flags": {
+            "value": 0,
+            "reason": "The job post is an internal login page for Rising Lions, indicating it is not a legitimate job for a freelancer."
+          }
+        },
+        "total_score": 0,
+        "tier": "reject",
+        "summary": "This job is a reject. It appears to be an internal login page for the 'Rising Lions' analytics dashboard, not an actual client job posting. Therefore it is out of stack (no relevant development work) and unavailable.",
+        "proposal_angles": [],
+        "missing_signals": [
+          "job.posted_at",
+          "job.proposals_count",
+          "client_total_spent",
+          "client_hires",
+          "client_rating",
+          "job.budget_type",
+          "job.budget_min",
+          "job.budget_max"
+        ],
+        "criteria_version": "0.2",
+        "prompt_version": "v1",
+        "confidence": 1,
+        "confidence_warnings": [],
+        "effective_decision": "reject",
+        "threshold_flipped": false,
+        "min_score_at_decision": 50,
+        "classifier_mode_at_decision": "shadow",
+        "profile_id": "sana",
+        "job_external_id": null,
+        "snapshot_id": "6ce8bae8-7d39-435f-a1a2-5101799263e4",
+        "model": "gemini-2.5-flash",
+        "prompt_mode": "A_full",
+        "evaluation_path": "llm_after_deterministic",
+        "source": "manual_url",
+        "task_id": "db37076e-4750-4be6-8d15-b19efb315d25",
+        "request_meta": {
+          "source": "manual_url",
+          "task_id": "db37076e-4750-4be6-8d15-b19efb315d25",
+          "requested_by": "smoke-test-phase-11",
+          "request_id": "639d230f-d28c-4962-9c98-3caf914767a5",
+          "classifier_mode": "shadow"
+        },
+        "thresholds_used": {
+          "freshness_hours": 24,
+          "max_proposals": 30,
+          "hourly_floor_usd": 25,
+          "client_spend_floor_usd": 1000,
+          "client_rating_floor": 4
+        },
+        "_score_id": 453,
+        "_dlq_id": null,
+        "task": null,
+        "_task_id": "db37076e-4750-4be6-8d15-b19efb315d25"
+      },
+      "error": null,
+      "scoring": {
+        "decision_match": true,
+        "reason_overlap": null,
+        "borderline_credit": 1,
+        "points": 1
+      }
+    }
+  ]
+}
