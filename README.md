@@ -1,8 +1,8 @@
-# Vollna Analytics Dashboard
+# Rising Lions Analytics Dashboard
 
 Real-time analytics dashboard for Upwork job automation — track proposals, win rates, agent performance, and revenue.
 
-Built with Next.js 16, Vercel Postgres (Neon), Recharts, shadcn/ui, and NextAuth.js v5.
+Built with Next.js 16, Postgres 17, Recharts, shadcn/ui, and NextAuth.js v5. Deployed self-hosted on Contabo via Docker.
 
 ## Features
 
@@ -11,9 +11,10 @@ Built with Next.js 16, Vercel Postgres (Neon), Recharts, shadcn/ui, and NextAuth
 - **Profile Analytics** — per-profile volume, budget distribution, skills analysis
 - **Jobs Table** — filterable, sortable, with CSV export
 - **Charts** — volume over time, status funnel, revenue breakdowns, budget splits
-- **Data Sync** — ClickUp status sync (cron), Google Sheets import, n8n/ClickUp webhooks
+- **Data Sync** — Google Sheets import, n8n webhooks → Task Board
+- **Task Board** — single source of truth for job status; kanban with custom fields, comments, attachments
 - **Settings** — manual sync triggers, sync log history, agent/profile management, alert thresholds
-- **Authentication** — GitHub OAuth via NextAuth.js v5 with email allowlist
+- **Authentication** — GitHub OAuth (NextAuth.js v5) + email/password credentials
 - **Dark Mode** — system-aware theme toggle
 
 ## Tech Stack
@@ -21,35 +22,27 @@ Built with Next.js 16, Vercel Postgres (Neon), Recharts, shadcn/ui, and NextAuth
 | Layer | Technology |
 |-------|-----------|
 | Framework | Next.js 16 (App Router) |
-| Database | Vercel Postgres (Neon) via `@vercel/postgres` |
+| Database | Postgres 17 via `pg` (raw SQL through `src/lib/db.ts` tagged-template wrapper) |
 | Styling | Tailwind CSS 4 + shadcn/ui |
 | Charts | Recharts 3 |
-| Auth | NextAuth.js v5 (Auth.js) + GitHub OAuth |
-| Deployment | Vercel |
+| Auth | NextAuth.js v5 + GitHub OAuth + credentials |
+| File storage | Local filesystem (Docker named volume `uploads_data`, served via `/api/files/[...path]` with auth) |
+| Deployment | Docker on Contabo VPS (Ubuntu 24.04) |
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+
-- A Vercel project with Neon Postgres provisioned
+- Node.js 22+
+- Postgres 17 (local instance, or the Docker sibling container from `docker-compose.server.yml`)
 - GitHub OAuth app (for authentication)
 
 ### Setup
 
 ```bash
 npm install
-```
-
-Copy `.env.example` to `.env.local` and fill in the values:
-
-```bash
 cp .env.example .env.local
-```
-
-Generate an auth secret:
-
-```bash
+# fill in POSTGRES_*, AUTH_*, etc. in .env.local
 npx auth secret
 ```
 
@@ -57,19 +50,20 @@ npx auth secret
 
 | Variable | Description |
 |----------|-------------|
-| `POSTGRES_URL` | Neon Postgres connection string (pooled) |
-| `CLICKUP_API_KEY` | ClickUp API token for status sync |
-| `CLICKUP_TEAM_ID` | ClickUp team/workspace ID |
-| `GOOGLE_SHEETS_CLIENT_EMAIL` | Google service account email |
-| `GOOGLE_SHEETS_PRIVATE_KEY` | Google service account private key |
-| `GOOGLE_SHEET_ID` | Google Sheets spreadsheet ID |
+| `POSTGRES_URL` (or `POSTGRES_HOST` + `POSTGRES_USER` + `POSTGRES_PASSWORD` + `POSTGRES_DATABASE`) | Postgres connection |
+| `UPLOADS_DIR` | Where task attachments are written. Defaults to `./uploads` in dev; production sets it to `/var/lib/sales-dashboard/uploads` (a Docker volume) |
+| `GOOGLE_SHEETS_CLIENT_EMAIL` / `GOOGLE_SHEETS_PRIVATE_KEY` / `GOOGLE_SHEET_ID` | Sheets import |
 | `N8N_WEBHOOK_SECRET` | HMAC secret for n8n webhook verification |
-| `CLICKUP_WEBHOOK_SECRET` | Secret for ClickUp webhook verification |
-| `CRON_SECRET` | Vercel cron authorization token |
+| `N8N_API_URL` / `N8N_API_KEY` | n8n auto-provisioning of webhook nodes |
+| `CRON_SECRET` | Authorization for `/api/migrate` and other cron-style routes |
 | `AUTH_SECRET` | NextAuth.js session encryption secret |
-| `AUTH_GITHUB_ID` | GitHub OAuth app client ID |
-| `AUTH_GITHUB_SECRET` | GitHub OAuth app client secret |
-| `ALLOWED_EMAILS` | Comma-separated email allowlist (empty = allow all) |
+| `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | GitHub OAuth app credentials |
+| `ALLOWED_EMAILS` | Comma-separated email allowlist (empty = allow any GitHub user) |
+| `ADMIN_CREDENTIALS` | `email:password` pairs (comma-separated) for credentials login |
+| `SLACK_WEBHOOK_URL` | Optional — Slack alerts |
+| `NEXT_PUBLIC_APP_URL` | Public origin (used by server actions that call back into the API) |
+
+See `.env.example` for the full list.
 
 ### Development
 
@@ -77,7 +71,7 @@ npx auth secret
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open <http://localhost:3000>.
 
 ### Build
 
@@ -90,50 +84,46 @@ npm run build
 ```
 src/
 ├── app/
-│   ├── (dashboard)/          # Authenticated dashboard pages
-│   │   ├── dashboard/        # Overview with KPIs and charts
-│   │   ├── agents/           # Agent list and detail pages
-│   │   ├── profiles/         # Profile list and detail pages
-│   │   ├── jobs/             # Filterable jobs table
-│   │   └── settings/         # Sync controls, management, alerts
+│   ├── (dashboard)/          # Admin pages (KPIs, agents, profiles, jobs, settings, tasks)
+│   ├── (agent)/              # Agent pages (/my-*)
 │   ├── api/
 │   │   ├── auth/             # NextAuth.js route handler
-│   │   ├── stats/            # Stats API (overview, agents, profiles)
-│   │   ├── sync/             # ClickUp sync, Google Sheets import
-│   │   ├── webhook/          # n8n and ClickUp webhooks (public)
-│   │   └── jobs/             # Job export (CSV)
-│   └── login/                # Login page (GitHub OAuth)
+│   │   ├── stats/            # Stats API (cached, overview/agents/profiles)
+│   │   ├── sync/             # Google Sheets import
+│   │   ├── webhook/          # Public n8n endpoint (HMAC verified)
+│   │   ├── v1/webhooks/tasks # Bearer-auth board ingestion from n8n
+│   │   ├── files/[...path]/  # Auth-gated file serving for task attachments
+│   │   └── jobs/             # Job search + CSV export
+│   └── login/
 ├── components/
-│   ├── charts/               # Recharts visualizations
-│   ├── layout/               # Sidebar and header
-│   ├── settings/             # Settings page components
-│   └── ui/                   # shadcn/ui primitives
 ├── lib/
-│   ├── auth.ts               # NextAuth.js config and helpers
-│   ├── data.ts               # Database queries
-│   ├── clickup.ts            # ClickUp API client
+│   ├── auth.ts               # NextAuth.js config
+│   ├── data.ts               # Database queries (~1700 lines raw SQL)
+│   ├── actions.ts            # Server actions + revalidatePath
+│   ├── db.ts                 # pg pool + tagged-template wrapper
+│   ├── uploads.ts            # File storage helpers (path + mime)
+│   ├── task-data.ts          # Task board queries
+│   ├── task-actions.ts       # Task board mutations
 │   ├── sheets.ts             # Google Sheets client
-│   └── types.ts              # TypeScript types
-└── middleware.ts              # Auth middleware (protects dashboard + API)
+│   └── types.ts
+└── middleware.ts             # Auth + admin/agent route guard
 ```
 
 ## Authentication
 
-Authentication uses NextAuth.js v5 with GitHub OAuth. Protected routes:
+NextAuth.js v5 with two providers:
 
-- All dashboard pages (`/dashboard`, `/agents`, `/profiles`, `/jobs`, `/settings`)
-- API routes (`/api/stats/*`, `/api/sync/*`, `/api/jobs/*`)
+- **GitHub OAuth** — restricted by `ALLOWED_EMAILS` allowlist
+- **Credentials** — admin via `ADMIN_CREDENTIALS`, agents via DB-stored PBKDF2 hashes
 
-Public routes (no auth required):
+Protected:
 
-- `/login` — sign-in page
-- `/api/webhook/*` — webhook endpoints (use their own HMAC/secret verification)
-- `/api/auth/*` — NextAuth.js internals
-
-Set `ALLOWED_EMAILS` to restrict access to specific GitHub accounts by email. Leave empty to allow any GitHub user.
+- All admin pages (`/dashboard`, `/agents`, `/profiles`, `/jobs`, `/settings`, `/tasks`)
+- All agent pages (`/my-*`)
+- All API routes except `/api/webhook/*` (which use HMAC) and `/api/auth/*`
 
 ## Deployment
 
-Deploy to Vercel with `vercel deploy` or connect your Git repository. Ensure all environment variables are set in the Vercel dashboard.
+Pushed to `main` triggers `.github/workflows/deploy-contabo.yml`, which SSHes into the VPS, fast-forwards the working tree, rebuilds via `docker compose -f docker-compose.server.yml`, and verifies the healthcheck. See `docker/DEPLOY-CONTABO.md` for the full runbook.
 
-The ClickUp status sync runs on a daily cron schedule configured in `vercel.json`.
+For all repo guidance see `CLAUDE.md` (small index) and the topic files under `docs/claude/`.

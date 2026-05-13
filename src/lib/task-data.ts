@@ -738,7 +738,7 @@ export async function reorderColumns(projectId: string, orderedIds: string[]): P
 
 /**
  * Loads assignees + tags for each task in-place. Sequential per-task because
- * @vercel/postgres tagged template doesn't support array-binding for IN clauses.
+ * the tagged-template wrapper around pg doesn't support array-binding for IN clauses.
  */
 async function hydrateAssigneesAndTags(tasks: Task[]): Promise<void> {
   for (const task of tasks) {

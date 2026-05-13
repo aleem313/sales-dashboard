@@ -24,8 +24,11 @@ services:
     environment:
       - NODE_ENV=production
       - POSTGRES_HOST=postgres
+      - UPLOADS_DIR=/var/lib/sales-dashboard/uploads
     env_file:
       - .env.production
+    volumes:
+      - uploads_data:/var/lib/sales-dashboard/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,6 +72,7 @@ services:
 
 volumes:
   pgdata_server:
+  uploads_data:
 
 networks:
   server-net:

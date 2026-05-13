@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put, del } from "@vercel/blob";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { sql } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { getTaskById, isProjectMember } from "@/lib/task-data";
+import { getUploadsDir, sanitizeFilename } from "@/lib/uploads";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -45,11 +48,18 @@ export async function POST(
   if (!file) return NextResponse.json({ error: "No file provided" }, { status: 422 });
   if (file.size > MAX_SIZE) return NextResponse.json({ error: "File too large (max 10MB)" }, { status: 422 });
 
-  const blob = await put(`tasks/${taskId}/${file.name}`, file, { access: "public" });
+  const safeName = `${randomUUID()}-${sanitizeFilename(file.name)}`;
+  const relPath = `tasks/${taskId}/${safeName}`;
+  const absPath = path.join(getUploadsDir(), relPath);
+
+  await fs.mkdir(path.dirname(absPath), { recursive: true });
+  await fs.writeFile(absPath, Buffer.from(await file.arrayBuffer()));
+
+  const publicUrl = `/api/files/${relPath}`;
 
   const result = await sql`
     INSERT INTO file_attachments (task_id, filename, url, blob_path, size_bytes, mime_type, uploader_id)
-    VALUES (${taskId}, ${file.name}, ${blob.url}, ${blob.pathname}, ${file.size}, ${file.type}, ${agentId ?? null})
+    VALUES (${taskId}, ${file.name}, ${publicUrl}, ${relPath}, ${file.size}, ${file.type}, ${agentId ?? null})
     RETURNING *
   `;
 
@@ -58,7 +68,7 @@ export async function POST(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params: _params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -75,11 +85,16 @@ export async function DELETE(
   const isUploader = session.user.agentId === row.uploader_id;
   if (!isAdmin && !isUploader) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  // Delete from Vercel Blob
-  try {
-    await del(row.url as string);
-  } catch {
-    // Blob may already be deleted
+  // Remove from disk. Legacy rows (Vercel Blob era) have an absolute URL in
+  // `url` and no on-disk file — those silently no-op here.
+  const blobPath = row.blob_path as string | null;
+  if (blobPath) {
+    const absPath = path.join(getUploadsDir(), blobPath);
+    try {
+      await fs.unlink(absPath);
+    } catch {
+      // file may already be gone — nothing to do
+    }
   }
 
   await sql`DELETE FROM file_attachments WHERE id = ${attachmentId}`;

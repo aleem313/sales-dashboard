@@ -48,6 +48,12 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
+# Uploads dir — Docker named volume mounts on top of this path at runtime,
+# but creating it here with the right ownership ensures the volume inherits
+# nextjs:nodejs on first creation (so the app can write).
+RUN mkdir -p /var/lib/sales-dashboard/uploads \
+  && chown -R nextjs:nodejs /var/lib/sales-dashboard
+
 USER nextjs
 
 EXPOSE 3000
