@@ -1,4 +1,4 @@
-import { sql } from "@/lib/db";
+import { sql, withTransaction } from "@/lib/db";
 import type {
   KPIMetrics,
   KPIMetricsWithDeltas,
@@ -3346,41 +3346,47 @@ export async function saveUpworkProfileSnapshot(
     .filter((n): n is string => typeof n === "string" && n.length > 0)
     .join(", ");
 
-  // Single atomic statement: demote current row (if any) and insert the new row.
-  // Postgres validates the partial unique index at command end, after both modifications
-  // are applied — so only one is_current=TRUE row per profile_id is ever visible.
-  const result = await sql<{ id: string; replaced: boolean }>`
-    WITH demoted AS (
+  // Run inside a transaction so the demote definitely lands before the insert.
+  // Doing both in one CTE looks atomic but Postgres runs data-modifying CTEs
+  // in undefined order — the INSERT could land first and trip the partial
+  // unique index uq_upwork_snapshot_current_per_profile. The transaction
+  // forces serial ordering on a single connection while still rolling back
+  // both statements together if either fails.
+  return withTransaction(async (tx) => {
+    const demoted = await tx<{ id: string }>`
       UPDATE upwork_profile_snapshots
       SET is_current = FALSE
       WHERE profile_id = ${profileId} AND is_current = TRUE
       RETURNING id
-    )
-    INSERT INTO upwork_profile_snapshots (
-      profile_id, name, title, hourly_rate, rating, job_success_score,
-      top_rated_status, total_jobs_worked, total_hours, last_worked_on,
-      profile_url, ciphertext, skills_summary, data
-    )
-    VALUES (
-      ${profileId}, ${name}, ${title}, ${hourlyRate}, ${rating}, ${jss},
-      ${topRated}, ${totalJobs}, ${totalHours}, ${lastWorkedOn}::date,
-      ${profileUrl}, ${ciphertext}, ${skillsSummary || null},
-      ${JSON.stringify(json)}::jsonb
-    )
-    RETURNING id, (SELECT COUNT(*) FROM demoted) > 0 AS replaced
-  `;
+    `;
 
-  const row = result.rows[0];
-  if (!row) throw new Error("Failed to insert snapshot");
-  return { id: row.id, replaced: row.replaced };
+    const inserted = await tx<{ id: string }>`
+      INSERT INTO upwork_profile_snapshots (
+        profile_id, name, title, hourly_rate, rating, job_success_score,
+        top_rated_status, total_jobs_worked, total_hours, last_worked_on,
+        profile_url, ciphertext, skills_summary, data
+      )
+      VALUES (
+        ${profileId}, ${name}, ${title}, ${hourlyRate}, ${rating}, ${jss},
+        ${topRated}, ${totalJobs}, ${totalHours}, ${lastWorkedOn}::date,
+        ${profileUrl}, ${ciphertext}, ${skillsSummary || null},
+        ${JSON.stringify(json)}::jsonb
+      )
+      RETURNING id
+    `;
+
+    const row = inserted.rows[0];
+    if (!row) throw new Error("Failed to insert snapshot");
+    return { id: row.id, replaced: (demoted.rowCount ?? 0) > 0 };
+  });
 }
 
 // Admin restore: hard-deletes the current snapshot for `profileId` and promotes
-// the historical snapshot identified by `snapshotId` to is_current=TRUE in one
-// statement. The partial unique index uq_upwork_snapshot_current_per_profile
-// is validated at statement end, so both modifications coexist mid-statement.
-// Throws if `snapshotId` doesn't exist, doesn't belong to `profileId`, or is
-// already the current row.
+// the historical snapshot identified by `snapshotId` to is_current=TRUE.
+// Runs inside a transaction so the DELETE (which removes the existing
+// is_current=TRUE row from the partial unique index) lands before the UPDATE
+// that promotes the target row. Throws if `snapshotId` doesn't exist, doesn't
+// belong to `profileId`, or is already the current row.
 export async function restoreUpworkProfileSnapshot(
   profileId: string,
   snapshotId: string
@@ -3389,38 +3395,43 @@ export async function restoreUpworkProfileSnapshot(
     throw new Error("profileId and snapshotId are required");
   }
 
-  const result = await sql<{ promoted_id: string; deleted_id: string | null }>`
-    WITH target AS (
+  return withTransaction(async (tx) => {
+    const target = await tx<{ id: string }>`
       SELECT id FROM upwork_profile_snapshots
       WHERE id = ${snapshotId}::uuid
         AND profile_id = ${profileId}
         AND is_current = FALSE
-    ),
-    deleted_current AS (
+      LIMIT 1
+    `;
+    if (target.rows.length === 0) {
+      throw new Error(
+        "Snapshot not found, does not belong to this profile, or is already current"
+      );
+    }
+    const targetId = target.rows[0].id;
+
+    const deleted = await tx<{ id: string }>`
       DELETE FROM upwork_profile_snapshots
-      WHERE profile_id = ${profileId}
-        AND is_current = TRUE
-        AND EXISTS (SELECT 1 FROM target)
+      WHERE profile_id = ${profileId} AND is_current = TRUE
       RETURNING id
-    ),
-    promoted AS (
+    `;
+
+    const promoted = await tx<{ id: string }>`
       UPDATE upwork_profile_snapshots
       SET is_current = TRUE
-      WHERE id = (SELECT id FROM target)
+      WHERE id = ${targetId}::uuid
       RETURNING id
-    )
-    SELECT
-      (SELECT id FROM promoted) AS promoted_id,
-      (SELECT id FROM deleted_current) AS deleted_id
-  `;
+    `;
 
-  const row = result.rows[0];
-  if (!row?.promoted_id) {
-    throw new Error(
-      "Snapshot not found, does not belong to this profile, or is already current"
-    );
-  }
-  return { promoted_id: row.promoted_id, deleted_id: row.deleted_id };
+    if (promoted.rows.length === 0) {
+      throw new Error("Failed to promote target snapshot");
+    }
+
+    return {
+      promoted_id: promoted.rows[0].id,
+      deleted_id: deleted.rows[0]?.id ?? null,
+    };
+  });
 }
 
 // Returns all profiles assigned to a given agent, ordered by name.
