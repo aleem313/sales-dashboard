@@ -67,5 +67,6 @@ export const config = {
     "/api/relevancy-audit/:path*",
     "/relevancy-evaluator/:path*",
     "/api/relevancy/:path*",
+    "/api/admin/:path*",
   ],
 };

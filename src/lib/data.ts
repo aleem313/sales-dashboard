@@ -4726,3 +4726,137 @@ export async function listProfilesForManualEval(): Promise<
     has_snapshot: r.has_snapshot,
   }));
 }
+
+// ============================================================
+// THRESHOLD PREVIEW (Phase 13/14, plan v3.3 §10.6.4)
+// ============================================================
+
+export interface ThresholdPreview {
+  window_days: number;
+  profile_id: string | null;
+  total: number;                         // all rows in window
+  scored: number;                        // rows with total_score IS NOT NULL
+  by_decision: Record<string, number>;   // proceed / reject / review counts
+  by_effective_decision: Record<string, number>;
+  proceeds_total: number;                // rows where decision = proceed
+  would_flip: Array<{ threshold: number; count: number; pct_of_proceeds: number }>;
+  score_distribution: Array<{ band: string; count: number }>;  // 0-9, 10-19, ..., 90-100
+}
+
+// Computes the calibration distribution for the operator settings preview.
+// Filters: last N days (default 7), optionally scoped to one profile.
+// Powers the inline preview shown next to the min_score input + the per-profile
+// dropdown on the Settings page.
+export async function getThresholdPreview(opts: {
+  windowDays?: number;
+  profileId?: string | null;
+}): Promise<ThresholdPreview> {
+  const windowDays = opts.windowDays && opts.windowDays > 0 && opts.windowDays <= 90
+    ? Math.floor(opts.windowDays)
+    : 7;
+  const profileId = opts.profileId && typeof opts.profileId === "string"
+    ? opts.profileId
+    : null;
+
+  // Use parameterized sql.query for dynamic profile_id branching; tagged
+  // templates can't splice query fragments cleanly with the wrapper in db.ts.
+  const aggSql = `
+    SELECT
+      COUNT(*)::int                                                                            AS total,
+      COUNT(*) FILTER (WHERE total_score IS NOT NULL)::int                                     AS scored,
+      COUNT(*) FILTER (WHERE decision = 'proceed')::int                                        AS proceed_count,
+      COUNT(*) FILTER (WHERE decision = 'reject')::int                                         AS reject_count,
+      COUNT(*) FILTER (WHERE decision = 'review')::int                                         AS review_count,
+      COUNT(*) FILTER (WHERE effective_decision = 'proceed')::int                              AS eff_proceed,
+      COUNT(*) FILTER (WHERE effective_decision = 'reject')::int                               AS eff_reject,
+      COUNT(*) FILTER (WHERE effective_decision = 'review')::int                               AS eff_review,
+      COUNT(*) FILTER (WHERE decision = 'proceed' AND total_score IS NOT NULL)::int            AS proceeds_total,
+      COUNT(*) FILTER (WHERE decision = 'proceed' AND total_score IS NOT NULL AND total_score < 40)::int AS flip_40,
+      COUNT(*) FILTER (WHERE decision = 'proceed' AND total_score IS NOT NULL AND total_score < 50)::int AS flip_50,
+      COUNT(*) FILTER (WHERE decision = 'proceed' AND total_score IS NOT NULL AND total_score < 60)::int AS flip_60,
+      COUNT(*) FILTER (WHERE decision = 'proceed' AND total_score IS NOT NULL AND total_score < 70)::int AS flip_70,
+      COUNT(*) FILTER (WHERE decision = 'proceed' AND total_score IS NOT NULL AND total_score < 80)::int AS flip_80
+    FROM relevancy_scores
+    WHERE evaluated_at > NOW() - ($1 || ' days')::interval
+      ${profileId ? "AND profile_id = $2" : ""}
+  `;
+  const aggParams: unknown[] = profileId ? [windowDays, profileId] : [windowDays];
+  const rows = await sql.query<{
+    total: number | string;
+    scored: number | string;
+    proceed_count: number | string;
+    reject_count: number | string;
+    review_count: number | string;
+    eff_proceed: number | string;
+    eff_reject: number | string;
+    eff_review: number | string;
+    proceeds_total: number | string;
+    flip_40: number | string;
+    flip_50: number | string;
+    flip_60: number | string;
+    flip_70: number | string;
+    flip_80: number | string;
+  }>(aggSql, aggParams);
+
+  const distSql = `
+    SELECT
+      LEAST(FLOOR(total_score / 10)::int, 9) AS band,
+      COUNT(*)::int                          AS cnt
+    FROM relevancy_scores
+    WHERE evaluated_at > NOW() - ($1 || ' days')::interval
+      AND total_score IS NOT NULL
+      ${profileId ? "AND profile_id = $2" : ""}
+    GROUP BY band
+    ORDER BY band
+  `;
+  const dist = await sql.query<{ band: number | string; cnt: number | string }>(
+    distSql,
+    aggParams
+  );
+
+  const r = rows.rows[0] ?? {
+    total: 0, scored: 0, proceed_count: 0, reject_count: 0, review_count: 0,
+    eff_proceed: 0, eff_reject: 0, eff_review: 0, proceeds_total: 0,
+    flip_40: 0, flip_50: 0, flip_60: 0, flip_70: 0, flip_80: 0,
+  };
+  const proceedsTotal = Number(r.proceeds_total);
+  const pct = (n: number) =>
+    proceedsTotal > 0 ? Math.round((n / proceedsTotal) * 1000) / 10 : 0;
+
+  // Pre-fill all 10 bands so the UI can render a stable histogram.
+  const bandMap = new Map<number, number>();
+  for (let i = 0; i <= 9; i++) bandMap.set(i, 0);
+  for (const d of dist.rows) {
+    bandMap.set(Number(d.band), Number(d.cnt));
+  }
+  const score_distribution = Array.from(bandMap.entries()).map(([band, count]) => ({
+    band: band === 9 ? "90-100" : `${band * 10}-${band * 10 + 9}`,
+    count,
+  }));
+
+  return {
+    window_days: windowDays,
+    profile_id: profileId,
+    total: Number(r.total),
+    scored: Number(r.scored),
+    by_decision: {
+      proceed: Number(r.proceed_count),
+      reject: Number(r.reject_count),
+      review: Number(r.review_count),
+    },
+    by_effective_decision: {
+      proceed: Number(r.eff_proceed),
+      reject: Number(r.eff_reject),
+      review: Number(r.eff_review),
+    },
+    proceeds_total: proceedsTotal,
+    would_flip: [
+      { threshold: 40, count: Number(r.flip_40), pct_of_proceeds: pct(Number(r.flip_40)) },
+      { threshold: 50, count: Number(r.flip_50), pct_of_proceeds: pct(Number(r.flip_50)) },
+      { threshold: 60, count: Number(r.flip_60), pct_of_proceeds: pct(Number(r.flip_60)) },
+      { threshold: 70, count: Number(r.flip_70), pct_of_proceeds: pct(Number(r.flip_70)) },
+      { threshold: 80, count: Number(r.flip_80), pct_of_proceeds: pct(Number(r.flip_80)) },
+    ],
+    score_distribution,
+  };
+}
