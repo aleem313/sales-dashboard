@@ -23,7 +23,7 @@ export function RejectsTable({ rows }: RejectsTableProps) {
             <th className="px-3 py-2 text-left font-semibold">Job</th>
             <th className="px-3 py-2 text-right font-semibold">Score</th>
             <th className="px-3 py-2 text-left font-semibold">Tier</th>
-            <th className="px-3 py-2 text-left font-semibold">Top reason</th>
+            <th className="px-3 py-2 text-left font-semibold">Reasons</th>
             <th className="px-3 py-2 text-left font-semibold">Mode</th>
             <th className="px-3 py-2 text-right font-semibold">Action</th>
           </tr>

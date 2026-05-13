@@ -120,9 +120,13 @@ export function RejectRow({ row, expanded, onToggleExpand }: RejectRowProps) {
     }
   }
 
-  const topReason = row.rejection_reasons && row.rejection_reasons.length > 0
-    ? row.rejection_reasons[0]
-    : null;
+  // Show the first 4 reasons as badges so the admin can scan multi-gate
+  // rejects at a glance. Overflow → "+N more" pill with full list in tooltip.
+  const reasons = row.rejection_reasons ?? [];
+  const MAX_VISIBLE_REASONS = 4;
+  const visibleReasons = reasons.slice(0, MAX_VISIBLE_REASONS);
+  const hiddenReasonCount = Math.max(0, reasons.length - MAX_VISIBLE_REASONS);
+  const hiddenReasonsTooltip = reasons.slice(MAX_VISIBLE_REASONS).join(", ");
 
   const isOverridden = row.override !== null;
 
@@ -175,21 +179,43 @@ export function RejectRow({ row, expanded, onToggleExpand }: RejectRowProps) {
           </Badge>
         </td>
         <td className="px-3 py-2">
-          {topReason ? (
-            <Badge variant="outline" className="border-red-300 text-red-700 dark:border-red-900 dark:text-red-300 text-[11px]">
-              {topReason}
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-[11px] text-muted-foreground italic">
-              (unspecified)
-            </Badge>
-          )}
-          {row.threshold_flipped && (
-            <Badge variant="outline" className="ml-1 border-amber-300 text-amber-700 dark:border-amber-900 dark:text-amber-300 text-[11px]" title="LLM said proceed but score < min_score; flipped to reject">
-              <Zap className="mr-0.5 h-3 w-3" />
-              flipped
-            </Badge>
-          )}
+          <div className="flex flex-wrap items-center gap-1">
+            {visibleReasons.length === 0 ? (
+              <Badge variant="outline" className="text-[11px] text-muted-foreground italic">
+                (unspecified)
+              </Badge>
+            ) : (
+              visibleReasons.map((r, i) => (
+                <Badge
+                  key={`${r}-${i}`}
+                  variant="outline"
+                  className="border-red-300 text-red-700 dark:border-red-900 dark:text-red-300 text-[11px]"
+                  title={r}
+                >
+                  {r}
+                </Badge>
+              ))
+            )}
+            {hiddenReasonCount > 0 && (
+              <Badge
+                variant="outline"
+                className="border-red-300 text-red-700 dark:border-red-900 dark:text-red-300 text-[11px]"
+                title={hiddenReasonsTooltip}
+              >
+                +{hiddenReasonCount} more
+              </Badge>
+            )}
+            {row.threshold_flipped && (
+              <Badge
+                variant="outline"
+                className="border-amber-300 text-amber-700 dark:border-amber-900 dark:text-amber-300 text-[11px]"
+                title="LLM said proceed but score < min_score; flipped to reject"
+              >
+                <Zap className="mr-0.5 h-3 w-3" />
+                flipped
+              </Badge>
+            )}
+          </div>
         </td>
         <td className="px-3 py-2">
           <Badge
