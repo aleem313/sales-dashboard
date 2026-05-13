@@ -6,7 +6,7 @@ Replays 20 frozen Appendix D fixtures through the manual evaluator's classifier 
 
 | Item | Where | Notes |
 |---|---|---|
-| `MANUAL_EVAL_TOKEN` | Bearer token attached to n8n J1 Webhook credential | The same value the dashboard uses to call `/webhook/job-evaluate-manual` |
+| `RELEVANCY_MANUAL_EVAL_TOKEN` | Bearer token attached to n8n J1 Webhook credential | The same value the dashboard uses to call `/webhook/job-evaluate-manual`. (`MANUAL_EVAL_TOKEN` is accepted as a legacy alias.) |
 | `job-evaluate-manual` workflow active | n8n cloud (`fvbhmg0NPnRm4z54`) | Credential attached to J1, workflow toggled ON |
 | `_relevancy-classifier-core` active | n8n cloud (`hi71jhPU8tmq7hEp`) | Already active since 2026-05-12 |
 | Snapshots loaded | Shayan, Saim, Craig, Khansa, Sana | Per Appendix D.6 — all already loaded |
@@ -14,10 +14,10 @@ Replays 20 frozen Appendix D fixtures through the manual evaluator's classifier 
 
 ## How to run
 
-From repo root, with `MANUAL_EVAL_TOKEN` exported:
+From repo root, with `RELEVANCY_MANUAL_EVAL_TOKEN` exported:
 
 ```bash
-export MANUAL_EVAL_TOKEN=<your-token>
+export RELEVANCY_MANUAL_EVAL_TOKEN=<your-token>
 npx tsx scripts/smoke-test-phase-11.ts
 ```
 
@@ -28,12 +28,12 @@ Optional flags:
 | `--only 1,12,17` | all 20 | Run a subset (debug specific fixtures) |
 | `--concurrency 2` | `1` | Increase parallelism — keep low to avoid Gemini rate-limit |
 | `--webhook-base <url>` | `https://ikonicdev.app.n8n.cloud/webhook` | Override n8n cloud URL |
-| `--token <value>` | `$MANUAL_EVAL_TOKEN` | Inline token (avoid for shell history) |
+| `--token <value>` | `$RELEVANCY_MANUAL_EVAL_TOKEN` | Inline token (avoid for shell history) |
 
 PowerShell:
 
 ```powershell
-$env:MANUAL_EVAL_TOKEN = "<token>"
+$env:RELEVANCY_MANUAL_EVAL_TOKEN = "<token>"
 npx tsx scripts/smoke-test-phase-11.ts
 ```
 

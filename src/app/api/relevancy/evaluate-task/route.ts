@@ -148,8 +148,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 5. Forward to n8n.
-  const token = process.env.MANUAL_EVAL_TOKEN;
+  // 5. Forward to n8n. Env var name matches plan §15.1.
+  //    `MANUAL_EVAL_TOKEN` is accepted as a transitional alias (the earlier
+  //    .env.relevancy.example used that name) but `RELEVANCY_MANUAL_EVAL_TOKEN`
+  //    is authoritative.
+  const token = process.env.RELEVANCY_MANUAL_EVAL_TOKEN || process.env.MANUAL_EVAL_TOKEN;
   if (!token) {
     return NextResponse.json(
       { error: "manual_eval_token_not_configured" },

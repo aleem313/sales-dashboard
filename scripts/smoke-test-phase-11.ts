@@ -13,8 +13,9 @@
 //   node --import tsx scripts/smoke-test-phase-11.ts --concurrency 2   # default 1
 //
 // Required env (or CLI flags):
-//   MANUAL_EVAL_TOKEN     — Bearer token attached to n8n's J1 Webhook credential.
-//   N8N_WEBHOOK_BASE      — defaults to https://ikonicdev.app.n8n.cloud/webhook
+//   RELEVANCY_MANUAL_EVAL_TOKEN — Bearer token attached to n8n's J1 Webhook credential.
+//                                 (MANUAL_EVAL_TOKEN accepted as transitional alias.)
+//   N8N_WEBHOOK_BASE            — defaults to https://ikonicdev.app.n8n.cloud/webhook
 //
 // Output:
 //   docs/phase-11-results/<ISO-timestamp>.json     — full per-fixture data
@@ -101,7 +102,10 @@ interface CliArgs {
 function parseArgs(argv: string[]): CliArgs {
   const args = {
     webhookBase: process.env.N8N_WEBHOOK_BASE || "https://ikonicdev.app.n8n.cloud/webhook",
-    token: process.env.MANUAL_EVAL_TOKEN || "",
+    token:
+      process.env.RELEVANCY_MANUAL_EVAL_TOKEN ||
+      process.env.MANUAL_EVAL_TOKEN ||
+      "",
     only: null as number[] | null,
     concurrency: 1,
     fixturesPath: "docs/phase-11-fixtures.json",
@@ -125,7 +129,7 @@ function parseArgs(argv: string[]): CliArgs {
 
   if (!args.token) {
     throw new Error(
-      "MANUAL_EVAL_TOKEN env var or --token flag is required (the n8n webhook bearer)"
+      "RELEVANCY_MANUAL_EVAL_TOKEN env var or --token flag is required (the n8n webhook bearer)"
     );
   }
   return args;
