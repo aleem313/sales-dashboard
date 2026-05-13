@@ -253,24 +253,112 @@ async function runWatch(args: CliArgs) {
   console.log(
     `(${args.watchIntervalSec}s interval, ${args.watchTimeoutSec}s timeout. Flip the toggle in /settings now if you haven't yet.)`
   );
+
+  let propagated = false;
   while (Date.now() < deadline) {
     const r = await fetchProfileContext(args.dashboardBase, args.profileId);
     const current = r.body?._system?.classifier_mode ?? "?";
     const minScore = r.body?._system?.effective_min_score ?? "?";
     const ts = new Date().toLocaleTimeString();
     if (current === args.expect) {
-      console.log(`  [${ts}] mode = ${current} · effective_min_score = ${minScore}  ✅ matched`);
-      console.log(`\n✅ classifier_mode propagated to n8n's read path within window.`);
-      return;
+      console.log(
+        `  [${ts}] mode = ${current} · effective_min_score = ${minScore}  ✅ matched`
+      );
+      propagated = true;
+      break;
     }
-    console.log(`  [${ts}] mode = ${current} · effective_min_score = ${minScore}  (waiting for ${args.expect})`);
+    console.log(
+      `  [${ts}] mode = ${current} · effective_min_score = ${minScore}  (waiting for ${args.expect})`
+    );
     await new Promise((res) => setTimeout(res, args.watchIntervalSec * 1000));
   }
-  console.log(`\n⚠️ Timed out after ${args.watchTimeoutSec}s. Possible causes:`);
-  console.log("  - Toggle wasn't clicked (or click failed)");
-  console.log("  - Cache invalidation didn't fire — check updateTag() in setRelevancyModeAction");
-  console.log("  - Dashboard container needs restart");
-  process.exit(1);
+
+  if (!propagated) {
+    console.log(`\n⚠️ Timed out after ${args.watchTimeoutSec}s. Possible causes:`);
+    console.log("  - Toggle wasn't clicked (or click failed)");
+    console.log("  - Cache invalidation didn't fire — check updateTag() in setRelevancyModeAction");
+    console.log("  - Dashboard container needs restart");
+    process.exit(1);
+  }
+
+  console.log(`\n✅ classifier_mode propagated to n8n's read path within window.`);
+
+  // Second-stage check: run a real manual eval and confirm the verdict
+  // comes back stamped with classifier_mode_at_decision = expect. This proves
+  // the full chain (DB → /api/profiles/:id/context → C1 → C6 → verdict) is
+  // emitting the new mode, not just that the context endpoint sees it.
+  if (!args.token) {
+    console.log(
+      "\nℹ️  Skipping verdict-stamp check — no RELEVANCY_MANUAL_EVAL_TOKEN."
+    );
+    console.log(
+      "    Re-run with --token <value> (or export the env var) to validate the full chain."
+    );
+    return;
+  }
+
+  console.log(`\nRunning manual eval probe to verify verdict-stamp matches…`);
+  try {
+    const r = await fetch(`${args.webhookBase}/job-evaluate-manual`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${args.token}`,
+      },
+      body: JSON.stringify({
+        task_id: args.smokeTaskId,
+        profile_id: args.smokeProfileId,
+        requested_by: "smoke-test-phase-14-watch",
+        request_id: randomUUID(),
+      }),
+    });
+    const text = await r.text();
+    interface VerdictProbe {
+      classifier_mode_at_decision?: string;
+      min_score_at_decision?: number;
+      decision?: string;
+      effective_decision?: string;
+      threshold_flipped?: boolean;
+      total_score?: number | null;
+      error?: string;
+    }
+    let v: VerdictProbe | null = null;
+    try {
+      v = JSON.parse(text) as VerdictProbe;
+    } catch {
+      /* */
+    }
+    if (!r.ok || !v) {
+      console.log(
+        `  ✗ Probe HTTP ${r.status} — ${v?.error ?? text.slice(0, 120)}`
+      );
+      process.exit(1);
+    }
+    const stamped = v.classifier_mode_at_decision;
+    const stampOk = stamped === args.expect;
+    console.log(
+      `  ${stampOk ? "✓" : "✗"} verdict.classifier_mode_at_decision = ${stamped ?? "(missing)"}`
+    );
+    console.log(
+      `    decision=${v.decision} · effective=${v.effective_decision} · threshold_flipped=${v.threshold_flipped ?? false} · score=${v.total_score ?? "—"} · min=${v.min_score_at_decision ?? "—"}`
+    );
+    if (!stampOk) {
+      console.log(
+        `\n⚠️ Profile context says ${args.expect} but classifier still stamped ${stamped}.`
+      );
+      console.log(
+        "    Likely the classifier sub-workflow cached the old mode mid-execution OR C1's read returned stale data."
+      );
+      console.log(
+        "    Wait 60s and retry — n8n cloud caches profile-context reads per-execution."
+      );
+      process.exit(1);
+    }
+    console.log(`\n✅ Full chain verified: DB → context endpoint → classifier verdict all show ${args.expect}.`);
+  } catch (e) {
+    console.log(`\n⚠️ Probe failed: ${(e as Error).message}`);
+    process.exit(1);
+  }
 }
 
 async function main() {
