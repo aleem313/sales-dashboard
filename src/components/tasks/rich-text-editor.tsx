@@ -57,7 +57,7 @@ export function RichTextEditor({
     editorProps: {
       attributes: {
         class: cn(
-          "prose prose-sm dark:prose-invert max-w-none min-h-[80px] px-3 py-2 text-sm focus:outline-none",
+          "prose prose-sm dark:prose-invert max-w-none min-h-[80px] max-h-96 overflow-y-auto px-3 py-2 text-sm focus:outline-none",
           "[&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0"
         ),
       },
