@@ -1,32 +1,44 @@
 # Mode A — Production Relevancy Classifier System Prompt
 
 **Prompt version**: `v1`
-**Criteria version**: `0.2` (matches `criteria_versions` seed in migration 019)
-**Token estimate**: ~7,000 (system instruction only; cached after first call via Gemini implicit caching)
-**Status**: **Canonical**. Source-of-truth for the n8n env var `RELEVANCY_SYSTEM_PROMPT_A` and any out-of-band tests against Gemini Flash 2.5.
+**Criteria version**: `0.2` (matches `criteria_versions` seed in migration 019; reason_enum extended 13 → 16 via migration 020 on 2026-05-12)
+**Token estimate**: ~7,000 (full body, system instruction only)
+**Status**: **Canonical**. Source-of-truth for the inlined `parameters.options.systemMessage` on both AI Agents in `_relevancy-classifier-core` (`hi71jhPU8tmq7hEp`) and any out-of-band tests against the production LLMs.
 **Source refs**: PRD §6.2 (reason taxonomy), PRD §7 (hard gates), PRD §16 (example library), plan v3.3 §8.2 / §8.4 (prompt design + output schema)
 
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-05-15 | OUTPUT RULES: added "Top-level shape only" bullet forbidding the `rubric` wrapper and pinning component field name to `value` (not `score`) | DeepSeek (now primary post-2026-05-15 swap) was emitting `{rubric: {components, total_score, tier}}` with component `.score` instead of top-level `{components, total_score, tier}` with `.value`. C6 validators were reading `verdict.total_score` / `verdict.components` (both undefined under the wrapper), persisting `null`, and the dashboard score badge / breakdown rendered empty. Belt-and-braces with the C6 normalization patch shipped same day — prompt is the front-line fix, code is the safety net. |
 | 2026-05-11 | Initial extraction during Phase 6 Part B Sitting 1 | Phase 6 starts — the canonical prompt has been a `{{ paste here }}` placeholder in v2 §5.3 until now |
 
 ## Usage
 
 ### Loading into n8n
 
-The body in `## Prompt body (verbatim)` below is the literal text that goes into the n8n env var `RELEVANCY_SYSTEM_PROMPT_A`. Copy everything between the opening and closing `~~~` fences (NOT the markdown ``` fences, which would conflict with the JSON inside).
+The body in `## Prompt body (verbatim)` below is the literal text that goes into `parameters.options.systemMessage` on the n8n AI Agent nodes. Copy everything between the opening and closing `~~~` fences (NOT the markdown ``` fences, which would conflict with the JSON inside).
 
-In n8n's Google Gemini Chat Model node, reference the env var with `={{ $env.RELEVANCY_SYSTEM_PROMPT_A }}`.
+**The classifier sub-workflow has TWO AI Agents** (primary + failover topology since 2026-05-12, primary/failover roles swapped on 2026-05-15):
+
+| Role | Node | LLM | Prompt body | Patched via |
+|---|---|---|---|---|
+| Primary | `AI Agent — Relevancy Classifier` (id `097c8c70-26ac-4b9c-ad07-2bf296b0125d`) | DeepSeek R1 via OpenRouter | **Condensed ~11.5KB** (evidence library omitted; gates/enum/rubric/tiers/calibration notes preserved) | `patchNodeField` on `parameters.options.systemMessage` |
+| Failover | `AI Agent — Relevancy Classifier (Gemini Failover)` (id `c5-ai-agent`) | Gemini 2.5 Flash via OpenRouter | **Full ~38.7KB** (this canonical body verbatim, including the §16 evidence library) | `patchNodeField` on `parameters.options.systemMessage` |
+
+Logic edits (decision rules, gates, reason enum, rubric, tiers, calibration notes, self-check) MUST be mirrored across BOTH agents in the same atomic `n8n_update_partial_workflow` call. The only intentional divergence is the evidence-library omission on the DeepSeek primary.
+
+Note: n8n cloud on this plan tier does NOT expose custom env vars (`$env.MY_VAR` is undefined and breaks IF condition evaluation when accessed). The prompt is inlined directly into each agent's `systemMessage` — there is no env-var indirection.
 
 ### Pairing this prompt with a structured-output schema
 
-This prompt instructs the LLM to emit JSON conforming to the schema in plan v3 §8.4. The Gemini node MUST be configured with `generationConfig.responseMimeType = "application/json"` and `responseSchema` set to the v3 §8.4 schema. The schema is the contract; this prompt is the rationale + library + tone.
+This prompt instructs the LLM to emit JSON conforming to the schema in plan v3 §8.4. In the live workflow, the Structured Output Parser sub-node is shared by both AI Agents but **inert** (`hasOutputParser: false`) — three attempts to enable schema enforcement failed at schema-init time on the prior Gemini-direct path; the OpenRouter path has not been re-tested. See `docs/n8n_relevancy_classifier_core_prd.md` TD-2. Workaround: each LLM emits raw text; the Validate Output twin (`c6-validate` Gemini path / `c6-deepseek-validate` DeepSeek path) JSON.parses with try/catch fallback.
 
-### Cache behavior
+### Token-budget caveats
 
-Gemini implicit caching keys off the system instruction. So long as this text does not change byte-for-byte, every call after the first hits cache. **Do not template-interpolate** anything into this prompt body — keep it static. Per-call variation goes in the user message.
+Both LLM sub-nodes have `options.maxTokens = 8192` set explicitly (2026-05-13 fix after score #514 truncated). With empty `options: {}` the request hits OpenRouter's per-model default which is too low for Gemini 2.5 Flash + thinking-mode reasoning — reasoning tokens eat the budget and verdict JSON truncates mid-output. If you swap models, re-evaluate the cap.
+
+**Do not template-interpolate** anything into this prompt body — keep it static. Per-call variation goes in the user message.
 
 ## User message contract
 
@@ -109,7 +121,7 @@ C4 (`Prepare Classifier Input`) in the `_relevancy-classifier-core` sub-workflow
 
 ## Prompt body (verbatim)
 
-Copy everything between the `~~~` fences below into `RELEVANCY_SYSTEM_PROMPT_A`. **Do not include the fences themselves.**
+Copy everything between the `~~~` fences below into the **failover Gemini agent's** `parameters.options.systemMessage` (full body). For the **primary DeepSeek agent**, copy the same body but omit the §16 evidence library section (the condensed ~11.5KB variant). **Do not include the fences themselves.**
 
 ~~~
 You are the Rising Lions Upwork Relevancy Classifier. Decide whether an incoming Upwork job is RELEVANT (worth a proposal) or NOT RELEVANT (move to N/A) for a specific freelancer profile.
@@ -716,6 +728,7 @@ These notes call out non-obvious patterns from the labeled data above. They over
 ## OUTPUT RULES
 
 - Emit ONLY JSON conforming to the response schema. No markdown, no prose preamble, no commentary.
+- **Top-level shape only.** `components`, `total_score`, and `tier` are SIBLINGS of `decision`, NOT nested inside a `rubric` wrapper. Inside each component, the field name is `value`, NOT `score`. Match the response schema exactly.
 - Every gate evaluated by you (those in `pending_for_llm`) MUST have an `evidence` string ≤ 200 chars citing concrete fields from the input.
 - Every rubric `components.<name>.reason` MUST cite concrete fields from the input.
 - `summary`: ≤ 600 chars. Lead with the decision and the strongest one or two signals.
