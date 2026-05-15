@@ -35,9 +35,14 @@ export const dynamic = "force-dynamic";
 const N8N_WEBHOOK_BASE =
   process.env.N8N_WEBHOOK_BASE || "https://ikonicdev.app.n8n.cloud/webhook";
 const MANUAL_EVAL_WEBHOOK_PATH = "job-evaluate-manual";
-// n8n's executeWorkflow + Gemini stack is sub-2s on the warm path. Give it a
-// generous ceiling so we surface as 504 instead of letting the browser hang.
-const N8N_TIMEOUT_MS = 25_000;
+// Classifier latency profile depends on the primary LLM:
+//   Gemini 2.5 Flash:       ~10s warm path
+//   DeepSeek R1 (full):     180-300s (reasoning model)
+//   DeepSeek R1-Distill-70B: 20-40s typical (current primary as of 2026-05-15)
+// Plus profile-context HTTP, persist HTTP, and respond formatting overhead.
+// 60s gives ~2x safety margin over the current typical run. Bump if you swap
+// to a slower model (see docs/relevancy/llm_options_and_latency.md).
+const N8N_TIMEOUT_MS = 60_000;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Permissive: any host, /tasks or /my-tasks, ?task=<uuid> as the FIRST or only param.

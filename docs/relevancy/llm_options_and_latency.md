@@ -123,23 +123,57 @@ DeepSeek's prompt is already condensed (~11.5KB vs Gemini's full 38.7KB). Furthe
 
 ## 8. How to swap models (operationally)
 
+### 8.1 Model-swap checklist
+
+Whenever you change the primary or failover model id, run through this list — skipping any of it leads to a silent failure (timeouts, wrong DB labels, dashboard misreads):
+
+- [ ] **Update the LLM sub-node's `parameters.model.value`** (see §8.2 below).
+- [ ] **Update the matching Validate Output twin's `verdict.model` hardcode** so `relevancy_scores.model` distinguishes runs by variant (see §8.3).
+- [ ] **Check the API route timeout in `src/app/api/relevancy/evaluate-task/route.ts`** (constant `N8N_TIMEOUT_MS`). The classifier's typical latency must be well under this ceiling, otherwise the manual evaluator will silently fail with `n8n_timeout` even though the n8n run succeeded. See §8.4.
+- [ ] **Validate** with `n8n_validate_workflow` after the n8n edit — must come back valid.
+- [ ] **Smoke-test** via the manual evaluator (`/relevancy-evaluator`) or wait for a live Vollna fire.
+- [ ] **Update `docs/n8n_relevancy_classifier_core_prd.md` §12** with a dated changelog entry.
+- [ ] **Update memory** `relevancy_classifier_status.md` "Recent patches" section.
+
+### 8.2 The model id field
+
 The model id lives in **one field** in the sub-workflow `hi71jhPU8tmq7hEp`:
 
 - **Primary LLM sub-node**: `DeepSeek R1 (OpenRouter)`, node id `6b156aeb-60b2-4c0e-afc3-d24f5735f868`
-- **Field**: `parameters.model.value`
-- **Current value**: `deepseek/deepseek-r1`
-- **Change to**: `deepseek/deepseek-r1-distill-llama-70b` (or whichever variant)
+  - **Field**: `parameters.model.value`
+  - **Current value (as of 2026-05-15)**: `deepseek/deepseek-r1-distill-llama-70b`
+- **Failover LLM sub-node**: `Gemini 2.5 Flash (OpenRouter)`, node id `83310b74-e12c-4091-adf8-23b24fe21705`
+  - **Field**: `parameters.model.value`
+  - **Current value**: `google/gemini-2.5-flash`
 
-That's it. Single `patchNodeField` op via `n8n_update_partial_workflow`. No prompt change, no Validate Output change, no connection change.
+Single `patchNodeField` op via `n8n_update_partial_workflow`. No prompt change, no Validate Output structural change, no connection change.
 
-Mirror change for the failover LLM sub-node if swapping that too:
-- `Gemini 2.5 Flash (OpenRouter)`, node id `83310b74-e12c-4091-adf8-23b24fe21705`
-- `parameters.model.value`: `google/gemini-2.5-flash`
+### 8.3 The `verdict.model` hardcode
 
-**Important**: do NOT update `verdict.model` hardcodes in the Validate Output Code nodes when you swap variants — the hardcoded strings (`'gemini-2.5-flash'`, `'deepseek-r1'`) are what the dashboard's "via X" badge logic keys off. Either:
-- Keep the hardcodes (badge will say "via DeepSeek R1" even when it's actually the distilled variant — misleading), or
-- Update the hardcodes to match the new model id AND update the dashboard's RelevancyPanel switch to recognize the new id, or
-- Better: pull the model id dynamically from the LLM response (longer-term fix, not urgent).
+Each Validate Output Code node hardcodes a string into `verdict.model`. That string lands in `relevancy_scores.model` and feeds the dashboard's "via X" badge.
+
+- **DeepSeek twin** (id `54869aed-9998-4712-b6a3-513d6005cfe3`) — currently `verdict.model = 'deepseek-r1-distill-llama-70b';`
+- **Gemini twin** (id `c6-validate-threshold`) — currently `verdict.model = 'gemini-2.5-flash';`
+
+The dashboard's `RelevancyPanel.modelDisplay` switch uses `model.includes("deepseek")` and `model.includes("gemini")` for prefix matching, so any reasonable id keeps the badge looking right. But for DB queryability, keep the hardcode in sync with the actual model id when swapping.
+
+### 8.4 The API route timeout (`N8N_TIMEOUT_MS`)
+
+**This is the bite-you-silently lever.** The Next.js API route at `src/app/api/relevancy/evaluate-task/route.ts` aborts the fetch to n8n after `N8N_TIMEOUT_MS` milliseconds. If the classifier takes longer than this, n8n still finishes its work and persists the row to `relevancy_scores` — but the result never reaches the browser, the user sees nothing (or a tiny toast that's easy to miss), and the manual evaluator looks broken.
+
+Calibrate this ceiling to ~2× the typical classifier latency:
+
+| Primary model | Typical latency | Recommended `N8N_TIMEOUT_MS` |
+|---|---|---|
+| Gemini 2.5 Flash | ~10s | `25_000` |
+| DeepSeek R1-Distill-Llama-70B (current) | 20–40s | `60_000` |
+| DeepSeek R1-Distill-Qwen-32B | 15–25s | `45_000` |
+| DeepSeek V3 | 10–20s | `30_000` |
+| Full DeepSeek R1 | 180–300s | `360_000` (and consider whether the user will wait that long) |
+
+**Symptom of a too-tight timeout**: `manual_job_evaluations.load_error = 'n8n_timeout'` rows accumulate, all the matching n8n executions show `status: success` with valid verdicts, but the user sees nothing in the dashboard. Fix by bumping `N8N_TIMEOUT_MS` to match the new model's latency profile.
+
+This bug bit on 2026-05-15: the swap from Gemini Flash to DeepSeek R1-Distill-70B raised typical latency from ~10s to 30s, but the API timeout stayed at 25s. Fixed by bumping to 60s.
 
 ---
 
