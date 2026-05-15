@@ -41,7 +41,7 @@ import {
   Image as ImageIcon,
   Download,
 } from "lucide-react";
-import { cn, copyText } from "@/lib/utils";
+import { cn, copyText, descriptionToHtml } from "@/lib/utils";
 import { formatDistanceToNow, format } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -896,7 +896,7 @@ export function TaskDetailDrawer({ columns, isAdmin, agentId: currentAgentId }: 
             <div className="px-6 py-3">
               <p className="text-sm font-medium mb-2">Description</p>
               <RichTextEditor
-                content={task.description ?? ""}
+                content={descriptionToHtml(task.description)}
                 onChange={(html) => setTask((prev) => prev ? { ...prev, description: html } : prev)}
                 onBlur={() => updateField("description", task.description)}
               />

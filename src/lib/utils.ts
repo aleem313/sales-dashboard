@@ -51,6 +51,25 @@ export function formatHours(hours: number | null): string {
   return `${hours.toFixed(1)}h`;
 }
 
+// Tiptap's `content` prop expects HTML. Job descriptions ingested via n8n are
+// stored as plain text with `\n` newlines, which Tiptap collapses to spaces.
+// Detect HTML and pass it through; otherwise escape plain text and convert
+// double-newlines to paragraphs and single newlines to <br>.
+export function descriptionToHtml(text: string | null | undefined): string {
+  if (!text) return "";
+  if (/^\s*<(p|br|div|h\d|ul|ol|li|span|strong|em|a)\b/i.test(text)) {
+    return text;
+  }
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return escaped
+    .split(/\n\n+/)
+    .map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
 // Copy text to clipboard with a fallback for insecure (HTTP) contexts
 // where `navigator.clipboard` is unavailable — e.g. the self-hosted Contabo
 // deployment at http://157.173.110.62.

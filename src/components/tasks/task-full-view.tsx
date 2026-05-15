@@ -42,7 +42,7 @@ import {
   Search,
   Copy,
 } from "lucide-react";
-import { cn, copyText } from "@/lib/utils";
+import { cn, copyText, descriptionToHtml } from "@/lib/utils";
 import { formatDistanceToNow, format } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -967,7 +967,7 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
             <div>
               <p className="text-sm font-medium mb-2">Description</p>
               <RichTextEditor
-                content={task.description ?? ""}
+                content={descriptionToHtml(task.description)}
                 onChange={(html) => setTask((prev) => prev ? { ...prev, description: html } : prev)}
                 onBlur={() => updateField("description", task.description)}
               />
