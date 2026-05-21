@@ -3614,6 +3614,13 @@ export async function insertRelevancyScore(
   const componentsJson = row.components != null ? JSON.stringify(row.components) : null;
   const evidencePanelJson = row.evidence_panel != null ? JSON.stringify(row.evidence_panel) : null;
   const thresholdsUsedJson = row.thresholds_used != null ? JSON.stringify(row.thresholds_used) : null;
+  // total_score column is INTEGER; some LLMs (DeepSeek r1-distill, observed
+  // 2026-05-18..20) return fractional weighted sums like 82.5. Round here as
+  // a defensive last-line-of-defense so a malformed score never poisons the
+  // audit-log insert and lands the row in the DLQ. Precision loss is harmless
+  // for ranking/threshold comparisons, which is all the column is used for.
+  const totalScoreInt =
+    row.total_score == null ? null : Math.round(row.total_score);
 
   const result = await client<{ id: number | string }>`
     INSERT INTO relevancy_scores (
@@ -3643,7 +3650,7 @@ export async function insertRelevancyScore(
       ${row.gates_failed ?? null},
       ${gatesEvidenceJson}::jsonb,
       ${componentsJson}::jsonb,
-      ${row.total_score ?? null},
+      ${totalScoreInt},
       ${row.tier ?? null},
       ${row.confidence ?? null},
       ${row.confidence_warnings ?? null},
@@ -4565,6 +4572,13 @@ export async function drainRelevancyScoresDlq(opts: {
       const currentAttempts = row.attempts;
       retried++;
 
+      // Wrap the risky replay in a SAVEPOINT so a failure rolls back ONLY the
+      // replay attempt — the bookkeeping UPDATE below then runs on a healthy
+      // tx. Without this, an aborted replay poisons the outer tx and the
+      // entire batch loop crashes on the first malformed payload (observed
+      // 2026-05-21: 694 rows accumulated because catch-block UPDATE hit
+      // "current transaction is aborted, commands ignored").
+      await tx`SAVEPOINT sp_replay`;
       try {
         // Replay the parked verdict through the normal insert path. Postgres
         // CHECK constraints + FK on criteria_version are the validator —
@@ -4573,6 +4587,7 @@ export async function drainRelevancyScoresDlq(opts: {
           row.payload as import("./types").RelevancyScoreInsert,
           tx
         );
+        await tx`RELEASE SAVEPOINT sp_replay`;
         await tx`
           UPDATE relevancy_scores_dlq
           SET resolved_at = NOW()
@@ -4580,6 +4595,9 @@ export async function drainRelevancyScoresDlq(opts: {
         `;
         succeeded++;
       } catch (err) {
+        // The replay aborted the tx; roll back to the savepoint so the outer
+        // tx is healthy again and the bookkeeping UPDATE can commit.
+        await tx`ROLLBACK TO SAVEPOINT sp_replay`;
         // Exponential backoff: 1h, 2h, 4h, 8h, 16h. attempts will become
         // `currentAttempts + 1` after this UPDATE; if that crosses maxAttempts
         // the row is permanent.
