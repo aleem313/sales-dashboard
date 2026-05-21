@@ -32,7 +32,9 @@ No test framework. No local dev workflow — all changes must be production-read
 
 - **`admin`** — full access via `(dashboard)/` route group
 - **`agent`** — restricted to `(agent)/` route group; all agent routes start with `/my-`
+- **shared (admin + agent)** — `(shared)/` route group, e.g. `/relevancy-audit`, `/relevancy-evaluator`
 - Middleware (`src/middleware.ts`) enforces auth + redirects agents away from admin routes to `/my-dashboard`
+- **Two layers of role-guard** — middleware AND `(dashboard)/layout.tsx` both redirect agents. New shared routes MUST live in `(shared)/`, not `(dashboard)/`, or the layout will redirect agents even after middleware lets them through.
 
 ## Key Files
 
