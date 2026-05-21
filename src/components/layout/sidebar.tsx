@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -113,6 +114,13 @@ const agentNavSections: NavSection[] = [
     ],
   },
   {
+    label: "Relevancy",
+    items: [
+      { href: "/relevancy-evaluator", label: "Relevancy Evaluator", icon: Microscope },
+      { href: "/relevancy-audit", label: "Relevancy Audit", icon: ShieldCheck },
+    ],
+  },
+  {
     label: "Profiles",
     items: [
       { href: "/my-profiles", label: "My Profiles", icon: UserCircle },
@@ -184,9 +192,16 @@ function SidebarNav({
 }
 
 function useNavSections() {
+  const { data: session, status } = useSession();
   const pathname = usePathname();
-  const isAgentRoute = pathname.startsWith("/my-");
-  return isAgentRoute ? agentNavSections : adminNavSections;
+
+  // During initial session load, fall back to the URL heuristic so authenticated
+  // agents sitting on a shared route (/relevancy-audit, /relevancy-evaluator)
+  // don't get a flash of admin nav. Once status resolves, role is authoritative.
+  if (status === "loading") {
+    return pathname.startsWith("/my-") ? agentNavSections : adminNavSections;
+  }
+  return session?.user?.role === "agent" ? agentNavSections : adminNavSections;
 }
 
 function SidebarLogo({ homeHref, onClick }: { homeHref: string; onClick?: () => void }) {
