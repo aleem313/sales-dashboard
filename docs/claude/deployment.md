@@ -8,6 +8,7 @@ No local dev workflow — all changes must be production-ready.
 
 **CI/CD key files:**
 - `.github/workflows/deploy-contabo.yml` — auto-deploy pipeline (push to main)
+- `.github/workflows/relevancy-dlq-drain.yml` — hourly cron at `:07` that POSTs `/api/cron/relevancy-dlq-drain` with `Authorization: Bearer ${{ secrets.CRON_SECRET }}`. Concurrency-locked (`cancel-in-progress: true`) so manual dispatch + cron never overlap. Captures HTTP status + body via `-w` and `-o` so 5xx error bodies surface in the run summary — do NOT use `curl -sSf`, that swallows the body. Repo secret `CRON_SECRET` value must be the bare token (no `Bearer ` prefix); the workflow adds the prefix. Telemetry: GitHub masks the secret as `***`, so a healthy log reads `Authorization: Bearer ***`. If you see `Authorization: ***` (no visible `Bearer`), the secret value contains the prefix — strip it.
 - `docker-compose.server.yml` — lean HTTP-only compose used on Contabo (no nginx, no SSL)
 - `docker-compose.prod.yml` — full nginx+certbot stack, intended for post-domain setup
 

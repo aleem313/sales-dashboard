@@ -41,8 +41,14 @@ Migrations in `src/lib/migrations/`.
 
 - **Protected routes** check auth via `getServerSession()` or middleware
 - **Webhook routes** are public but verify signatures (HMAC SHA256)
-- **Cron routes** require `Authorization: Bearer <CRON_SECRET>` header
+- **Cron routes** require `Authorization: Bearer <CRON_SECRET>` header. The Bearer token is bare — do NOT include `Bearer ` inside the secret value, the route handler adds it.
 - Stats API responses are cached in DB; server actions call `revalidatePath()` to bust cache
+
+## Relevancy Scores Ingestion (gotchas)
+
+- **`relevancy_scores.total_score` is INTEGER, not NUMERIC.** Some LLMs (DeepSeek r1-distill confirmed 2026-05-18..20) return fractional weighted sums like `82.5`. `insertRelevancyScore` defensively `Math.round()`s the value before insertion (`src/lib/data.ts`). Same applies to `min_score_at_decision`, `input_tokens`, `output_tokens`, `latency_ms` — all INTEGER. Only `confidence` is `numeric(4,3)`.
+- **DLQ drain uses Postgres SAVEPOINTs per row.** `drainRelevancyScoresDlq` wraps each `insertRelevancyScore` replay in `SAVEPOINT sp_replay` so a failed replay rolls back to the savepoint, leaving the outer tx healthy for the bookkeeping UPDATE (attempts++/backoff/error_detail). Without this, an aborted replay poisons the whole batch with "current transaction is aborted, commands ignored." Pattern is reusable: any per-row work that calls a function which might throw inside a multi-row transaction should sit inside a savepoint.
+- **DLQ payload shape contract.** The DLQ is for **post-verdict audit-log insert failures only** — payloads must conform to `RelevancyScoreInsert` (top-level `decision`, `model`, `prompt_version`, etc.). Parking classifier *inputs* (`{job, profile_context, user_message_json, ...}`) is a misuse — those can never replay through `insertRelevancyScore` and clog the queue. If you see a "junk" cluster in `relevancy_scores_dlq` (rows without a top-level `decision` key), it points to a classifier-side mis-park, not a real ingestion failure.
 
 ## Dashboard Count Rules (CRITICAL)
 
