@@ -4511,6 +4511,305 @@ export async function captureAgentMoveOverride(opts: {
 }
 
 // ===================================================================
+// Agent feedback on AI classifications (migration 023)
+// ===================================================================
+//
+// Lets agents flag specific rejection reasons emitted by the LLM as wrong from
+// inside the task card's AI Relevancy panel. Distinct from agent_move (which
+// fires on column drag) and admin_audit (admin-only on /relevancy-audit). The
+// feedback rows are scoped per-(score, agent) — one agent gets one row per
+// score, edit-via-delete-then-insert (matches admin path).
+//
+// Permission contract: an agent may flag a card only if they are an assignee
+// (or the card is unassigned); admins may flag any card. Enforced at the API
+// route via assertCanFlagTaskRelevancy below.
+
+export interface AgentFeedbackRow {
+  feedback_id: number;
+  score_id: number;
+  override_reason: string[] | null;
+  note: string | null;
+  created_at: string;
+  agent_id: string | null;
+}
+
+export interface AgentFeedbackListRow extends AgentFeedbackRow {
+  agent_name: string | null;
+  task_id: string | null;
+  task_title: string | null;
+  classifier_decision: string;
+  job_external_id: string | null;
+  job_url: string | null;
+  job_title: string | null;
+}
+
+// Resolves the caller's effective scope for flagging a given task's classifier.
+// Mirrors the /my-tasks agent-scope rule: assigned OR unassigned. Admins are
+// allowed unconditionally. Returns the agent_id resolved from the session so
+// the API route doesn't have to look it up again.
+export async function assertCanFlagTaskRelevancy(opts: {
+  taskId: string;
+  sessionUserId: string | undefined;
+  sessionRole: string | undefined;
+  sessionAgentId: string | undefined;
+}): Promise<
+  | { ok: true; scope: "admin"; agentId: string | null }
+  | { ok: true; scope: "agent"; agentId: string }
+  | { ok: false; code: "unauthorized" | "not_assigned" | "task_not_found" }
+> {
+  if (!opts.sessionUserId) return { ok: false, code: "unauthorized" };
+
+  // Admin path — no assignment check.
+  if (opts.sessionRole === "admin") {
+    return { ok: true, scope: "admin", agentId: opts.sessionAgentId ?? null };
+  }
+
+  if (!opts.sessionAgentId) return { ok: false, code: "unauthorized" };
+
+  // Agent path — must be assigned OR card unassigned. Same rule the kanban
+  // applies via agentScopeOnCurrentBoard.
+  const row = await sql<{ assigned: boolean; has_any_assignees: boolean }>`
+    SELECT
+      EXISTS (
+        SELECT 1 FROM task_assignees ta
+        WHERE ta.task_id = ${opts.taskId}::uuid AND ta.agent_id = ${opts.sessionAgentId}::uuid
+      ) AS assigned,
+      EXISTS (
+        SELECT 1 FROM task_assignees ta WHERE ta.task_id = ${opts.taskId}::uuid
+      ) AS has_any_assignees
+  `;
+  if (row.rows.length === 0) return { ok: false, code: "task_not_found" };
+  const { assigned, has_any_assignees } = row.rows[0];
+  if (!assigned && has_any_assignees) return { ok: false, code: "not_assigned" };
+
+  return { ok: true, scope: "agent", agentId: opts.sessionAgentId };
+}
+
+// Writes an agent_feedback row for the given score. Returns the new feedback
+// id + created_at, or an error code on duplicate / missing score. The same
+// agent flagging the same score twice gets a 409-style error — the API maps
+// that to the edit-via-delete-then-insert flow.
+export async function createAgentFeedbackOverride(opts: {
+  scoreId: number;
+  agentId: string;
+  taskId: string;
+  overrideReason: string[];
+  note: string | null;
+}): Promise<
+  | { feedback_id: number; created_at: string }
+  | { error: "score_not_found" }
+  | { error: "already_flagged"; feedback_id: number }
+> {
+  // Bind the score to the URL-supplied task. A malicious agent assigned to
+  // task A cannot poison the audit by submitting a score_id from task B —
+  // the lookup returns nothing and the API surfaces score_not_found (404).
+  const scoreRow = await sql<{ decision: string; source: string | null }>`
+    SELECT decision, source
+    FROM relevancy_scores
+    WHERE id = ${opts.scoreId}
+      AND task_id = ${opts.taskId}::uuid
+    LIMIT 1
+  `;
+  if (scoreRow.rows.length === 0) return { error: "score_not_found" };
+  const { decision, source } = scoreRow.rows[0];
+
+  const existing = await sql<{ id: number | string }>`
+    SELECT id FROM relevancy_overrides
+    WHERE score_id = ${opts.scoreId}
+      AND override_type = 'agent_feedback'
+      AND agent_id = ${opts.agentId}::uuid
+    LIMIT 1
+  `;
+  if (existing.rows.length > 0) {
+    return { error: "already_flagged", feedback_id: Number(existing.rows[0].id) };
+  }
+
+  try {
+    const inserted = await sql<{ id: number | string; created_at: string | Date }>`
+      INSERT INTO relevancy_overrides (
+        score_id, task_id, classifier_decision, agent_action, agent_id,
+        override_type, override_reason, note, source
+      ) VALUES (
+        ${opts.scoreId},
+        ${opts.taskId}::uuid,
+        ${decision},
+        NULL,
+        ${opts.agentId}::uuid,
+        'agent_feedback',
+        ${opts.overrideReason},
+        ${opts.note},
+        ${source}
+      )
+      RETURNING id, created_at
+    `;
+    const row = inserted.rows[0];
+    return {
+      feedback_id: Number(row.id),
+      created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    };
+  } catch (e) {
+    // Race: a concurrent POST won the partial unique index
+    // (idx_feedback_unique_score_agent). Refetch the winning row and surface
+    // already_flagged so the client swaps into edit mode.
+    const code = (e as { code?: string } | null)?.code;
+    if (code === "23505") {
+      const refetch = await sql<{ id: number | string }>`
+        SELECT id FROM relevancy_overrides
+        WHERE score_id = ${opts.scoreId}
+          AND override_type = 'agent_feedback'
+          AND agent_id = ${opts.agentId}::uuid
+        LIMIT 1
+      `;
+      if (refetch.rows.length > 0) {
+        return { error: "already_flagged", feedback_id: Number(refetch.rows[0].id) };
+      }
+    }
+    throw e;
+  }
+}
+
+// Returns the caller's existing feedback row for the given task (NULL if not
+// yet flagged). Used to pre-fill the form in edit mode. Scoped by agent_id so
+// each agent only sees their own.
+export async function getAgentFeedbackForTask(opts: {
+  taskId: string;
+  agentId: string;
+}): Promise<AgentFeedbackRow | null> {
+  const result = await sql<{
+    id: number | string;
+    score_id: number | string;
+    override_reason: string[] | null;
+    note: string | null;
+    created_at: string | Date;
+    agent_id: string | null;
+  }>`
+    SELECT id, score_id, override_reason, note, created_at, agent_id
+    FROM relevancy_overrides
+    WHERE task_id = ${opts.taskId}::uuid
+      AND override_type = 'agent_feedback'
+      AND agent_id = ${opts.agentId}::uuid
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+  if (result.rows.length === 0) return null;
+  const r = result.rows[0];
+  return {
+    feedback_id: Number(r.id),
+    score_id: Number(r.score_id),
+    override_reason: r.override_reason,
+    note: r.note,
+    created_at: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+    agent_id: r.agent_id,
+  };
+}
+
+// Deletes an agent_feedback row iff (a) it belongs to the requesting agent
+// AND (b) it lives under the URL-supplied task. Admins use the AsAdmin variant
+// below which skips the agent_id check but still enforces the task_id match.
+export async function deleteAgentFeedback(opts: {
+  feedbackId: number;
+  agentId: string;
+  taskId: string;
+}): Promise<"deleted" | "not_found" | "forbidden"> {
+  const row = await sql<{
+    agent_id: string | null;
+    override_type: string;
+    task_id: string | null;
+  }>`
+    SELECT agent_id, override_type, task_id
+    FROM relevancy_overrides
+    WHERE id = ${opts.feedbackId}
+    LIMIT 1
+  `;
+  if (row.rows.length === 0) return "not_found";
+  const r = row.rows[0];
+  if (r.override_type !== "agent_feedback") return "not_found";
+  // Treat a path/row mismatch as not_found rather than forbidden — the row
+  // doesn't exist *under this URL*, even if it exists elsewhere.
+  if (r.task_id !== opts.taskId) return "not_found";
+  if (r.agent_id !== opts.agentId) return "forbidden";
+
+  await sql`DELETE FROM relevancy_overrides WHERE id = ${opts.feedbackId}`;
+  return "deleted";
+}
+
+// Admin variant — can delete any agent's feedback row. Used by /relevancy-audit
+// admin moderation UI. Still enforces the task_id match so an admin can't be
+// tricked by a crafted DELETE body into removing a row outside the URL scope.
+export async function deleteAgentFeedbackAsAdmin(opts: {
+  feedbackId: number;
+  taskId: string;
+}): Promise<"deleted" | "not_found"> {
+  const row = await sql<{ override_type: string; task_id: string | null }>`
+    SELECT override_type, task_id
+    FROM relevancy_overrides
+    WHERE id = ${opts.feedbackId}
+    LIMIT 1
+  `;
+  if (row.rows.length === 0) return "not_found";
+  if (row.rows[0].override_type !== "agent_feedback") return "not_found";
+  if (row.rows[0].task_id !== opts.taskId) return "not_found";
+  await sql`DELETE FROM relevancy_overrides WHERE id = ${opts.feedbackId}`;
+  return "deleted";
+}
+
+// Lists agent_feedback rows for the admin review surface on /relevancy-audit.
+// When scopeAgentId is provided, results are restricted to that agent's rows
+// (used when the page is viewed by an agent, not admin). Joins tasks + agents
+// + scores so the table can render context without extra round trips.
+export async function listAgentFeedback(opts: {
+  scopeAgentId?: string | null;
+  limit?: number;
+}): Promise<AgentFeedbackListRow[]> {
+  const limit = opts.limit ?? 100;
+  const result = await sql<{
+    id: number | string;
+    score_id: number | string;
+    override_reason: string[] | null;
+    note: string | null;
+    created_at: string | Date;
+    agent_id: string | null;
+    agent_name: string | null;
+    task_id: string | null;
+    task_title: string | null;
+    classifier_decision: string;
+    job_external_id: string | null;
+    job_url: string | null;
+    job_title: string | null;
+  }>`
+    SELECT
+      ro.id, ro.score_id, ro.override_reason, ro.note, ro.created_at,
+      ro.agent_id, ag.name AS agent_name,
+      ro.task_id, t.title AS task_title,
+      ro.classifier_decision,
+      rs.job_external_id, rs.job_url, COALESCE(rs.job_title, t.title) AS job_title
+    FROM relevancy_overrides ro
+    LEFT JOIN agents ag ON ag.id = ro.agent_id
+    LEFT JOIN tasks t ON t.id = ro.task_id
+    LEFT JOIN relevancy_scores rs ON rs.id = ro.score_id
+    WHERE ro.override_type = 'agent_feedback'
+      AND (${opts.scopeAgentId ?? null}::uuid IS NULL OR ro.agent_id = ${opts.scopeAgentId ?? null}::uuid)
+    ORDER BY ro.created_at DESC
+    LIMIT ${limit}
+  `;
+  return result.rows.map((r) => ({
+    feedback_id: Number(r.id),
+    score_id: Number(r.score_id),
+    override_reason: r.override_reason,
+    note: r.note,
+    created_at: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+    agent_id: r.agent_id,
+    agent_name: r.agent_name,
+    task_id: r.task_id,
+    task_title: r.task_title,
+    classifier_decision: r.classifier_decision,
+    job_external_id: r.job_external_id,
+    job_url: r.job_url,
+    job_title: r.job_title,
+  }));
+}
+
+// ===================================================================
 // DLQ retry worker (plan v3.3 Appendix C)
 // ===================================================================
 

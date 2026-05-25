@@ -1321,7 +1321,12 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
               onChange={(text) => updateCustomField("_proposal", text)}
               readOnly={false}
             />
-            <RelevancyPanel cf={cf} />
+            <RelevancyPanel
+              cf={cf}
+              taskId={taskId}
+              viewerRole={isAdmin ? "admin" : "agent"}
+              viewerAgentId={agentId ?? null}
+            />
           </div>
         </div>
       </div>

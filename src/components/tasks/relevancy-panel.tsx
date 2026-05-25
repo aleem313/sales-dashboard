@@ -1,14 +1,26 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, AlertTriangle, Info, Check, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sparkles, AlertTriangle, Info, Check, X, Flag } from "lucide-react";
 import { format } from "date-fns";
+import {
+  RelevancyFeedbackForm,
+  OVERALL_DECISION_FLAG,
+  type ExistingFeedback,
+} from "./relevancy-feedback-form";
 
 type CustomFields = Record<string, unknown>;
 
 interface RelevancyPanelProps {
   cf: CustomFields;
+  // When provided, enables the "Mark wrong" affordance. Omit on read-only
+  // surfaces (e.g. the audit page) where the feedback flow doesn't apply.
+  taskId?: string;
+  viewerRole?: "admin" | "agent";
+  viewerAgentId?: string | null;
 }
 
 type GateStatus = "pass" | "fail" | "skipped_deterministic";
@@ -87,9 +99,54 @@ function decisionColor(decision: string | null): string {
   }
 }
 
-export function RelevancyPanel({ cf }: RelevancyPanelProps) {
+export function RelevancyPanel({
+  cf,
+  taskId,
+  viewerRole,
+  viewerAgentId,
+}: RelevancyPanelProps) {
   const scoreId = (cf._relevancy_score_id as number | null) ?? null;
   const dlqId = (cf._relevancy_dlq_id as number | null) ?? null;
+
+  // Feedback affordance — only when the panel knows the task it's rendering
+  // for AND there's a real score row to flag (DLQ-only entries have no
+  // classifier verdict to dispute).
+  const feedbackEnabled =
+    taskId !== undefined && scoreId !== null && (viewerRole === "admin" || !!viewerAgentId);
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [existingFeedback, setExistingFeedback] = useState<ExistingFeedback | null>(null);
+  const [feedbackLoaded, setFeedbackLoaded] = useState(false);
+
+  // Fetch existing feedback row when the panel mounts. The API returns null
+  // when the viewer hasn't flagged this task yet; the button stays "Mark wrong"
+  // in that case.
+  useEffect(() => {
+    if (!feedbackEnabled) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/tasks/${taskId}/relevancy-feedback`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (!res.ok) {
+          if (!cancelled) setFeedbackLoaded(true);
+          return;
+        }
+        const json = (await res.json()) as { feedback: ExistingFeedback | null };
+        if (!cancelled) {
+          setExistingFeedback(json.feedback);
+          setFeedbackLoaded(true);
+        }
+      } catch {
+        if (!cancelled) setFeedbackLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [feedbackEnabled, taskId]);
 
   if (scoreId === null && dlqId === null) return null;
 
@@ -144,6 +201,17 @@ export function RelevancyPanel({ cf }: RelevancyPanelProps) {
     }
   }
 
+  // The list of reasons the agent can tick. We surface the LLM's emitted
+  // rejection_reasons; if there are none (proceed verdict), the agent can
+  // still flag via the fixed "Overall decision was wrong" checkbox.
+  const flagableReasons: string[] = reasons;
+
+  const flaggedSpecificReasons =
+    (existingFeedback?.override_reason ?? []).filter((r) => r !== OVERALL_DECISION_FLAG);
+  const flaggedDecision =
+    (existingFeedback?.override_reason ?? []).includes(OVERALL_DECISION_FLAG);
+  const isFlagged = existingFeedback !== null;
+
   return (
     <div className="mt-6 rounded-lg border bg-card overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/30">
@@ -166,10 +234,36 @@ export function RelevancyPanel({ cf }: RelevancyPanelProps) {
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
           {evaluatedDisplay && <span>{evaluatedDisplay}</span>}
           {scoreId !== null && <span>· #{scoreId}</span>}
           {isDLQ && <span>· DLQ #{dlqId}</span>}
+          {feedbackEnabled && feedbackLoaded && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setFormOpen((v) => !v)}
+              className={cn(
+                "h-6 px-2 text-[11px] gap-1",
+                isFlagged
+                  ? "text-emerald-700 hover:text-emerald-800 dark:text-emerald-300"
+                  : "text-foreground/80"
+              )}
+              title={isFlagged ? "You flagged this AI classification — click to edit" : "Tell the team why the AI got this wrong"}
+            >
+              {isFlagged ? (
+                <>
+                  <Check className="h-3 w-3" />
+                  Flagged
+                </>
+              ) : (
+                <>
+                  <Flag className="h-3 w-3" />
+                  Mark wrong
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -336,7 +430,49 @@ export function RelevancyPanel({ cf }: RelevancyPanelProps) {
             <span>No qualitative feedback returned by classifier.</span>
           </div>
         )}
+
+        {isFlagged && !formOpen && (
+          <div className="mt-2 rounded-md border border-emerald-200 dark:border-emerald-900 bg-emerald-50/60 dark:bg-emerald-950/30 px-3 py-2 text-[11px]">
+            <div className="flex items-center gap-1.5 text-emerald-800 dark:text-emerald-200 font-medium">
+              <Flag className="h-3 w-3" />
+              You flagged this classification as wrong.
+            </div>
+            {flaggedSpecificReasons.length > 0 && (
+              <div className="mt-1 text-foreground/80">
+                Wrong reasons: {flaggedSpecificReasons.join(", ")}
+              </div>
+            )}
+            {flaggedDecision && (
+              <div className="mt-1 text-foreground/80">Overall decision marked wrong.</div>
+            )}
+            {existingFeedback?.note && (
+              <div className="mt-1 text-foreground/70 italic">&ldquo;{existingFeedback.note}&rdquo;</div>
+            )}
+          </div>
+        )}
       </div>
+
+      {feedbackEnabled && formOpen && scoreId !== null && taskId && (
+        <RelevancyFeedbackForm
+          taskId={taskId}
+          scoreId={scoreId}
+          reasons={flagableReasons}
+          existing={existingFeedback}
+          onClose={() => setFormOpen(false)}
+          onSaved={(fb) => {
+            setExistingFeedback({
+              feedback_id: fb.feedback_id,
+              override_reason: fb.override_reason,
+              note: fb.note,
+            });
+            setFormOpen(false);
+          }}
+          onRemoved={() => {
+            setExistingFeedback(null);
+            setFormOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

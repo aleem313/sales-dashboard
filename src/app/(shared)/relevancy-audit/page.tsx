@@ -1,9 +1,16 @@
 import { Header } from "@/components/layout/header";
 import { Separator } from "@/components/ui/separator";
-import { getAllAgents, getAllProfiles, listRelevancyAuditRejects } from "@/lib/data";
+import {
+  getAllAgents,
+  getAllProfiles,
+  listAgentFeedback,
+  listRelevancyAuditRejects,
+} from "@/lib/data";
 import { AuditFilters } from "@/components/relevancy-audit/audit-filters";
 import { RejectsTable } from "@/components/relevancy-audit/rejects-table";
+import { AgentFeedbackTable } from "@/components/relevancy-audit/agent-feedback-table";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -56,10 +63,16 @@ export default async function RelevancyAuditPage({
   // Default = true; only the literal string "false" disables hide-overridden.
   const hideOverridden = params.hide_overridden !== "false";
 
-  const [agents, profiles, rejects] = await Promise.all([
+  const session = await auth();
+  const isAdmin = session?.user?.role === "admin";
+  // Agents see only their own feedback rows. Admins see all.
+  const scopeAgentId = isAdmin ? null : (session?.user?.agentId ?? null);
+
+  const [agents, profiles, rejects, agentFeedback] = await Promise.all([
     getAllAgents(),
     getAllProfiles(),
     listRelevancyAuditRejects({ from, to, profileIds, hideOverridden }),
+    listAgentFeedback({ scopeAgentId, limit: 100 }),
   ]);
 
   return (
@@ -112,6 +125,30 @@ export default async function RelevancyAuditPage({
           ) : (
             <RejectsTable rows={rejects.rows} />
           )}
+
+          <Separator />
+
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold text-foreground">
+                Agent Feedback on AI Classifications
+              </h2>
+              <p className="text-[13px] text-muted-foreground">
+                {isAdmin
+                  ? "Agents flagging specific reasons as wrong, with their comments. Use this signal to recalibrate the classifier prompt."
+                  : "Your previously flagged classifications. The criteria team reviews these to recalibrate the AI."}
+              </p>
+            </div>
+            {agentFeedback.length === 0 ? (
+              <div className="rounded-md border border-border p-6 text-center text-[13px] text-muted-foreground">
+                {isAdmin
+                  ? "No agent feedback recorded yet."
+                  : "You haven't flagged any classifications yet. Open a task card and click 'Mark wrong' in the AI Relevancy panel."}
+              </div>
+            ) : (
+              <AgentFeedbackTable rows={agentFeedback} showAgent={isAdmin} />
+            )}
+          </div>
         </div>
       </main>
     </>

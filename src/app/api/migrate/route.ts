@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "019" && migration !== "020" && migration !== "021" && migration !== "022" && migration !== "migrate-tasks") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "019" && migration !== "020" && migration !== "021" && migration !== "022" && migration !== "023" && migration !== "migrate-tasks") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
   }
 
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const sourceBoard = request.nextUrl.searchParams.get("from") || "e8442ebd-afd3-4217-99c4-e55ee20d4bfa";
     const destBoard = request.nextUrl.searchParams.get("to") || "351494d8-918e-475e-b16c-2eee3232aefe";
     return runMigrateTasks(sourceBoard, destBoard);
+  }
+
+  if (migration === "023") {
+    return run023();
   }
 
   if (migration === "022") {
@@ -456,6 +460,60 @@ async function run011() {
     return NextResponse.json({
       success: false,
       migration: "011_fix_profile_assignments",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run023() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 023: Allow override_type='agent_feedback' on relevancy_overrides...");
+
+    await sql`ALTER TABLE relevancy_overrides DROP CONSTRAINT IF EXISTS relevancy_overrides_override_type_check`;
+    await sql`
+      ALTER TABLE relevancy_overrides
+        ADD CONSTRAINT relevancy_overrides_override_type_check
+        CHECK (override_type IN ('agent_move', 'admin_audit', 'agent_feedback'))
+    `;
+    results.push("✓ Extended override_type CHECK to include 'agent_feedback'");
+
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_overrides_feedback_agent
+        ON relevancy_overrides (agent_id, created_at DESC)
+        WHERE override_type = 'agent_feedback'
+    `;
+    results.push("✓ Created idx_overrides_feedback_agent partial index");
+
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_unique_score_agent
+        ON relevancy_overrides (score_id, agent_id)
+        WHERE override_type = 'agent_feedback'
+    `;
+    results.push("✓ Created idx_feedback_unique_score_agent partial unique index");
+
+    const verifyResult = await sql`
+      SELECT pg_get_constraintdef(oid) AS def
+      FROM pg_constraint
+      WHERE conrelid = 'relevancy_overrides'::regclass
+        AND conname = 'relevancy_overrides_override_type_check'
+    `;
+    results.push(`✓ Constraint definition: ${verifyResult.rows[0]?.def ?? "(not found)"}`);
+
+    const cacheWipe = await sql`DELETE FROM stats_cache`;
+    results.push(`✓ Cleared stats_cache: ${cacheWipe.rowCount} rows removed`);
+
+    return NextResponse.json({
+      success: true,
+      migration: "023_agent_relevancy_feedback",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "023_agent_relevancy_feedback",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });
