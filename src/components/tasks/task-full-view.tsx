@@ -1325,7 +1325,7 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
               cf={cf}
               taskId={taskId}
               viewerRole={isAdmin ? "admin" : "agent"}
-              viewerAgentId={agentId ?? null}
+              viewerAgentId={currentAgentId ?? null}
             />
           </div>
         </div>
