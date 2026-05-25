@@ -214,8 +214,8 @@ export function RelevancyPanel({
 
   return (
     <div className="mt-6 rounded-lg border bg-card overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/30">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-4 py-2.5 border-b bg-muted/30">
+        <div className="flex items-center gap-2 flex-wrap">
           <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
           <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground">AI Relevancy</h3>
           {mode === "shadow" && (
@@ -234,10 +234,10 @@ export function RelevancyPanel({
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-          {evaluatedDisplay && <span>{evaluatedDisplay}</span>}
-          {scoreId !== null && <span>· #{scoreId}</span>}
-          {isDLQ && <span>· DLQ #{dlqId}</span>}
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground flex-wrap">
+          {evaluatedDisplay && <span className="whitespace-nowrap">{evaluatedDisplay}</span>}
+          {scoreId !== null && <span className="whitespace-nowrap">· #{scoreId}</span>}
+          {isDLQ && <span className="whitespace-nowrap">· DLQ #{dlqId}</span>}
           {feedbackEnabled && feedbackLoaded && (
             <Button
               variant="ghost"
