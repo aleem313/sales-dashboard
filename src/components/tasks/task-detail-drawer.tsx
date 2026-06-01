@@ -500,7 +500,10 @@ export function TaskDetailDrawer({ columns, isAdmin, agentId: currentAgentId }: 
   }
 
   function handleCopyLink() {
-    const url = `${window.location.origin}/tasks?task=${task?.id}`;
+    // Role-aware basePath so an agent copies a /my-tasks link, an admin a
+    // /tasks link. (Mirrors task-full-view.tsx handleCopyLink.)
+    const basePath = window.location.pathname.startsWith("/my-") ? "/my-tasks" : "/tasks";
+    const url = `${window.location.origin}${basePath}?task=${task?.id}`;
     copyText(url).then((ok) => {
       if (ok) toast.success("Link copied");
       else toast.error("Copy failed");

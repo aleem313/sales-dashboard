@@ -95,7 +95,11 @@ export const TaskCardContent = forwardRef<HTMLDivElement, TaskCardProps & { styl
 
     function handleCopyLink(e: React.MouseEvent) {
       e.stopPropagation();
-      const url = `${window.location.origin}/tasks?task=${task.id}`;
+      // Role-aware: agents on /my-* get a /my-tasks link, admins get /tasks.
+      // Middleware normalizes either way, but generating the right one avoids
+      // an extra redirect hop. (Mirrors task-full-view.tsx handleCopyLink.)
+      const basePath = window.location.pathname.startsWith("/my-") ? "/my-tasks" : "/tasks";
+      const url = `${window.location.origin}${basePath}?task=${task.id}`;
       copyText(url).then((ok) => {
         if (ok) toast.success("Link copied");
         else toast.error("Copy failed");

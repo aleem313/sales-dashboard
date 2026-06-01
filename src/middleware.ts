@@ -31,8 +31,26 @@ export default auth((req) => {
     return Response.redirect(loginUrl);
   }
 
-  // Redirect agents away from admin routes
   const role = req.auth.user?.role;
+
+  // Cross-role task-board deep-link normalization. A shared card URL carries
+  // ?task=<uuid> (and sometimes ?board=). Without this an agent opening an
+  // admin /tasks link bounces to /my-dashboard (losing the card), and an admin
+  // opening an agent /my-tasks link hits the "Not logged in as an agent" page.
+  // Map each role to its own task route, PRESERVING the query + any sub-path,
+  // so a card link shared in either direction just opens.
+  if (role === "agent" && (path === "/tasks" || path.startsWith("/tasks/"))) {
+    const dest = req.nextUrl.clone();
+    dest.pathname = "/my-tasks" + path.slice("/tasks".length);
+    return Response.redirect(dest);
+  }
+  if (role !== "agent" && (path === "/my-tasks" || path.startsWith("/my-tasks/"))) {
+    const dest = req.nextUrl.clone();
+    dest.pathname = "/tasks" + path.slice("/my-tasks".length);
+    return Response.redirect(dest);
+  }
+
+  // Redirect agents away from the remaining admin routes
   if (role === "agent") {
     const isAdminRoute = ADMIN_ROUTES.some((prefix) => path === prefix || path.startsWith(prefix + "/"));
     if (isAdminRoute) {
