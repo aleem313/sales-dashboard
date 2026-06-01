@@ -4603,11 +4603,28 @@ export async function createAgentFeedbackOverride(opts: {
   // Bind the score to the URL-supplied task. A malicious agent assigned to
   // task A cannot poison the audit by submitting a score_id from task B —
   // the lookup returns nothing and the API surfaces score_not_found (404).
+  //
+  // The canonical task↔score link is the CARD STAMP
+  // (tasks.custom_fields->>'_relevancy_score_id' = relevancy_scores.id), NOT
+  // relevancy_scores.task_id. The classifier persists the score BEFORE the
+  // board card exists, so task_id is NULL on ~97% of rows (2026-06-01: 2062 of
+  // 2132) and nothing ever backfills it — the same dead-column pattern as
+  // jobs.task_id, and the same link the admin audit query uses. Binding on
+  // task_id alone surfaced score_not_found for every classifier-scored card.
+  // Accept EITHER link so the rare task-bound rows (manual eval) and the common
+  // card-stamped rows both resolve, while still scoping the score to this task.
   const scoreRow = await sql<{ decision: string; source: string | null }>`
-    SELECT decision, source
-    FROM relevancy_scores
-    WHERE id = ${opts.scoreId}
-      AND task_id = ${opts.taskId}::uuid
+    SELECT rs.decision, rs.source
+    FROM relevancy_scores rs
+    WHERE rs.id = ${opts.scoreId}
+      AND (
+        rs.task_id = ${opts.taskId}::uuid
+        OR EXISTS (
+          SELECT 1 FROM tasks t
+          WHERE t.id = ${opts.taskId}::uuid
+            AND t.custom_fields->>'_relevancy_score_id' = rs.id::text
+        )
+      )
     LIMIT 1
   `;
   if (scoreRow.rows.length === 0) return { error: "score_not_found" };
