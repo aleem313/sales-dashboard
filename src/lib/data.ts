@@ -3152,16 +3152,22 @@ export async function getSlowResponseJobs(
   range?: DateRange,
   agentId?: string,
   profileId?: string
-): Promise<(Job & { agent_name: string | null; profile_name: string | null; response_minutes: number })[]> {
+): Promise<{
+  jobs: (Job & { agent_name: string | null; profile_name: string | null; response_minutes: number })[];
+  total: number;
+}> {
   // Window on received_at to match the top navbar date filter ("jobs received in
   // this period that are still waiting"). Same received_at semantics as
   // getAvgResponseTime. Newest received first so the latest slow jobs sit on top.
+  // COUNT(*) OVER() returns the TRUE total before LIMIT, so the header can show
+  // "N jobs (showing 20)" instead of the cap masquerading as the count.
   const { startDate, endDate } = range ?? {};
   const result = await sql`
     SELECT j.*,
       a.name AS agent_name,
       p.profile_name,
-      EXTRACT(EPOCH FROM (NOW() - j.received_at)) / 60 AS response_minutes
+      EXTRACT(EPOCH FROM (NOW() - j.received_at)) / 60 AS response_minutes,
+      COUNT(*) OVER() AS total_count
     FROM jobs j
     LEFT JOIN agents a ON a.id = j.agent_id
     LEFT JOIN profiles p ON p.profile_id = j.profile_id
@@ -3175,11 +3181,13 @@ export async function getSlowResponseJobs(
     LIMIT 20
   `;
 
-  return result.rows.map((row) => ({
+  const total = result.rows.length > 0 ? Number(result.rows[0].total_count) : 0;
+  const jobs = result.rows.map((row) => ({
     ...row,
     skills: row.skills ?? null,
     response_minutes: Math.round(parseFloat(row.response_minutes) || 0),
   })) as (Job & { agent_name: string | null; profile_name: string | null; response_minutes: number })[];
+  return { jobs, total };
 }
 
 // ============================================================

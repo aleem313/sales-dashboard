@@ -36,7 +36,7 @@ export default async function DashboardPage({
   const profileId = typeof params.profile === "string" ? params.profile : undefined;
   const range = parseDateRange(params);
 
-  const [kpi, funnel, pipeline, agents, profiles, avgResponseTime, slowJobs, allAgents, allProfiles, recentJobs] = await Promise.all([
+  const [kpi, funnel, pipeline, agents, profiles, avgResponseTime, slowResponse, allAgents, allProfiles, recentJobs] = await Promise.all([
     getKPIMetricsWithDeltas(range, agentId, profileId),
     getConversionFunnel(range, agentId, profileId),
     getPipelineNow(agentId, profileId),
@@ -169,7 +169,7 @@ export default async function DashboardPage({
           <AgentLeaderboard agents={agents} />
         </div>
 
-        <SlowResponseAlert jobs={slowJobs} />
+        <SlowResponseAlert jobs={slowResponse.jobs} total={slowResponse.total} />
 
         <div className="rounded-xl border border-border bg-card shadow-sm">
           <div className="flex items-center justify-between border-b border-border px-5 py-3.5">

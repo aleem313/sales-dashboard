@@ -16,7 +16,7 @@ function formatWaitTime(minutes: number) {
   return `${d}d ${h % 24}h`;
 }
 
-export function SlowResponseAlert({ jobs }: { jobs: SlowJob[] }) {
+export function SlowResponseAlert({ jobs, total }: { jobs: SlowJob[]; total: number }) {
   if (jobs.length === 0) return null;
 
   return (
@@ -25,7 +25,12 @@ export function SlowResponseAlert({ jobs }: { jobs: SlowJob[] }) {
         <div className="flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
           <h3 className="font-heading text-[15px] font-bold tracking-[0.03em] text-destructive">
-            Slow Response — {jobs.length} job{jobs.length > 1 ? "s" : ""} waiting &gt; 15 min
+            Slow Response — {total} job{total !== 1 ? "s" : ""} waiting &gt; 15 min
+            {total > jobs.length && (
+              <span className="ml-1.5 text-[12px] font-normal tracking-normal text-muted-foreground">
+                (showing {jobs.length})
+              </span>
+            )}
           </h3>
         </div>
       </div>
