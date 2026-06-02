@@ -117,6 +117,34 @@ export function RelevancyPanel({
   const [formOpen, setFormOpen] = useState(false);
   const [existingFeedback, setExistingFeedback] = useState<ExistingFeedback | null>(null);
   const [feedbackLoaded, setFeedbackLoaded] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  // Delete the viewer's existing flag straight from the summary box (the form
+  // also exposes Remove, but most people look for delete here, not behind the
+  // header chip). Mirrors RelevancyFeedbackForm.handleRemove.
+  async function handleRemoveFlag(feedbackId: number) {
+    setRemoving(true);
+    setRemoveError(null);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/relevancy-feedback`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback_id: feedbackId }),
+      });
+      if (!res.ok && res.status !== 204) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setRemoveError(body.error ?? `Remove failed (${res.status})`);
+        return;
+      }
+      setExistingFeedback(null);
+      setFormOpen(false);
+    } catch (e) {
+      setRemoveError((e as Error).message);
+    } finally {
+      setRemoving(false);
+    }
+  }
 
   // Fetch existing feedback row when the panel mounts. The API returns null
   // when the viewer hasn't flagged this task yet; the button stays "Mark wrong"
@@ -447,6 +475,31 @@ export function RelevancyPanel({
             )}
             {existingFeedback?.note && (
               <div className="mt-1 text-foreground/70 italic">&ldquo;{existingFeedback.note}&rdquo;</div>
+            )}
+            <div className="mt-2 flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setFormOpen(true)}
+                disabled={removing}
+                className="h-6 px-2 text-[11px]"
+              >
+                Edit
+              </Button>
+              {existingFeedback && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleRemoveFlag(existingFeedback.feedback_id)}
+                  disabled={removing}
+                  className="h-6 px-2 text-[11px] text-red-700 hover:text-red-800 dark:text-red-300"
+                >
+                  {removing ? "Removing…" : "Remove"}
+                </Button>
+              )}
+            </div>
+            {removeError && (
+              <div className="mt-1 text-[11px] text-red-700 dark:text-red-300">{removeError}</div>
             )}
           </div>
         )}
