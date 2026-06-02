@@ -234,6 +234,14 @@ export function RelevancyPanel({
   // still flag via the fixed "Overall decision was wrong" checkbox.
   const flagableReasons: string[] = reasons;
 
+  // assertMode = the AI APPROVED this job (proceed/review verdict — anything but
+  // reject). The agent disputes it by asserting which standard red-flags the AI
+  // missed, from the fixed canonical list, and those mirror into the card's
+  // _reason field. A reject verdict stays in dispute mode (tick which of the AI's
+  // own reasons are wrong — those must never mirror).
+  const verdict = effective ?? decision;
+  const assertMode = verdict !== null && verdict !== "reject";
+
   const flaggedSpecificReasons =
     (existingFeedback?.override_reason ?? []).filter((r) => r !== OVERALL_DECISION_FLAG);
   const flaggedDecision =
@@ -467,11 +475,14 @@ export function RelevancyPanel({
             </div>
             {flaggedSpecificReasons.length > 0 && (
               <div className="mt-1 text-foreground/80">
-                Wrong reasons: {flaggedSpecificReasons.join(", ")}
+                {assertMode ? "Red-flags it missed: " : "Wrong reasons: "}
+                {flaggedSpecificReasons.join(", ")}
               </div>
             )}
             {flaggedDecision && (
-              <div className="mt-1 text-foreground/80">Overall decision marked wrong.</div>
+              <div className="mt-1 text-foreground/80">
+                {assertMode ? "Marked wrong (no specific reason)." : "Overall decision marked wrong."}
+              </div>
             )}
             {existingFeedback?.note && (
               <div className="mt-1 text-foreground/70 italic">&ldquo;{existingFeedback.note}&rdquo;</div>
@@ -510,6 +521,7 @@ export function RelevancyPanel({
           taskId={taskId}
           scoreId={scoreId}
           reasons={flagableReasons}
+          assertMode={assertMode}
           existing={existingFeedback}
           onClose={() => setFormOpen(false)}
           onSaved={(fb) => {

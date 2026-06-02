@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { RELEVANCY_REASON_OPTIONS } from "@/lib/relevancy-reasons";
 
 // Sentinel value used in override_reason[] when the agent says "overall
 // decision was wrong" (rather than ticking a specific emitted reason).
@@ -20,6 +21,12 @@ interface Props {
   taskId: string;
   scoreId: number;
   reasons: string[]; // The LLM-emitted rejection_reasons / red_flags
+  // assertMode = the AI APPROVED this job (proceed verdict, no reasons emitted).
+  // The agent disputes it by asserting which standard red-flags the AI missed,
+  // picked from the fixed canonical list; those mirror into the card's _reason.
+  // !assertMode = the AI REJECTED it; the agent disputes which of the AI's own
+  // emitted reasons are wrong (those must NOT mirror to the card).
+  assertMode: boolean;
   existing: ExistingFeedback | null;
   onClose: () => void;
   onSaved: (fb: { feedback_id: number; override_reason: string[]; note: string | null }) => void;
@@ -30,6 +37,7 @@ export function RelevancyFeedbackForm({
   taskId,
   scoreId,
   reasons,
+  assertMode,
   existing,
   onClose,
   onSaved,
@@ -54,15 +62,44 @@ export function RelevancyFeedbackForm({
     });
   }
 
+  function renderChip(r: string) {
+    const checked = selected.has(r);
+    return (
+      <label
+        key={r}
+        className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] cursor-pointer transition-colors ${
+          checked
+            ? "border-red-300 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
+            : "border-border bg-background hover:bg-muted"
+        }`}
+      >
+        <input
+          type="checkbox"
+          className="h-3 w-3"
+          checked={checked}
+          onChange={() => toggle(r)}
+        />
+        <span>{r}</span>
+      </label>
+    );
+  }
+
+  // Whether there are any reason chips the agent can tick: the fixed canonical
+  // list in assert mode, or the AI's emitted reasons in dispute mode.
+  const hasPickableReasons = assertMode || reasons.length > 0;
+  const fallbackLabel = assertMode
+    ? "Wrong — none of these fit"
+    : "Overall decision was wrong";
+
   async function handleSave() {
     if (selected.size === 0) {
-      // When the verdict emitted no reasons (e.g. a proceed verdict), there is
-      // nothing to "pick" — the only way to dispute it is the overall checkbox,
-      // so don't tell the agent to pick a reason that doesn't exist.
+      // Nothing ticked. Tailor the message: when there are no reason chips at all
+      // (a dispute on a reject verdict that emitted no reasons), don't tell the
+      // agent to pick a reason that doesn't exist.
       setError(
-        reasons.length > 0
-          ? "Pick at least one reason or check 'Overall decision was wrong'."
-          : "Check 'Overall decision was wrong' to submit your feedback."
+        hasPickableReasons
+          ? `Pick at least one reason or check '${fallbackLabel}'.`
+          : `Check '${fallbackLabel}' to submit your feedback.`
       );
       return;
     }
@@ -96,6 +133,10 @@ export function RelevancyFeedbackForm({
         score_id: scoreId,
         override_reason: overrideReason,
         note: trimmedNote.length > 0 ? trimmedNote : null,
+        // In assert mode the ticked labels are red-flags the agent says apply to
+        // this wrongly-approved job → the server mirrors them into the card's
+        // _reason field. Never set in dispute mode (those ticks mean the opposite).
+        assert: assertMode,
       };
 
       const res = await fetch(`/api/tasks/${taskId}/relevancy-feedback`, {
@@ -154,42 +195,40 @@ export function RelevancyFeedbackForm({
         Mark this classification wrong
       </div>
 
-      {reasons.length === 0 && (
-        <p className="text-[11px] text-muted-foreground">
-          This verdict listed no specific reasons to dispute. To flag it, tick
-          &ldquo;Overall decision was wrong&rdquo; below.
-        </p>
-      )}
-
-      {reasons.length > 0 && (
+      {assertMode ? (
+        // AI approved this job — agent asserts which standard red-flags it missed.
+        // These mirror into the card's _reason field on save.
         <div className="space-y-1.5">
           <div className="text-[11px] font-medium text-muted-foreground">
-            Which reasons are wrong? (tick all that apply)
+            This job should NOT have been approved — what&apos;s wrong with it? (pick any)
           </div>
           <div className="flex flex-wrap gap-2">
-            {reasons.map((r) => {
-              const checked = selected.has(r);
-              return (
-                <label
-                  key={r}
-                  className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] cursor-pointer transition-colors ${
-                    checked
-                      ? "border-red-300 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
-                      : "border-border bg-background hover:bg-muted"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    className="h-3 w-3"
-                    checked={checked}
-                    onChange={() => toggle(r)}
-                  />
-                  <span>{r}</span>
-                </label>
-              );
-            })}
+            {RELEVANCY_REASON_OPTIONS.map((r) => renderChip(r))}
           </div>
+          <p className="text-[10px] text-muted-foreground">
+            Ticked reasons are also saved to the card&apos;s Reasons field.
+          </p>
         </div>
+      ) : (
+        // AI rejected this job — agent disputes which of the AI's OWN reasons are wrong.
+        <>
+          {reasons.length === 0 && (
+            <p className="text-[11px] text-muted-foreground">
+              This verdict listed no specific reasons to dispute. To flag it, tick
+              &ldquo;{fallbackLabel}&rdquo; below.
+            </p>
+          )}
+          {reasons.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-medium text-muted-foreground">
+                Which of the AI&apos;s reasons are wrong? (tick all that apply)
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {reasons.map((r) => renderChip(r))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <label className="flex items-start gap-2 text-[12px] cursor-pointer">
@@ -200,10 +239,12 @@ export function RelevancyFeedbackForm({
           onChange={() => toggle(OVERALL_DECISION_FLAG)}
         />
         <span>
-          <span className="font-medium">Overall decision was wrong</span>
+          <span className="font-medium">{fallbackLabel}</span>
           <span className="text-muted-foreground">
             {" "}
-            — the verdict itself is incorrect, even if the listed reasons aren&apos;t.
+            {assertMode
+              ? "— the job is bad, but not for any of the reasons listed."
+              : "— the verdict itself is incorrect, even if the listed reasons aren't."}
           </span>
         </span>
       </label>

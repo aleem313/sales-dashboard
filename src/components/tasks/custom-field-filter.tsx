@@ -19,6 +19,7 @@ import {
 import { X, Plus, Filter, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBoardStore } from "@/lib/stores/board-store";
+import { RELEVANCY_REASON_OPTIONS } from "@/lib/relevancy-reasons";
 import type { CustomFieldDefinition } from "@/lib/task-data";
 
 // Preset options mirror DateRangePicker (top navbar).
@@ -35,13 +36,8 @@ const DATE_PRESETS: { value: string; label: string }[] = [
 ];
 
 // Virtual field for Reason (N/A status). Uses _reason key in custom_fields.
-const REASON_OPTIONS = [
-  "Old job", "Duplicate", "Location loc", "Low Higher rate",
-  "Language barrier", "Too many invites", "Video Proposal",
-  "Client suspended", "Portfolio unavailable", "Client Low spending",
-  "Bad rating client", "Job unavailable", "Already hired", "Out of stack",
-  "Client already conducting an interview", "Short term job checks", "Red flag",
-];
+// Labels come from the shared canonical list (see src/lib/relevancy-reasons.ts).
+const REASON_OPTIONS = [...RELEVANCY_REASON_OPTIONS];
 
 const REASON_VIRTUAL_FIELD: CustomFieldDefinition = {
   id: "_reason",

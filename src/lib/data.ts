@@ -1,4 +1,5 @@
 import { sql, withTransaction } from "@/lib/db";
+import { RELEVANCY_REASON_SET } from "@/lib/relevancy-reasons";
 import type {
   KPIMetrics,
   KPIMetricsWithDeltas,
@@ -4710,6 +4711,50 @@ export async function createAgentFeedbackOverride(opts: {
     }
     throw e;
   }
+}
+
+// Unions canonical reason labels into a task's `_reason` custom field (the Task
+// Board's N/A reason multi-select). Mirrors an agent's red-flag ticks from the AI
+// Relevancy feedback form so they don't fill the card's Reasons field separately.
+// MERGE-only — never wipes existing reasons. Non-canonical values (e.g. the
+// `__decision__` sentinel) are dropped, so only real labels land. No-op when
+// nothing is left to add. Callers must wrap in try/catch: a mirror failure must
+// never block the feedback save itself.
+export async function mirrorReasonsToCard(opts: {
+  taskId: string;
+  reasons: string[];
+}): Promise<void> {
+  const labels = opts.reasons.filter((r) => RELEVANCY_REASON_SET.has(r));
+  if (labels.length === 0) return;
+
+  // Read the current _reason array (node-postgres parses jsonb → JS array). The
+  // CASE guards against a malformed non-array value.
+  const cur = await sql<{ reasons: string[] | null }>`
+    SELECT CASE
+             WHEN jsonb_typeof(custom_fields->'_reason') = 'array'
+             THEN custom_fields->'_reason'
+             ELSE '[]'::jsonb
+           END AS reasons
+    FROM tasks
+    WHERE id = ${opts.taskId}::uuid
+    LIMIT 1
+  `;
+  if (cur.rows.length === 0) return; // task vanished — nothing to mirror
+
+  const existing = Array.isArray(cur.rows[0].reasons) ? cur.rows[0].reasons : [];
+  const merged = Array.from(new Set([...existing, ...labels]));
+  // Superset-only union: if no new label was added, skip the write entirely.
+  if (merged.length === existing.length) return;
+
+  await sql`
+    UPDATE tasks
+    SET custom_fields = jsonb_set(
+      COALESCE(custom_fields, '{}'::jsonb),
+      '{_reason}',
+      ${JSON.stringify(merged)}::jsonb
+    )
+    WHERE id = ${opts.taskId}::uuid
+  `;
 }
 
 // Returns the caller's existing feedback row for the given task (NULL if not

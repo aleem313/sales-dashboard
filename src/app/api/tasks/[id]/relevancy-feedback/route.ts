@@ -9,6 +9,7 @@ import {
   deleteRelevancyFeedbackAsAdmin,
   getAgentFeedbackForTask,
   getAdminAuditOverrideForTask,
+  mirrorReasonsToCard,
 } from "@/lib/data";
 
 // POST /api/tasks/[id]/relevancy-feedback
@@ -28,6 +29,10 @@ interface PostBody {
   score_id?: unknown;
   override_reason?: unknown;
   note?: unknown;
+  // True only when the agent is asserting missed red-flags on a wrongly-APPROVED
+  // job (assert mode). Tells the server to mirror the ticked labels into the
+  // card's _reason field. Never set when disputing an AI rejection's own reasons.
+  assert?: unknown;
 }
 
 interface DeleteBody {
@@ -105,6 +110,11 @@ export async function POST(
     note = trimmed.length > 0 ? trimmed : null;
   }
 
+  // Mirror the ticked red-flags into the card's _reason field only in assert mode
+  // (the agent says these apply to a wrongly-approved job). mirrorReasonsToCard
+  // filters to canonical labels, so the __decision__ sentinel is dropped.
+  const shouldMirror = body.assert === true;
+
   try {
     // Admin (no agent row) → admin_audit override.
     if (isAdminAudit) {
@@ -128,6 +138,14 @@ export async function POST(
           );
         }
         return bad("unknown", 500);
+      }
+      if (shouldMirror) {
+        // Best-effort — a mirror failure must not fail the saved feedback.
+        try {
+          await mirrorReasonsToCard({ taskId, reasons: overrideReason });
+        } catch {
+          /* swallow — feedback already persisted */
+        }
       }
       revalidatePath("/my-tasks");
       revalidatePath("/tasks");
@@ -156,6 +174,14 @@ export async function POST(
         );
       }
     } else {
+      if (shouldMirror) {
+        // Best-effort — a mirror failure must not fail the saved feedback.
+        try {
+          await mirrorReasonsToCard({ taskId, reasons: overrideReason });
+        } catch {
+          /* swallow — feedback already persisted */
+        }
+      }
       revalidatePath("/my-tasks");
       revalidatePath("/tasks");
       revalidatePath("/relevancy-audit");

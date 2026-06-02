@@ -59,6 +59,7 @@ import {
 } from "@/lib/task-actions";
 import type { TaskTag } from "@/lib/task-data";
 import { useBoardStore } from "@/lib/stores/board-store";
+import { RELEVANCY_REASON_OPTIONS } from "@/lib/relevancy-reasons";
 import { RichTextEditor } from "./rich-text-editor";
 import { CustomFieldRenderer } from "./custom-field-renderer";
 import { JobDetails } from "./job-details";
@@ -1412,25 +1413,9 @@ function AssigneeDropdown({ members, assignedIds, onToggle, disabled }: {
 
 // ── Reason Multi-Select (N/A status only) ──
 
-const REASON_OPTIONS = [
-  "Old job",
-  "Duplicate",
-  "Location loc",
-  "Low Higher rate",
-  "Language barrier",
-  "Too many invites",
-  "Video Proposal",
-  "Client suspended",
-  "Portfolio unavailable",
-  "Client Low spending",
-  "Bad rating client",
-  "Job unavailable",
-  "Already hired",
-  "Out of stack",
-  "Client already conducting an interview",
-  "Short term job checks",
-  "Red flag",
-] as const;
+// Canonical reason labels live in the shared module (single source of truth —
+// see src/lib/relevancy-reasons.ts). Imported as REASON_OPTIONS to keep usage below.
+const REASON_OPTIONS = RELEVANCY_REASON_OPTIONS;
 
 function ReasonMultiSelect({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
   const [open, setOpen] = useState(false);
