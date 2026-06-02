@@ -56,7 +56,14 @@ export function RelevancyFeedbackForm({
 
   async function handleSave() {
     if (selected.size === 0) {
-      setError("Pick at least one reason or check 'Overall decision was wrong'.");
+      // When the verdict emitted no reasons (e.g. a proceed verdict), there is
+      // nothing to "pick" — the only way to dispute it is the overall checkbox,
+      // so don't tell the agent to pick a reason that doesn't exist.
+      setError(
+        reasons.length > 0
+          ? "Pick at least one reason or check 'Overall decision was wrong'."
+          : "Check 'Overall decision was wrong' to submit your feedback."
+      );
       return;
     }
     setSubmitting(true);
@@ -146,6 +153,13 @@ export function RelevancyFeedbackForm({
       <div className="text-[12px] font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-200">
         Mark this classification wrong
       </div>
+
+      {reasons.length === 0 && (
+        <p className="text-[11px] text-muted-foreground">
+          This verdict listed no specific reasons to dispute. To flag it, tick
+          &ldquo;Overall decision was wrong&rdquo; below.
+        </p>
+      )}
 
       {reasons.length > 0 && (
         <div className="space-y-1.5">
