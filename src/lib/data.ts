@@ -3149,9 +3149,14 @@ export async function getAvgResponseTime(
 // Jobs still in pre-sent status where wait time > threshold (15 min default)
 export async function getSlowResponseJobs(
   thresholdMinutes: number = 15,
+  range?: DateRange,
   agentId?: string,
   profileId?: string
 ): Promise<(Job & { agent_name: string | null; profile_name: string | null; response_minutes: number })[]> {
+  // Window on received_at to match the top navbar date filter ("jobs received in
+  // this period that are still waiting"). Same received_at semantics as
+  // getAvgResponseTime. Newest received first so the latest slow jobs sit on top.
+  const { startDate, endDate } = range ?? {};
   const result = await sql`
     SELECT j.*,
       a.name AS agent_name,
@@ -3162,9 +3167,11 @@ export async function getSlowResponseJobs(
     LEFT JOIN profiles p ON p.profile_id = j.profile_id
     WHERE LOWER(j.status) IN ('to do', 'todo', 'new', 'proposal ready', 'n/a')
       AND EXTRACT(EPOCH FROM (NOW() - j.received_at)) / 60 > ${thresholdMinutes}
+      AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
       AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
-    ORDER BY j.received_at ASC
+    ORDER BY j.received_at DESC
     LIMIT 20
   `;
 

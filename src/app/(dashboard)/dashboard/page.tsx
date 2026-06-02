@@ -43,7 +43,7 @@ export default async function DashboardPage({
     getEnhancedAgentStats(range, agentId, profileId),
     getEnhancedProfileStats(range, agentId, profileId),
     getAvgResponseTime(range, agentId, profileId),
-    getSlowResponseJobs(15, agentId, profileId),
+    getSlowResponseJobs(15, range, agentId, profileId),
     getAllAgents(),
     getAllProfiles(),
     getJobs({ agent_id: agentId, profile_id: profileId, limit: 10, sortBy: "received_at", sortDir: "desc" }),
