@@ -4339,14 +4339,35 @@ export async function createAdminAuditOverride(opts: {
   scoreId: number;
   adminId: string;
   note: string | null;
+  // Task-board path only. When provided, the score is BOUND to this task (an
+  // admin can't stamp a score that doesn't belong to the card they opened) and
+  // the row is task-stamped. /relevancy-audit omits both and keeps the unbound,
+  // note-only behavior.
+  taskId?: string | null;
+  overrideReason?: string[] | null;
 }): Promise<{ override_id: number; created_at: string } | { error: "score_not_found" } | { error: "already_overridden"; override_id: number }> {
   // 1. Look up the score row (need classifier_decision + source for the insert).
-  const scoreRow = await sql<{
-    decision: string;
-    source: string | null;
-  }>`
-    SELECT decision, source FROM relevancy_scores WHERE id = ${opts.scoreId} LIMIT 1
-  `;
+  //    With taskId, bind via the CARD STAMP (relevancy_scores.task_id is a dead
+  //    column on ~97% of rows — same link the agent feedback path uses), so a
+  //    crafted score_id from another card surfaces score_not_found.
+  const scoreRow = opts.taskId
+    ? await sql<{ decision: string; source: string | null }>`
+        SELECT rs.decision, rs.source
+        FROM relevancy_scores rs
+        WHERE rs.id = ${opts.scoreId}
+          AND (
+            rs.task_id = ${opts.taskId}::uuid
+            OR EXISTS (
+              SELECT 1 FROM tasks t
+              WHERE t.id = ${opts.taskId}::uuid
+                AND t.custom_fields->>'_relevancy_score_id' = rs.id::text
+            )
+          )
+        LIMIT 1
+      `
+    : await sql<{ decision: string; source: string | null }>`
+        SELECT decision, source FROM relevancy_scores WHERE id = ${opts.scoreId} LIMIT 1
+      `;
   if (scoreRow.rows.length === 0) {
     return { error: "score_not_found" };
   }
@@ -4363,19 +4384,24 @@ export async function createAdminAuditOverride(opts: {
     return { error: "already_overridden", override_id: Number(existing.rows[0].id) };
   }
 
-  // 3. Resolve task_id from the card stamp (nullable).
-  const taskRow = await sql<{ id: string }>`
-    SELECT id FROM tasks
-    WHERE custom_fields->>'_relevancy_score_id' = ${String(opts.scoreId)}
-    LIMIT 1
-  `;
-  const taskId = taskRow.rows[0]?.id ?? null;
+  // 3. Resolve task_id — prefer the board-supplied task, else the card stamp.
+  let taskId = opts.taskId ?? null;
+  if (!taskId) {
+    const taskRow = await sql<{ id: string }>`
+      SELECT id FROM tasks
+      WHERE custom_fields->>'_relevancy_score_id' = ${String(opts.scoreId)}
+      LIMIT 1
+    `;
+    taskId = taskRow.rows[0]?.id ?? null;
+  }
 
   // 4. Insert. agent_action + agent_id stay NULL (admin path, post-migration-021).
+  //    override_reason carries the ticked reasons / __decision__ sentinel when the
+  //    admin flags from the task board; NULL for the note-only audit-page path.
   const inserted = await sql<{ id: number | string; created_at: string | Date }>`
     INSERT INTO relevancy_overrides (
       score_id, task_id, classifier_decision, agent_action, agent_id,
-      override_type, admin_id, note, source
+      override_type, admin_id, override_reason, note, source
     ) VALUES (
       ${opts.scoreId},
       ${taskId},
@@ -4384,6 +4410,7 @@ export async function createAdminAuditOverride(opts: {
       NULL,
       'admin_audit',
       ${opts.adminId},
+      ${opts.overrideReason ?? null},
       ${opts.note},
       ${source}
     )
@@ -4720,6 +4747,49 @@ export async function getAgentFeedbackForTask(opts: {
   };
 }
 
+// Admin counterpart to getAgentFeedbackForTask. Returns the admin_audit override
+// the requesting admin created for THIS task's score (NULL if none), shaped like
+// AgentFeedbackRow so the task-board panel/form reuse the agent edit flow. Scoped
+// to admin_id so each admin only edits their own verdict; a score audited by a
+// different admin reads as null here (managed on /relevancy-audit instead). Links
+// by the card stamp because legacy audit-page rows have task_id = NULL.
+export async function getAdminAuditOverrideForTask(opts: {
+  taskId: string;
+  adminId: string;
+}): Promise<AgentFeedbackRow | null> {
+  const result = await sql<{
+    id: number | string;
+    score_id: number | string;
+    override_reason: string[] | null;
+    note: string | null;
+    created_at: string | Date;
+  }>`
+    SELECT ro.id, ro.score_id, ro.override_reason, ro.note, ro.created_at
+    FROM relevancy_overrides ro
+    WHERE ro.override_type = 'admin_audit'
+      AND ro.admin_id = ${opts.adminId}
+      AND (
+        ro.task_id = ${opts.taskId}::uuid
+        OR ro.score_id = (
+          SELECT NULLIF(t.custom_fields->>'_relevancy_score_id', '')::int
+          FROM tasks t WHERE t.id = ${opts.taskId}::uuid
+        )
+      )
+    ORDER BY ro.created_at DESC
+    LIMIT 1
+  `;
+  if (result.rows.length === 0) return null;
+  const r = result.rows[0];
+  return {
+    feedback_id: Number(r.id),
+    score_id: Number(r.score_id),
+    override_reason: r.override_reason,
+    note: r.note,
+    created_at: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+    agent_id: null,
+  };
+}
+
 // Deletes an agent_feedback row iff (a) it belongs to the requesting agent
 // AND (b) it lives under the URL-supplied task. Admins use the AsAdmin variant
 // below which skips the agent_id check but still enforces the task_id match.
@@ -4768,6 +4838,48 @@ export async function deleteAgentFeedbackAsAdmin(opts: {
   if (row.rows[0].task_id !== opts.taskId) return "not_found";
   await sql`DELETE FROM relevancy_overrides WHERE id = ${opts.feedbackId}`;
   return "deleted";
+}
+
+// Admin delete dispatcher for the task-board feedback endpoint. Handles BOTH
+// override types an admin can remove from a card:
+//   - agent_feedback — admin moderating an agent's flag (task-bound, any agent)
+//   - admin_audit    — admin removing their OWN board/audit verdict (admin-owned)
+// Returns the outcome so the route maps to 204 / 403 / 404.
+export async function deleteRelevancyFeedbackAsAdmin(opts: {
+  feedbackId: number;
+  taskId: string;
+  adminId: string;
+}): Promise<"deleted" | "not_found" | "forbidden"> {
+  const row = await sql<{
+    override_type: string;
+    task_id: string | null;
+    admin_id: string | null;
+  }>`
+    SELECT override_type, task_id, admin_id
+    FROM relevancy_overrides
+    WHERE id = ${opts.feedbackId}
+    LIMIT 1
+  `;
+  if (row.rows.length === 0) return "not_found";
+  const r = row.rows[0];
+
+  if (r.override_type === "agent_feedback") {
+    // Same task-binding guard as deleteAgentFeedbackAsAdmin — a crafted body
+    // can't reach a row outside this URL's task.
+    if (r.task_id !== opts.taskId) return "not_found";
+    await sql`DELETE FROM relevancy_overrides WHERE id = ${opts.feedbackId}`;
+    return "deleted";
+  }
+  if (r.override_type === "admin_audit") {
+    // Only the creating admin may remove their verdict (mirrors
+    // deleteAdminAuditOverride). Legacy audit-page rows have task_id = NULL, so
+    // only enforce the binding when a task is stamped.
+    if (r.task_id !== null && r.task_id !== opts.taskId) return "not_found";
+    if (r.admin_id !== opts.adminId) return "forbidden";
+    await sql`DELETE FROM relevancy_overrides WHERE id = ${opts.feedbackId}`;
+    return "deleted";
+  }
+  return "not_found";
 }
 
 // Lists agent_feedback rows for the admin review surface on /relevancy-audit.

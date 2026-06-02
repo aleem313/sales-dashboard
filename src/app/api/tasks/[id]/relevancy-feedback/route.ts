@@ -4,9 +4,11 @@ import { auth } from "@/lib/auth";
 import {
   assertCanFlagTaskRelevancy,
   createAgentFeedbackOverride,
+  createAdminAuditOverride,
   deleteAgentFeedback,
-  deleteAgentFeedbackAsAdmin,
+  deleteRelevancyFeedbackAsAdmin,
   getAgentFeedbackForTask,
+  getAdminAuditOverrideForTask,
 } from "@/lib/data";
 
 // POST /api/tasks/[id]/relevancy-feedback
@@ -57,14 +59,11 @@ export async function POST(
     return bad("not_assigned", 403);
   }
 
-  // For admins without an agent row, we still need an agent_id to satisfy the
-  // FK on relevancy_overrides.agent_id. Block — admins should use the admin
-  // audit flow on /relevancy-audit instead. (The user-facing "Mark wrong" button
-  // is still primarily an agent affordance even though admins can see the page.)
-  if (gate.scope === "admin" && !gate.agentId) {
-    return bad("admin_use_audit_flow", 400);
-  }
-  const agentId = gate.agentId!;
+  // An admin without an agent row can't write an agent_feedback row (the FK on
+  // relevancy_overrides.agent_id is NOT NULL), so their "Mark wrong" is routed
+  // to an admin_audit override instead — the same record type the /relevancy-audit
+  // page writes. Admins WHO ALSO have an agent row keep the agent_feedback path.
+  const isAdminAudit = gate.scope === "admin" && !gate.agentId;
 
   let body: PostBody;
   try {
@@ -107,6 +106,40 @@ export async function POST(
   }
 
   try {
+    // Admin (no agent row) → admin_audit override.
+    if (isAdminAudit) {
+      const adminId = session.user.id;
+      if (!adminId) return bad("no_admin_id", 500);
+      const result = await createAdminAuditOverride({
+        scoreId,
+        adminId,
+        note,
+        taskId,
+        overrideReason,
+      });
+      if ("error" in result) {
+        if (result.error === "score_not_found") return bad("score_not_found", 404);
+        if (result.error === "already_overridden") {
+          // Some other admin already audited this score — they own the single
+          // admin_audit row. Surface it so the client can point at it.
+          return NextResponse.json(
+            { error: "already_overridden", feedback_id: result.override_id },
+            { status: 409 }
+          );
+        }
+        return bad("unknown", 500);
+      }
+      revalidatePath("/my-tasks");
+      revalidatePath("/tasks");
+      revalidatePath("/relevancy-audit");
+      return NextResponse.json(
+        { feedback_id: result.override_id, created_at: result.created_at },
+        { status: 201 }
+      );
+    }
+
+    // Agent (or admin with an agent row) → agent_feedback override.
+    const agentId = gate.agentId!;
     const result = await createAgentFeedbackOverride({
       scoreId,
       agentId,
@@ -176,8 +209,13 @@ export async function DELETE(
   try {
     let outcome: "deleted" | "not_found" | "forbidden";
     if (gate.scope === "admin") {
-      const adminOutcome = await deleteAgentFeedbackAsAdmin({ feedbackId, taskId });
-      outcome = adminOutcome;
+      // Dispatches by override type: moderates an agent_feedback row, or removes
+      // the admin's own admin_audit verdict.
+      outcome = await deleteRelevancyFeedbackAsAdmin({
+        feedbackId,
+        taskId,
+        adminId: session.user.id ?? "",
+      });
     } else {
       outcome = await deleteAgentFeedback({ feedbackId, agentId: gate.agentId, taskId });
     }
@@ -221,7 +259,15 @@ export async function GET(
     return bad("not_assigned", 403);
   }
   if (!gate.agentId) {
-    // Admin without agent_id has no row to return — return null.
+    // Admin without an agent row — return their own admin_audit verdict (if any)
+    // so the panel shows it as flagged and opens the form in edit mode.
+    if (gate.scope === "admin" && session.user.id) {
+      const adminRow = await getAdminAuditOverrideForTask({
+        taskId,
+        adminId: session.user.id,
+      });
+      return NextResponse.json({ feedback: adminRow });
+    }
     return NextResponse.json({ feedback: null });
   }
 
