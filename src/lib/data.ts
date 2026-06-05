@@ -4948,9 +4948,18 @@ export async function deleteRelevancyFeedbackAsAdmin(opts: {
 // + scores so the table can render context without extra round trips.
 export async function listAgentFeedback(opts: {
   scopeAgentId?: string | null;
+  from?: Date | null;
+  to?: Date | null;
+  profileIds?: string[] | null;
   limit?: number;
 }): Promise<AgentFeedbackListRow[]> {
   const limit = opts.limit ?? 100;
+  // Date filter is on the flag time (ro.created_at) — matches the table's
+  // "When" column and the relevancy-audit page's windowing. Null = unbounded.
+  const fromIso = opts.from ? opts.from.toISOString() : null;
+  const toIso = opts.to ? opts.to.toISOString() : null;
+  const profileFilter =
+    opts.profileIds && opts.profileIds.length > 0 ? opts.profileIds : null;
   const result = await sql<{
     id: number | string;
     score_id: number | string;
@@ -4978,6 +4987,9 @@ export async function listAgentFeedback(opts: {
     LEFT JOIN relevancy_scores rs ON rs.id = ro.score_id
     WHERE ro.override_type = 'agent_feedback'
       AND (${opts.scopeAgentId ?? null}::uuid IS NULL OR ro.agent_id = ${opts.scopeAgentId ?? null}::uuid)
+      AND (${fromIso}::timestamptz IS NULL OR ro.created_at >= ${fromIso}::timestamptz)
+      AND (${toIso}::timestamptz IS NULL OR ro.created_at <= ${toIso}::timestamptz)
+      AND (${profileFilter}::text[] IS NULL OR rs.profile_id = ANY(${profileFilter}::text[]))
     ORDER BY ro.created_at DESC
     LIMIT ${limit}
   `;

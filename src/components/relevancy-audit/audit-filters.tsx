@@ -18,12 +18,21 @@ interface AuditFiltersProps {
   profiles: Profile[];
   selectedProfileIds: string[];
   hideOverridden: boolean;
+  // Page this filter bar lives on — profile/hide-overridden changes push here.
+  // The DateRangePicker mutates window.location directly so it's path-agnostic.
+  basePath?: string;
+  // The "Hide overridden" toggle only makes sense for the rejects list (where a
+  // row may or may not have an override). On the agent-feedback page every row
+  // IS an override, so the page hides it.
+  showHideOverridden?: boolean;
 }
 
 export function AuditFilters({
   profiles,
   selectedProfileIds,
   hideOverridden,
+  basePath = "/relevancy-audit",
+  showHideOverridden = true,
 }: AuditFiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -42,7 +51,7 @@ export function AuditFilters({
     const p = new URLSearchParams(searchParams.toString());
     mutate(p);
     const qs = p.toString();
-    router.push(qs ? `/relevancy-audit?${qs}` : "/relevancy-audit");
+    router.push(qs ? `${basePath}?${qs}` : basePath);
   }
 
   function toggleProfile(id: string) {
@@ -150,19 +159,21 @@ export function AuditFilters({
         </PopoverContent>
       </Popover>
 
-      <div className="ml-auto flex items-center gap-2">
-        <label
-          htmlFor="hide-overridden"
-          className="text-[13px] font-medium text-muted-foreground"
-        >
-          Hide overridden
-        </label>
-        <Switch
-          id="hide-overridden"
-          checked={hideOverridden}
-          onCheckedChange={toggleHideOverridden}
-        />
-      </div>
+      {showHideOverridden && (
+        <div className="ml-auto flex items-center gap-2">
+          <label
+            htmlFor="hide-overridden"
+            className="text-[13px] font-medium text-muted-foreground"
+          >
+            Hide overridden
+          </label>
+          <Switch
+            id="hide-overridden"
+            checked={hideOverridden}
+            onCheckedChange={toggleHideOverridden}
+          />
+        </div>
+      )}
     </div>
   );
 }

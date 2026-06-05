@@ -55,6 +55,8 @@ export function AgentFeedbackTable({ rows, showAgent }: Props) {
                     {taskHref ? (
                       <a
                         href={taskHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="text-foreground hover:underline underline-offset-2 truncate"
                         title={row.job_title ?? row.task_title ?? ""}
                       >
