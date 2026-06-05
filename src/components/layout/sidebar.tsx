@@ -25,6 +25,7 @@ import {
   BarChart3,
   ShieldCheck,
   Microscope,
+  MessageSquareWarning,
 } from "lucide-react";
 import { useState, Suspense } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -80,6 +81,7 @@ const adminNavSections: NavSection[] = [
     items: [
       { href: "/relevancy-evaluator", label: "Relevancy Evaluator", icon: Microscope },
       { href: "/relevancy-audit", label: "Relevancy Audit", icon: ShieldCheck },
+      { href: "/agent-feedback", label: "Agent Feedback", icon: MessageSquareWarning },
     ],
   },
   {
@@ -118,6 +120,7 @@ const agentNavSections: NavSection[] = [
     items: [
       { href: "/relevancy-evaluator", label: "Relevancy Evaluator", icon: Microscope },
       { href: "/relevancy-audit", label: "Relevancy Audit", icon: ShieldCheck },
+      { href: "/agent-feedback", label: "Agent Feedback", icon: MessageSquareWarning },
     ],
   },
   {
