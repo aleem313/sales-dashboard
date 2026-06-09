@@ -554,6 +554,10 @@ export interface ConnectsUsage {
   niche: string | null;
   connects_used: number;
   connects_budget: number;
+  /** Won tasks (that consumed connects) attributed to this profile. */
+  wins: number;
+  /** connects_used / wins, rounded. null when wins === 0 (no efficiency to rank). */
+  cost_per_win: number | null;
 }
 
 export interface BoostedConnectsSummary {

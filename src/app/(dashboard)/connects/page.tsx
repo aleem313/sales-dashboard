@@ -49,17 +49,28 @@ export default async function ConnectsPage({
     .filter((r) => r.wins === 0)
     .reduce((s, r) => s + r.connects_spent, 0);
 
-  const mostEfficient = [...usage].sort((a, b) => {
-    const ra = roi.find((r) => r.niche === a.niche);
-    const rb = roi.find((r) => r.niche === b.niche);
-    return (ra?.cost_per_win ?? Infinity) - (rb?.cost_per_win ?? Infinity);
-  })[0];
+  // Rank profiles by their own connect efficiency (cost_per_win, lower = better).
+  // Only profiles that actually spent connects are rankable. A null cost_per_win
+  // means 0 wins, i.e. connects spent with nothing won — the worst possible
+  // efficiency, so it sorts last (treated as Infinity).
+  //
+  // The comparator must NOT subtract the scores: Infinity - Infinity is NaN,
+  // and a NaN-returning comparator leaves the array unsorted, which is how the
+  // same profile used to land in BOTH cards.
+  const effScore = (cpw: number | null) => (cpw == null ? Infinity : cpw);
+  const ranked = [...usage]
+    .filter((u) => u.connects_used > 0)
+    .sort((a, b) => {
+      const sa = effScore(a.cost_per_win);
+      const sb = effScore(b.cost_per_win);
+      return sa === sb ? 0 : sa < sb ? -1 : 1;
+    });
 
-  const leastEfficient = [...usage].sort((a, b) => {
-    const ra = roi.find((r) => r.niche === a.niche);
-    const rb = roi.find((r) => r.niche === b.niche);
-    return (rb?.cost_per_win ?? Infinity) - (ra?.cost_per_win ?? Infinity);
-  })[0];
+  // Most efficient = lowest finite cost_per_win (a profile with no wins is never "most").
+  const mostEfficient = ranked.find((u) => u.cost_per_win != null) ?? null;
+  // Least efficient = worst score, but never the same profile as "most".
+  const worst = ranked.length > 0 ? ranked[ranked.length - 1] : null;
+  const leastEfficient = worst && worst !== mostEfficient ? worst : null;
 
   return (
     <>

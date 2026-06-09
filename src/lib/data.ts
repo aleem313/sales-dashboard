@@ -2716,7 +2716,11 @@ export async function getConnectsUsageByProfile(
       p.profile_name,
       p.stack,
       COALESCE(cpb.total_purchased, 0) AS connects_budget,
-      COALESCE(SUM(NULLIF(t.custom_fields->>'_connects_used', '')::numeric), 0) AS connects_used
+      COALESCE(SUM(NULLIF(t.custom_fields->>'_connects_used', '')::numeric), 0) AS connects_used,
+      COUNT(*) FILTER (
+        WHERE LOWER(c.name) = 'won'
+          AND NULLIF(t.custom_fields->>'_connects_used', '') IS NOT NULL
+      ) AS wins
     FROM profiles p
     LEFT JOIN LATERAL (
       SELECT COALESCE(SUM(cp.connects_count), 0) AS total_purchased
@@ -2739,6 +2743,7 @@ export async function getConnectsUsageByProfile(
       )
     )
     LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
+    LEFT JOIN columns c ON c.id = t.column_id
     WHERE p.active = true
       AND (
         NULLIF(t.custom_fields->>'_connects_used', '') IS NOT NULL
@@ -2770,12 +2775,18 @@ export async function getConnectsUsageByProfile(
     ORDER BY connects_used DESC
   `;
 
-  return result.rows.map((row) => ({
-    profile_name: row.profile_name,
-    niche: row.stack,
-    connects_used: parseInt(row.connects_used) || 0,
-    connects_budget: parseInt(row.connects_budget) || 0,
-  }));
+  return result.rows.map((row) => {
+    const connectsUsed = parseInt(row.connects_used) || 0;
+    const wins = parseInt(row.wins) || 0;
+    return {
+      profile_name: row.profile_name,
+      niche: row.stack,
+      connects_used: connectsUsed,
+      connects_budget: parseInt(row.connects_budget) || 0,
+      wins,
+      cost_per_win: wins > 0 ? Math.round(connectsUsed / wins) : null,
+    };
+  });
 }
 
 // ============================================================

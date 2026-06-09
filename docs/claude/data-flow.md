@@ -69,6 +69,14 @@ As of 2026-04-29, commit `ebe8122`. Every task counts only toward stages it has 
 - Examples: a Won card moved Proposal Submitted (6 days ago) → Won (today) counts under Proposals Sent for any window covering 6 days ago AND under Won + every cumulative tile for today. A card moved Proposal Submitted (10 days ago) → Meeting Done (yesterday) counts under Meetings Booked + Meetings Done for yesterday's filter, NOT for today's.
 - **Caveat:** relies on `activity_log` integrity — `task_moved` entries are written by `moveTaskAction` (`task-data.ts:1027`); any move that bypasses that path (e.g. raw `PATCH /api/tasks/[id]/move`) is invisible to the funnel.
 
+## Connects Efficiency (Most/Least Efficient cards)
+
+As of 2026-06-09. The `/connects` "Most Efficient" / "Least Efficient" cards rank **profiles** by their own `cost_per_win`, not by niche.
+
+- `getConnectsUsageByProfile` returns per-profile `wins` (won tasks that consumed connects, `LOWER(columns.name)='won'`) and `cost_per_win = round(connects_used / wins)`, **`null` when `wins = 0`**. This mirrors `getConnectROIByNiche`'s win convention so the two stay consistent.
+- Ranking (in `connects/page.tsx`) only considers profiles with `connects_used > 0`. `cost_per_win = null` (spent connects, won nothing) sorts **last** (treated as `Infinity`) = least efficient; lowest finite `cost_per_win` = most efficient. A profile with no wins is never "most efficient".
+- **Gotcha that bit us:** the old code ranked profiles by their *niche's* cost_per_win via `roi.find(...)` and used a `(... ?? Infinity) - (... ?? Infinity)` comparator. `Infinity - Infinity = NaN`, and a NaN-returning sort comparator leaves the array unsorted — so when every niche was winless/unmatched, both `sort(asc)[0]` and `sort(desc)[0]` returned `usage[0]` and the **same profile showed as both most AND least efficient**. The comparator now branches (`sa === sb ? 0 : sa < sb ? -1 : 1`) and a guard ensures `leastEfficient !== mostEfficient`.
+
 ## Timezone
 
 **Default timezone is US Eastern** (`-04:00` fixed EDT) as of 2026-04-29. Set in `src/lib/date-utils.ts` (`resolveTZ`) and mirrored in `src/lib/date-presets.ts` (server-safe util consumed by `parseBoardFiltersFromSearchParams` and the date picker). PKT is opt-in via `?tz=pkt`. The fixed offset does NOT auto-handle EST/EDT DST — swap to `Intl.DateTimeFormat` if winter-time off-by-one is reported.
