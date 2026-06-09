@@ -93,6 +93,7 @@ Only edit CLAUDE.md itself when adding a **new topic file** (so the index points
 | `docs/n8n_relevancy_classifier_core_prd.md` | Classifier sub-workflow PRD |
 | `docs/job_relevancy_criteria_prd.md` | Relevancy criteria PRD (rules + reason enum) |
 | `docs/relevancy/mode_a_prompt.md` | Canonical classifier prompt |
+| `docs/proposal_feedback_feature.md` | Proposal feedback + AI regenerate + training capture (migration 024, `proposal-regenerate` n8n workflow) — read before changing that flow |
 
 ## Conversation Continuity
 
