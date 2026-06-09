@@ -63,7 +63,12 @@ export default async function ConnectsPage({
     .sort((a, b) => {
       const sa = effScore(a.cost_per_win);
       const sb = effScore(b.cost_per_win);
-      return sa === sb ? 0 : sa < sb ? -1 : 1;
+      if (sa !== sb) return sa < sb ? -1 : 1;
+      // Tie-break — notably the winless bucket where every score is Infinity:
+      // more connects spent for the same cost-per-win is less efficient, so it
+      // sorts later. Ascending connects_used keeps the lightest spender "most"
+      // and pushes the heaviest spender to "least".
+      return a.connects_used - b.connects_used;
     });
 
   // Most efficient = lowest finite cost_per_win (a profile with no wins is never "most").
