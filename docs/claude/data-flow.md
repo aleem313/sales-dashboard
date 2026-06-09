@@ -37,6 +37,8 @@ History (n8n workflow snapshots in `docs/*.json` still mention earlier dual-targ
 
 Migrations in `src/lib/migrations/`.
 
+**Proposal feedback (migration 024):** `proposal_feedback` — append-only log of agent feedback on AI-written proposals + regeneration history, doubling as the training corpus. The card's `custom_fields._proposal` holds only the currently-applied text; this table holds the full lineage of `(original_proposal, categories[], note) → regenerated_proposal` triples. Two write paths: `/api/tasks/[id]/proposal-feedback` (feedback-only, `status='feedback'`) and `/api/proposals/regenerate` (calls n8n `proposal-regenerate` webhook, writes `status='regenerated'` + applies the new text to the card via `setTaskProposalText`; records `status='regen_failed'` if n8n is down). Auth reuses `assertCanFlagTaskRelevancy`; regen is rate-limited via `checkProposalRegenRateLimit` (30/hr · 150/day per author). UI: `ProposalFeedbackPanel` under `ProposalBox` in `task-full-view.tsx`. Categories vocabulary: `src/lib/proposal-feedback-reasons.ts`.
+
 ## API Conventions
 
 - **Protected routes** check auth via `getServerSession()` or middleware

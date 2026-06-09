@@ -5257,6 +5257,261 @@ export async function listProfilesForManualEval(): Promise<
 }
 
 // ============================================================
+// PROPOSAL FEEDBACK + REGENERATION (migration 024)
+// ============================================================
+//
+// Append-only log of agent feedback on AI-written proposals + regeneration
+// history. Each row is a self-contained training record:
+//   input  = original_proposal + categories + note
+//   target = regenerated_proposal (NULL for feedback-only rows)
+// The card's _proposal holds only the currently-applied text; this table holds
+// the full lineage. See migration 024_proposal_feedback.sql.
+
+export interface ProposalFeedbackRow {
+  feedback_id: number;
+  task_id: string;
+  job_external_id: string | null;
+  profile_id: string | null;
+  agent_id: string | null;
+  admin_id: string | null;
+  author_role: "agent" | "admin";
+  author_name: string | null;
+  categories: string[];
+  note: string | null;
+  original_proposal: string | null;
+  regenerated_proposal: string | null;
+  model: string | null;
+  status: "feedback" | "regenerated" | "regen_failed";
+  applied: boolean;
+  created_at: string;
+}
+
+export interface ProposalFeedbackInsert {
+  taskId: string;
+  jobExternalId: string | null;
+  profileId: string | null;
+  agentId: string | null;       // FK — set for agent authors (and admins who also have an agent row)
+  adminId: string | null;       // NextAuth session id — set for admin authors
+  authorRole: "agent" | "admin";
+  categories: string[];
+  note: string | null;
+  originalProposal: string | null;
+  regeneratedProposal: string | null;
+  model: string | null;
+  status: "feedback" | "regenerated" | "regen_failed";
+  applied: boolean;
+  requestId: string | null;
+}
+
+// Inserts one proposal_feedback row (feedback-only OR a regeneration record) and
+// returns its id + created_at. No dedup/unique constraint — this is an append-only
+// history, so an agent can submit feedback and regenerate as many times as the
+// rate limiter allows.
+export async function insertProposalFeedback(
+  row: ProposalFeedbackInsert
+): Promise<{ id: number; created_at: string }> {
+  const result = await sql<{ id: number | string; created_at: string | Date }>`
+    INSERT INTO proposal_feedback (
+      task_id, job_external_id, profile_id, agent_id, admin_id, author_role,
+      categories, note, original_proposal, regenerated_proposal, model,
+      status, applied, request_id
+    ) VALUES (
+      ${row.taskId}::uuid,
+      ${row.jobExternalId},
+      ${row.profileId},
+      ${row.agentId}::uuid,
+      ${row.adminId},
+      ${row.authorRole},
+      ${row.categories},
+      ${row.note},
+      ${row.originalProposal},
+      ${row.regeneratedProposal},
+      ${row.model},
+      ${row.status},
+      ${row.applied},
+      ${row.requestId}::uuid
+    )
+    RETURNING id, created_at
+  `;
+  const r = result.rows[0];
+  return {
+    id: Number(r.id),
+    created_at: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+  };
+}
+
+// Full feedback/regeneration history for one task, newest first. Joins agents to
+// surface a display name for the history list. Powers the panel's initial render.
+export async function listProposalFeedbackForTask(
+  taskId: string
+): Promise<ProposalFeedbackRow[]> {
+  const result = await sql<{
+    id: number | string;
+    task_id: string;
+    job_external_id: string | null;
+    profile_id: string | null;
+    agent_id: string | null;
+    admin_id: string | null;
+    author_role: "agent" | "admin";
+    author_name: string | null;
+    categories: string[] | null;
+    note: string | null;
+    original_proposal: string | null;
+    regenerated_proposal: string | null;
+    model: string | null;
+    status: "feedback" | "regenerated" | "regen_failed";
+    applied: boolean;
+    created_at: string | Date;
+  }>`
+    SELECT
+      pf.id, pf.task_id, pf.job_external_id, pf.profile_id, pf.agent_id, pf.admin_id,
+      pf.author_role, a.name AS author_name, pf.categories, pf.note,
+      pf.original_proposal, pf.regenerated_proposal, pf.model, pf.status,
+      pf.applied, pf.created_at
+    FROM proposal_feedback pf
+    LEFT JOIN agents a ON a.id = pf.agent_id
+    WHERE pf.task_id = ${taskId}::uuid
+    ORDER BY pf.created_at DESC
+    LIMIT 100
+  `;
+  return result.rows.map((r) => ({
+    feedback_id: Number(r.id),
+    task_id: r.task_id,
+    job_external_id: r.job_external_id,
+    profile_id: r.profile_id,
+    agent_id: r.agent_id,
+    admin_id: r.admin_id,
+    author_role: r.author_role,
+    author_name: r.author_name,
+    categories: Array.isArray(r.categories) ? r.categories : [],
+    note: r.note,
+    original_proposal: r.original_proposal,
+    regenerated_proposal: r.regenerated_proposal,
+    model: r.model,
+    status: r.status,
+    applied: r.applied,
+    created_at: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+  }));
+}
+
+// Deletes a proposal_feedback row iff it lives under the URL-supplied task AND
+// (the caller is an admin OR owns the row). Mirrors deleteAgentFeedback: a
+// path/row mismatch reads as not_found, not forbidden.
+export async function deleteProposalFeedback(opts: {
+  feedbackId: number;
+  taskId: string;
+  agentId: string | null;
+  isAdmin: boolean;
+}): Promise<"deleted" | "not_found" | "forbidden"> {
+  const row = await sql<{ agent_id: string | null; task_id: string }>`
+    SELECT agent_id, task_id FROM proposal_feedback WHERE id = ${opts.feedbackId} LIMIT 1
+  `;
+  if (row.rows.length === 0) return "not_found";
+  if (row.rows[0].task_id !== opts.taskId) return "not_found";
+  if (!opts.isAdmin) {
+    if (!opts.agentId || row.rows[0].agent_id !== opts.agentId) return "forbidden";
+  }
+  await sql`DELETE FROM proposal_feedback WHERE id = ${opts.feedbackId}`;
+  return "deleted";
+}
+
+// Postgres-backed rate limiter for proposal regeneration (the LLM call). Mirrors
+// checkManualEvalRateLimit but counts regenerations per author over the window.
+// Defaults are tighter (30/hr, 150/day) since each regen is a full proposal-writer
+// LLM run. `requestedBy` is the NextAuth session.user.id (matches admin_id) — for
+// agents we also count their agent_id rows, so the cap follows the human either way.
+export async function checkProposalRegenRateLimit(args: {
+  requestedBy: string;
+  agentId?: string | null;
+  perHour?: number;
+  perDay?: number;
+}): Promise<ManualEvalRateLimitResult> {
+  const perHour = args.perHour ?? 30;
+  const perDay = args.perDay ?? 150;
+
+  const result = await sql<{ hourly: number | string; daily: number | string }>`
+    SELECT
+      COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 hour')::int AS hourly,
+      COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 day')::int  AS daily
+    FROM proposal_feedback
+    WHERE status = 'regenerated'
+      AND created_at > NOW() - INTERVAL '1 day'
+      AND (
+        admin_id = ${args.requestedBy}
+        OR (${args.agentId ?? null}::uuid IS NOT NULL AND agent_id = ${args.agentId ?? null}::uuid)
+      )
+  `;
+
+  const hourlyCount = Number(result.rows[0]?.hourly ?? 0);
+  const dailyCount = Number(result.rows[0]?.daily ?? 0);
+
+  if (hourlyCount >= perHour) {
+    return { allowed: false, exceeded: "hourly", hourlyCount, dailyCount, retryAfterSeconds: 3600 };
+  }
+  if (dailyCount >= perDay) {
+    return { allowed: false, exceeded: "daily", hourlyCount, dailyCount, retryAfterSeconds: 24 * 3600 };
+  }
+  return { allowed: true, exceeded: null, hourlyCount, dailyCount, retryAfterSeconds: 0 };
+}
+
+// Reads the fields the proposal feedback/regenerate routes need off a task card in
+// one query: current proposal text, the profile (resolved to a profile_id via the
+// _profile_name stamp), and the _job_id for training-export joins. profile_id is
+// NULL if the card has no _profile_name or it matches no profiles row.
+export async function getTaskProposalContext(taskId: string): Promise<{
+  exists: boolean;
+  proposal: string | null;
+  profileId: string | null;
+  profileName: string | null;
+  jobExternalId: string | null;
+} | null> {
+  const result = await sql<{
+    proposal: string | null;
+    profile_name: string | null;
+    profile_id: string | null;
+    job_external_id: string | null;
+  }>`
+    SELECT
+      NULLIF(t.custom_fields->>'_proposal', '')      AS proposal,
+      NULLIF(t.custom_fields->>'_profile_name', '')  AS profile_name,
+      COALESCE(
+        NULLIF(t.custom_fields->>'_profile_id', ''),
+        p.profile_id
+      )                                              AS profile_id,
+      NULLIF(t.custom_fields->>'_job_id', '')        AS job_external_id
+    FROM tasks t
+    LEFT JOIN profiles p ON p.profile_name = NULLIF(t.custom_fields->>'_profile_name', '')
+    WHERE t.id = ${taskId}::uuid
+    LIMIT 1
+  `;
+  if (result.rows.length === 0) return null;
+  const r = result.rows[0];
+  return {
+    exists: true,
+    proposal: r.proposal,
+    profileId: r.profile_id,
+    profileName: r.profile_name,
+    jobExternalId: r.job_external_id,
+  };
+}
+
+// Targeted write of a single proposal version back onto the card's _proposal
+// custom field via jsonb_set (no read-modify-write of the whole blob, so it won't
+// race with concurrent custom-field edits). Used by the regenerate route and the
+// "restore this version" affordance.
+export async function setTaskProposalText(taskId: string, text: string): Promise<void> {
+  await sql`
+    UPDATE tasks
+    SET custom_fields = jsonb_set(
+      COALESCE(custom_fields, '{}'::jsonb),
+      '{_proposal}',
+      ${JSON.stringify(text)}::jsonb
+    )
+    WHERE id = ${taskId}::uuid
+  `;
+}
+
+// ============================================================
 // THRESHOLD PREVIEW (Phase 13/14, plan v3.3 §10.6.4)
 // ============================================================
 

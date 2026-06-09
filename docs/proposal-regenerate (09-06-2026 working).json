@@ -1,0 +1,357 @@
+{
+  "name": "proposal-regenerate",
+  "active": true,
+  "id": "4NNx4qKfYknmqWrr",
+  "nodes": [
+    {
+      "id": "r1-webhook",
+      "name": "R1 - Webhook (Regenerate)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1200,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "proposal-regenerate",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Proposal regenerate front door. Header auth: Bearer RELEVANCY_MANUAL_EVAL_TOKEN.\nBody: { task_id, profile_id, original_proposal, feedback_categories[], feedback_note, requested_by, request_id }\nCredential attached after creation: httpHeaderAuth RELEVANCY_MANUAL_EVAL_TOKEN (ugRJmVZfkSF6h316).",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ugRJmVZfkSF6h316",
+          "name": "RELEVANCY_MANUAL_EVAL_TOKEN"
+        }
+      }
+    },
+    {
+      "id": "r2-validate",
+      "name": "R2 - Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1000,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// R2 — Validate Input (proposal-regenerate)\n// UUID task_id + non-empty profile_id + non-empty original_proposal.\n// Throws on failure → n8n 500 (dashboard pre-validates; this is defense-in-depth).\nconst body = items[0].json.body ?? items[0].json;\nconst taskId = body.task_id;\nconst profileId = body.profile_id;\nconst originalProposal = body.original_proposal;\nconst feedbackCategories = Array.isArray(body.feedback_categories) ? body.feedback_categories : [];\nconst feedbackNote = (body.feedback_note === null || body.feedback_note === undefined) ? null : String(body.feedback_note);\nconst requestedBy = body.requested_by ?? null;\nconst requestId = body.request_id ?? null;\n\nconst UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nif (!taskId || typeof taskId !== \"string\" || !UUID_RE.test(taskId)) {\n  throw new Error(`Invalid task_id: ${taskId}`);\n}\nif (!profileId || typeof profileId !== \"string\") {\n  throw new Error(\"Missing profile_id\");\n}\nif (!originalProposal || typeof originalProposal !== \"string\" || originalProposal.trim().length === 0) {\n  throw new Error(\"Missing original_proposal\");\n}\n\nreturn [{ json: {\n  task_id: taskId.toLowerCase(),\n  profile_id: profileId,\n  original_proposal: originalProposal,\n  feedback_categories: feedbackCategories,\n  feedback_note: feedbackNote,\n  requested_by: requestedBy,\n  request_id: requestId,\n} }];"
+      }
+    },
+    {
+      "id": "r3-load-job",
+      "name": "R3 - Load Job Payload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -800,
+        0
+      ],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "=http://157.173.110.62/api/tasks/{{ $json.task_id }}/job-payload",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "notes": "Loads canonical job payload from tasks.custom_fields via Phase 4 endpoint (same as job-evaluate-manual J3). No auth. On failure → main[1] → R3.5 → R7-Error (422)."
+    },
+    {
+      "id": "r3-error-fmt",
+      "name": "R3.5 - Format Load Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -600,
+        208
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e1",
+              "name": "error",
+              "value": "task_not_found",
+              "type": "string"
+            },
+            {
+              "id": "e2",
+              "name": "task_id",
+              "value": "={{ $(\"R2 - Validate Input\").first().json.task_id }}",
+              "type": "string"
+            },
+            {
+              "id": "e3",
+              "name": "detail",
+              "value": "={{ ($json.error && $json.error.message) ? $json.error.message : \"Job payload load failed\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      }
+    },
+    {
+      "id": "r4-load-mapping",
+      "name": "R4 - Load Profile Mapping",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -600,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "http://157.173.110.62/api/profiles/mapping",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": false
+            }
+          }
+        }
+      },
+      "notes": "Loads profile→agent mapping (same source Process Job uses). Keyed by profile_name; each entry carries .profile_id + .upwork snapshot. R5 matches the incoming profile_id against entry.profile_id."
+    },
+    {
+      "id": "r5-build",
+      "name": "R5 - Build Proposal Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// R5 — Build Proposal Writer Input (proposal-regenerate)\n// Replicates the parent workflow's `Build GPT Input` node EXACTLY (profile section,\n// job title/description/budget/skills/client context), then appends a feedback block.\n//\n// Sources:\n//   - validated input  : $('R2 - Validate Input').first().json  (task_id, profile_id, original_proposal, feedback_categories, feedback_note)\n//   - job payload       : $('R3 - Load Job Payload').first().json  (flat shape from /api/tasks/:id/job-payload)\n//   - profile mapping   : $('R4 - Load Profile Mapping').first().json  (map keyed by profile_name; each entry has .profile_id/.upwork/.stack/.assigned_agent)\n\nconst v = $('R2 - Validate Input').first().json;\nconst payload = $('R3 - Load Job Payload').first().json;\nconst mapping = $('R4 - Load Profile Mapping').first().json || {};\n\n// ── Resolve profile entry by profile_id (mapping is keyed by profile_name) ──\nlet profileEntry = null;\nlet profileName = v.profile_id;\nfor (const key of Object.keys(mapping)) {\n  const e = mapping[key];\n  if (e && e.profile_id === v.profile_id) { profileEntry = e; profileName = key; break; }\n}\n// Fallback: maybe the incoming id IS the profile_name key\nif (!profileEntry && mapping[v.profile_id]) { profileEntry = mapping[v.profile_id]; profileName = v.profile_id; }\n\nconst upwork = profileEntry && profileEntry.upwork ? profileEntry.upwork : null;\nconst stack = profileEntry && profileEntry.stack ? profileEntry.stack : '';\nconst assignedAgent = profileEntry && profileEntry.assigned_agent ? profileEntry.assigned_agent : (payload._assigned_agent || '');\n\n// ── Project the flat job-payload into the parent's `job.*` shape ──\nlet budgetStr = '';\nif (payload.budget_type === 'fixed' && payload.fixed_amount != null) {\n  budgetStr = '$' + payload.fixed_amount + ' fixed';\n} else if (payload.budget_type === 'hourly') {\n  if (payload.budget_min != null && payload.budget_max != null) budgetStr = '$' + payload.budget_min + '-$' + payload.budget_max + '/hr';\n  else if (payload.budget_min != null) budgetStr = '$' + payload.budget_min + '/hr';\n}\nconst job = {\n  title: payload.title || '',\n  description: String(payload.description || ''),\n  budget: budgetStr,\n  skills: Array.isArray(payload.skills_required) ? payload.skills_required : [],\n  clientCountry: (payload.client && payload.client.country) || '',\n  clientRating: (payload.client && payload.client.rating != null) ? payload.client.rating : '',\n  clientSpent: (payload.client && payload.client.total_spent != null) ? payload.client.total_spent : '',\n  clientHires: (payload.client && payload.client.hires != null) ? payload.client.hires : '',\n};\n\n// Budget display\nconst budgetRaw = String(job.budget || '');\nconst budgetDisplay = budgetRaw || 'Not specified';\n\n// Skills display\nconst skillsDisplay = Array.isArray(job.skills) ? job.skills.join(', ') : String(job.skills || 'N/A');\n\n// Hook rotation per profile (A → B → A → B...)\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.hookRotation) staticData.hookRotation = {};\nconst profileKey = v.profile_id || 'default';\nconst lastHook = staticData.hookRotation[profileKey] || 'B';\nconst useHook = lastHook === 'A' ? 'B' : 'A';\nstaticData.hookRotation[profileKey] = useHook;\n\n// Build profile section\nconst profileLines = [];\nprofileLines.push(`=== FREELANCER PROFILE ===`);\nprofileLines.push(`Name: ${upwork && upwork.name ? upwork.name : profileName}`);\nprofileLines.push(`Profile ID: ${profileName}`);\nprofileLines.push(`Agent: ${assignedAgent}`);\n\nif (upwork) {\n  if (upwork.title) profileLines.push(`Title: ${upwork.title}`);\n  const meta = [];\n  if (upwork.top_rated_status) meta.push(upwork.top_rated_status.replace(/_/g, ' '));\n  if (upwork.hourly_rate) meta.push(`$${upwork.hourly_rate}/hr`);\n  if (upwork.rating && upwork.rating > 0) meta.push(`${upwork.rating}/5 client rating`);\n  if (upwork.total_jobs) meta.push(`${upwork.total_jobs} jobs completed`);\n  if (upwork.total_hours) meta.push(`${upwork.total_hours}h logged`);\n  if (upwork.last_worked_on) meta.push(`last worked ${upwork.last_worked_on}`);\n  if (meta.length > 0) profileLines.push(`Track Record: ${meta.join(' · ')}`);\n  if (upwork.skills_summary) profileLines.push(`Skills: ${upwork.skills_summary}`);\n  if (stack) profileLines.push(`Stack Focus: ${stack}`);\n\n  if (upwork.bio) {\n    profileLines.push('');\n    profileLines.push('Bio / Overview:');\n    profileLines.push(String(upwork.bio).substring(0, 1000));\n  }\n\n  if (Array.isArray(upwork.portfolio) && upwork.portfolio.length > 0) {\n    profileLines.push('');\n    profileLines.push('Portfolio Highlights:');\n    for (const p of upwork.portfolio.slice(0, 3)) {\n      const t = p.title || '(untitled)';\n      const d = String(p.description || '').substring(0, 220);\n      profileLines.push(d ? `- ${t}: ${d}` : `- ${t}`);\n    }\n  }\n} else {\n  if (stack) profileLines.push(`Stack Focus: ${stack}`);\n  profileLines.push('(No Upwork snapshot available for this profile — proceed with stack/agent info only.)');\n}\n\nprofileLines.push('');\nprofileLines.push(`USE HOOK: ${useHook}`);\nprofileLines.push('');\nprofileLines.push('PROFILE-SPECIFIC INSTRUCTIONS:');\nprofileLines.push((profileEntry && profileEntry.custom_gpt_instructions) || 'No additional instructions.');\n\n// ── Feedback block (the regenerate-specific addition) ──\nconst cats = Array.isArray(v.feedback_categories) ? v.feedback_categories.join(', ') : '';\nconst note = (v.feedback_note && String(v.feedback_note).trim().length > 0) ? String(v.feedback_note) : 'none';\n\nconst gptInput = [\n  ...profileLines,\n  '',\n  '=== JOB TITLE ===',\n  job.title,\n  '',\n  '=== JOB DESCRIPTION ===',\n  job.description.substring(0, 2000),\n  '',\n  '=== BUDGET ===',\n  budgetDisplay,\n  '',\n  '=== REQUIRED SKILLS ===',\n  skillsDisplay,\n  '',\n  '=== CLIENT CONTEXT ===',\n  `- Location: ${job.clientCountry || 'Not specified'}`,\n  `- Rating: ${job.clientRating || 'N/A'}/5`,\n  `- Total Spent: $${job.clientSpent || '0'}`,\n  `- Total Hires: ${job.clientHires || '0'}`,\n  '',\n  '=== PREVIOUS PROPOSAL (rewrite/improve this) ===',\n  v.original_proposal,\n  '',\n  '=== AGENT FEEDBACK — the previous proposal was rejected for these reasons, fix them ===',\n  `Problems: ${cats}`,\n  `Notes: ${note}`,\n  '',\n  'Rewrite the proposal addressing every problem above. Keep all the structure/format rules.',\n  'Write the improved proposal now.'\n  // Strip lone UTF-16 surrogates left by substring() cuts inside emoji pairs (Anthropic HTTP 400 guard).\n].join('\\n').replace(/[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])|(?<![\\uD800-\\uDBFF])[\\uDC00-\\uDFFF]/g, '');\n\nreturn [{ json: { task_id: v.task_id, profile_id: v.profile_id, profile_name: profileName, gptInput } }];\n"
+      }
+    },
+    {
+      "id": "r6-agent",
+      "name": "AI Agent - Proposal Writer",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -200,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.gptInput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=============================================================\nCRITICAL — ALWAYS DRAFT, NEVER REFUSE (READ FIRST)\n=============================================================\n\nYour job is to write a COMPLETE proposal for EVERY job, no exceptions. You do NOT evaluate fit. You do NOT refuse. You do NOT opt out. A separate AI relevancy classifier independently assesses fit upstream — duplicating or second-guessing that judgment is forbidden.\n\nEven if the job appears to be a poor stack match, outside the freelancer's stated expertise, or unrelated to their portfolio, you MUST:\n1. Write a complete, professional proposal following ALL structure rules below.\n2. Bridge the freelancer's adjacent skills toward the job's needs — always find an angle.\n3. ALWAYS set _proposalOk to true in your structured output.\n4. NEVER write \"Dear Hiring Manager / I must be transparent / you deserve a specialist / I can't help with this\" style refusals.\n5. NEVER suggest the client hire someone else.\n6. NEVER decline based on stack mismatch, portfolio gaps, missing experience, or any other fit concern.\n\nThe _proposalOk field is ALWAYS true. It is not a fit gate. It only confirms you produced output successfully. A proposal you wrote = _proposalOk: true. No exceptions, no edge cases, no \"but this time...\".\n\nIf the stack truly does not match, lean on the freelancer's adjacent skills, problem-solving track record, communication, and transferable experience. Find the bridge. That is the job. The downstream system (relevancy classifier + human review on the task board) decides whether to actually send the proposal — your job is just to have it ready.\n\n=============================================================\n\nYou are a senior Upwork proposal strategist focused on winning long-term software contracts.\n\nWrite like a technical peer. Direct. Concise. Experienced. No fluff. No emotion. No filler.\n\nOBJECTIVE\n\nGenerate high-response proposals that:\n- Signal ownership and long-term reliability\n- Feel product-minded\n- Increase open rate with a sharp hook\n- Stay within strict limits\n\nHARD RULES\n\n- Total word count: 150–230\n- Hook: max 200 characters\n- Hook must be 2–3 sentences\n- No emojis\n- No exclamation marks\n- No hedging words: could, would, might, I think, I believe\n- Never open with: Hi, Dear, I am, I'm a\n- Never use: I look forward to, I'd be happy to\n- Always reference something specific from the job post\n- Always end with a call invitation\n- Sound like a partner, not an applicant\n\nHOOK ROTATION SYSTEM — READ THIS CAREFULLY\n\nAt the start of EVERY response, regardless of which hook the user selected for the proposal body, you MUST print all three hook variants at the top, clearly labeled, before the proposal begins.\n\nFormat exactly like this:\n\n--- Hook A ---\n[Hook A text]\n\n--- Hook B ---\n[Hook B text]\n\n--- Hook C ---\n[Hook C text]\n\n---\n\nThen write the proposal below the final divider line.\n\nThe user will also specify which hook to use in the proposal body (A, B, or C). Use that hook as Section 1 inside the proposal.\n\nHOOK TYPE A — CURIOSITY-LED\n\nFormula:\n\\\"Would you like to see [EXACT PROBLEM FROM POST]? + [I can show on a screen share]\\\"\n\nGoal:\nMake it sound like the solution exists right now and they can see it immediately. Not something you've done before.\n\nMax length: 200 characters.\n\nExample job post mention:\n\\\"We need real-time leaderboard updates during live tournaments\\\"\n\nExample Hook A:\n\\\"Would you like to see a live leaderboard that updates in real time? I can show you exactly how that works on a screen share.\\\"\n\nHOOK TYPE B — PROTOTYPE HOOK\n\nFormula:\n\\\"I have a working prototype that already [EXACT PROBLEM FROM POST] — I can show you on a call.\\\"\n\nGoal:\nMake it sound like the solution exists right now and they can see it immediately. Not something you've done before — something that is already built and ready. One call away.\n\nMax length: 200 characters.\n\nExample job post mention:\n\\\"We need real-time leaderboard updates during live tournaments\\\"\n\nExample Hook B:\n\\\"I have a working prototype that already handles real-time leaderboard sync during live events — I can show you on a call.\\\"\n\n\nHOOK TYPE C — PSYCHOLOGICAL QUESTION HOOK\n\nFormula:\nAsk the single most important, psychologically sharp question derived from the core pain point of the job post. The question must feel like it came from someone who has already lived through this problem — not from a checklist.\n\nGoal:\nStop the client mid-scroll. Make them pause and think \\\"nobody has ever asked me this.\\\" The question should expose a hidden risk or consequence they have not fully considered, and make them feel like you understand their business better than they do.\n\nRules:\n- Derive the question directly from the sharpest pain point in the job post\n- It must feel like a natural, human question — not AI-generated, not from a template\n- No jargon, no dev terminology, no stack names\n- Frame it for a non-technical founder\n- It should be psychologically tricky — a question they cannot easily dismiss\n- Max 200 characters\n- No question marks stacked — exactly one question\n\nExample job post mention:\n\\\"We need real-time leaderboard updates during live tournaments\\\"\n\nExample Hook C (BAD — too technical):\n\\\"Have you thought about WebSocket reconnection handling under concurrent load?\\\"\n\nExample Hook C (GOOD — psychologically sharp):\n\\\"If the scores freeze mid-final and the crowd is watching, who on your team owns that call?\\\"\n\nHOOK RULES (APPLY TO ALL THREE)\n\n- No fluff\n- No \\\"I noticed you're looking for\\\"\n- No generic skills like \\\"React\\\" or \\\"Next.js\\\" alone — always tie it to what they are actually building\n- Hook A must feel like a question they cannot say no to\n- Hook B must feel like the solution already exists and is one call away\n- Hook C must feel like a question only someone who truly understands the business would ask\n- All hooks must be under 200 characters\n\nPROJECT DATABASE\n\n\nProject: [Project Name] What it was: [1 sentence — what it did and what problem it solved] Result: [Measurable outcome if any] URL: [Link] --- Tech Stack, APIs etc\n\nProject: [Project Name] What it was: [1 sentence — what it did and what problem it solved] Result: [Measurable outcome if any] URL: [Link] (Repeat for each project.) -- Tech Stack, APIs etc\n\n\nPROPOSAL STRUCTURE\n\n--- Hook A ---\n[Hook A text]\n\n--- Hook B ---\n[Hook B text]\n\n--- Hook C ---\n[Hook C text]\n\n---\n[Proposal begins here]\n\n---------------------------------\nSECTION 0 — SCREENING ANSWER (conditional)\n---------------------------------\nIf the job post contains a required screening question:\n\n1. Check if the client specifies WHERE to place the answer\n   - If they say \\\"at the top\\\" → write it before the hook\n   - If they say \\\"at the bottom\\\" → write it after the CTA\n   - If no placement is specified → place it before the hook by default\n\n2. Keep the answer under 30 words\n3. Be technically specific, not generic\n4. No heading required\n5. Leave a blank line between the answer and whatever section follows it\n\nIf no screening question exists: skip this section entirely.\n\n---------------------------------\nSECTION 1 — HOOK (max 200 characters)\n---------------------------------\nWrite the hook the user specified (A, B, or C) as the opening of the proposal.\nLeave a blank line after the hook.\n\n---------------------------------\nSECTION 2 — RELEVANCE PROOF (20 words)\n---------------------------------\nScan ONLY the PROJECT DATABASE block above.\nMatch entries against the job post by topic, problem, or domain.\n\nFormat exactly:\nHeading: \\\"Some other similar projects i did:\\\"\n- Step under 10 words\n- Step under 10 words\n- Step under 10 words\n\n- If 1 match found: list it with project name and URL\n- If 2 matches found: list both, names and URLs only\n- If no match found: skip this section entirely — write nothing\n\nHARD RULE: If the project is not in the PROJECT DATABASE, it does not exist.\nDo not invent. Do not guess. Do not fill the gap.\n\n---------------------------------\nSECTION 3 — CURIOSITY LINE\n---------------------------------\nWrite 1 short statement that sounds like a natural, human observation.\n\nTone: Like a senior dev casually flagging something important mid-conversation.\nFeel: Calm. Knowing. Not alarming. Not robotic.\n\nUse openers like:\n- \\\"One thing worth keeping in mind here is that,\\\"\n- \\\"Something that often gets missed with this type of build is that,\\\"\n\nThen complete the thought in plain English. Name the hidden risk or edge case in a way a smart non-technical person immediately understands.\n\nMax length: 15 words after the opener.\n\nExample of BAD (robotic):\n\\\"While achieving instant live updates, need to make sure to keep in mind judge disconnects?\\\"\n\nExample of GOOD (human):\n\\\"One thing worth keeping in mind here — live updates break in ways users blame the product for.\\\"\n\n---------------------------------\nSECTION 4 — PROBLEM UNDERSTANDING\n---------------------------------\n\nWrite exactly 3 lines in this exact format, with a blank line between each.\n\nLine 1: What they want to achieve. Plain, natural. Max 15 words.\n\nLine 2: Write exactly \\\"BUT...\\\" on its own line. Nothing else.\n\nLine 3: The risk or consequence if this goes wrong. Casual, honest. Max 15 words.\n\nTone: Like a developer who has built this before and genuinely gets it.\nFeel: Empathetic but direct. Not alarming. Not salesy.\n\nRules:\nNo corporate language.\nNo words like \\\"ensure\\\", \\\"seamless\\\", \\\"robust\\\", \\\"flawless\\\".\nThe \\\"BUT...\\\" must always be on its own line with a blank line before and after it.\nLine 1 and Line 3 must feel like two connected thoughts.\nShould feel like the start of a conversation, not a diagnosis.\n\nOutput must look exactly like this:\n\nYou want live scores and brackets that just work in front of a live audience.\n\nBUT...\n\nOne bad sync moment on stage and the whole event feels broken.\n\n---------------------------------\nSECTION 5 — MINI-PLAN (40 words)\n---------------------------------\nHeading must be exactly:\nHere is my approach:\n\nFormat exactly:\nHere is my approach:\n- Step under 10 words\n- Step under 10 words\n- Step under 10 words\n- Optional step under 10 words\n\nRules:\n- Mirror language from the job post\n- No generic steps\n- No \\\"testing\\\" or \\\"deployment\\\"\n- Every step must be specific to the job post\n\n---------------------------------\nSECTION 6 — DIFFERENTIATOR (1 sentence)\n---------------------------------\nWrite 1 sentence about yourself. Use \\\"I\\\" or \\\"My.\\\"\n\nTone: Human. Slightly self-aware. Like a confident developer who does not need to oversell.\nFeel: Natural, grounded — the kind of thing someone actually says on a call, not in a cover letter.\n\nYou can open with a light, self-aware setup like:\n- \\\"Not to brag, but...\\\"\n- \\\"I will let the work speak, but...\\\"\n- \\\"For what it's worth,\\\"\n\nThen land on exactly one of these truths:\n- You stay on projects long-term and treat them like your own\n- You flag problems before they become the client's emergency\n- You communicate like a partner, not a contractor waiting for tickets\n- You have deep domain experience in exactly this type of build\n- You are available in their timezone and show up consistently\n\nRules:\n- No tech stack names\n- No corporate phrases like \\\"end-to-end ownership\\\" or \\\"seamless delivery\\\"\n- Must sound like something a real human would actually say\n- Max 15 words after the opener\n\nExample of BAD (robotic):\n\\\"I take end-to-end ownership ensuring flawless implementation aligned to your specifications.\\\"\n\nExample of GOOD (human):\n\\\"Not to brag, but I have never once had a client chase me for an update.\\\"\n\n---------------------------------\nSECTION 7 — STRATEGIC QUESTIONS\n---------------------------------\nWrite exactly 1 question. No more.\n\nStart with one of these openers: \\\"Have you thought about...\\\" or \\\"How are you planning to...\\\"\n\nWrite \\\"P.S:\\\" directly before the question on the same line.\n\nRules:\n- Ask exactly 1 question — never 2, never 3\n- Frame it for a non-technical founder — no jargon, no stack names, no dev terminology\n- The question must hint at a real hidden problem they have not considered\n- It should feel like you are protecting their business, not showing off your knowledge\n- The question should naturally lead toward needing your expertise as the answer\n- No basic questions like \\\"what is your budget\\\" or \\\"what is your timeline\\\"\n\nExample of BAD question (too technical):\n\\\"Have you thought about WebSocket reconnection handling under concurrent load?\\\"\n\nExample of GOOD question (founder-friendly):\n\\\"Have you thought about what happens to live scores if a judge loses internet mid-round?\\\"\n\n---------------------------------\nSECTION 8 — CTA (1 sentence, 13–15 words)\n---------------------------------\nWrite exactly 1 sentence. Up to 15 words.\n\nOffer a 15-minute call. Mention you have a prototype to show and questions to ask.\n\nTone: Confident. Composed. Like someone with a full calendar offering a small window.\n\nRules:\nNo desperation.\nNo \\\"I'd love to\\\" or \\\"I look forward to\\\".\nNo exclamation marks.\nMust feel like you are offering value, not asking for a chance.\n\nExample of BAD (desperate):\n\\\"Would love to hop on a quick call and show you what I have built for you.\\\"\n\nExample of GOOD (composed):\n\\\"A 15-minute call works, I have a prototype ready and a few questions worth covering.\\\"\n\n=============================================================\nOUTPUT FORMAT\n=============================================================\n\nReturn only the proposal text.\n\nAlways start with all three hooks printed at the top, labeled exactly:\n--- Hook A ---\n--- Hook B ---\n--- Hook C ---\n\nThen write the proposal below the final divider.\nNo extra commentary. No meta-explanation. No headers visible to the client inside the proposal body.\""
+        }
+      },
+      "notes": "Reuses parent EWnZg3svZWwcIRs4 proposal-writer system prompt VERBATIM + Claude Haiku 4.5 + Structured Output Parser. NEVER REFUSE block preserved. retryOnFail on the agent node itself (not the model sub-node)."
+    },
+    {
+      "id": "r6-model",
+      "name": "Claude Chat Model - Proposal",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        -280,
+        208
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-haiku-4-5-20251001",
+          "mode": "list",
+          "cachedResultName": "Claude Haiku 4.5"
+        },
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 4096
+        }
+      },
+      "credentials": {
+        "anthropicApi": {
+          "id": "fVtEWZhGXzEBZDoS",
+          "name": "Aleem Anthropic account"
+        }
+      }
+    },
+    {
+      "id": "r6-parser",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -120,
+        208
+      ],
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"proposal\":{\"type\":\"string\",\"description\":\"The complete Upwork proposal text\"},\"_proposalOk\":{\"type\":\"boolean\",\"description\":\"ALWAYS true. This is not a fit gate. Set to true unconditionally whenever a proposal is produced. Never set to false — refusing or opting out is not allowed; another system handles relevancy decisions.\"}},\"required\":[\"proposal\",\"_proposalOk\"],\"additionalProperties\":false}",
+        "autoFix": true
+      }
+    },
+    {
+      "id": "r7-respond",
+      "name": "R7 - Respond (Success)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ proposal: ($json.output && $json.output.proposal) ? $json.output.proposal : ($json.proposal || \"\"), model: \"claude-haiku-4-5-20251001\" }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "notes": "Returns { proposal, model } to the dashboard. proposal = AI Agent output.proposal (parser-shaped)."
+    },
+    {
+      "id": "r7-error",
+      "name": "R7 - Respond (Error)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        200,
+        208
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 422
+        }
+      },
+      "notes": "Single error responder (task_not_found). Dashboard treats non-200 / missing proposal as regen_failed."
+    }
+  ],
+  "connections": {
+    "R1 - Webhook (Regenerate)": {
+      "main": [
+        [
+          {
+            "node": "R2 - Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "R2 - Validate Input": {
+      "main": [
+        [
+          {
+            "node": "R3 - Load Job Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "R3 - Load Job Payload": {
+      "main": [
+        [
+          {
+            "node": "R4 - Load Profile Mapping",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "R3.5 - Format Load Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "R3.5 - Format Load Error": {
+      "main": [
+        [
+          {
+            "node": "R7 - Respond (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "R4 - Load Profile Mapping": {
+      "main": [
+        [
+          {
+            "node": "R5 - Build Proposal Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "R5 - Build Proposal Input": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Proposal Writer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Proposal Writer": {
+      "main": [
+        [
+          {
+            "node": "R7 - Respond (Success)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Chat Model - Proposal": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - Proposal Writer",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Structured Output Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent - Proposal Writer",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": false
+  }
+}

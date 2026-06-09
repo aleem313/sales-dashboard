@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "019" && migration !== "020" && migration !== "021" && migration !== "022" && migration !== "023" && migration !== "migrate-tasks") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "019" && migration !== "020" && migration !== "021" && migration !== "022" && migration !== "023" && migration !== "024" && migration !== "migrate-tasks") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
   }
 
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const sourceBoard = request.nextUrl.searchParams.get("from") || "e8442ebd-afd3-4217-99c4-e55ee20d4bfa";
     const destBoard = request.nextUrl.searchParams.get("to") || "351494d8-918e-475e-b16c-2eee3232aefe";
     return runMigrateTasks(sourceBoard, destBoard);
+  }
+
+  if (migration === "024") {
+    return run024();
   }
 
   if (migration === "023") {
@@ -460,6 +464,59 @@ async function run011() {
     return NextResponse.json({
       success: false,
       migration: "011_fix_profile_assignments",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run024() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 024: Create proposal_feedback (proposal feedback + regeneration history + training corpus)...");
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS proposal_feedback (
+        id                   BIGSERIAL PRIMARY KEY,
+        task_id              UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        job_external_id      TEXT,
+        profile_id           TEXT REFERENCES profiles(profile_id),
+        agent_id             UUID REFERENCES agents(id),
+        admin_id             TEXT,
+        author_role          TEXT NOT NULL CHECK (author_role IN ('agent','admin')),
+        categories           TEXT[] NOT NULL DEFAULT '{}',
+        note                 TEXT,
+        original_proposal    TEXT,
+        regenerated_proposal TEXT,
+        model                TEXT,
+        status               TEXT NOT NULL DEFAULT 'feedback'
+                               CHECK (status IN ('feedback','regenerated','regen_failed')),
+        applied              BOOLEAN NOT NULL DEFAULT FALSE,
+        request_id           UUID,
+        created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    results.push("✓ Created proposal_feedback table");
+
+    await sql`CREATE INDEX IF NOT EXISTS idx_pf_task    ON proposal_feedback (task_id, created_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_pf_profile ON proposal_feedback (profile_id, created_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_pf_status  ON proposal_feedback (status, created_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_pf_regen   ON proposal_feedback (created_at DESC) WHERE status = 'regenerated'`;
+    results.push("✓ Created indexes idx_pf_task / idx_pf_profile / idx_pf_status / idx_pf_regen");
+
+    const cacheWipe = await sql`DELETE FROM stats_cache`;
+    results.push(`✓ Cleared stats_cache: ${cacheWipe.rowCount} rows removed`);
+
+    return NextResponse.json({
+      success: true,
+      migration: "024_proposal_feedback",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "024_proposal_feedback",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });
