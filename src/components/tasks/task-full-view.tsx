@@ -1323,6 +1323,12 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
               onChange={(text) => updateCustomField("_proposal", text)}
               readOnly={false}
             />
+            <RelevancyPanel
+              cf={cf}
+              taskId={taskId}
+              viewerRole={isAdmin ? "admin" : "agent"}
+              viewerAgentId={currentAgentId ?? null}
+            />
             <ProposalFeedbackPanel
               taskId={taskId}
               currentProposal={job?.proposal_text ?? (cf._proposal as string) ?? null}
@@ -1332,12 +1338,6 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
                 updateCustomField("_proposal", text);
                 setJob((prev) => (prev ? { ...prev, proposal_text: text } : prev));
               }}
-            />
-            <RelevancyPanel
-              cf={cf}
-              taskId={taskId}
-              viewerRole={isAdmin ? "admin" : "agent"}
-              viewerAgentId={currentAgentId ?? null}
             />
           </div>
         </div>
