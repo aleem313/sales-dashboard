@@ -6,6 +6,7 @@ import {
   getEnhancedAgentStats,
   getKPIMetricsWithDeltas,
   getAgentWeeklyActivity,
+  getAvgResponseTime,
   getAllAgents,
   getAllProfiles,
 } from "@/lib/data";
@@ -23,9 +24,12 @@ export default async function AgentsPage({
   const profileId = typeof params.profile === "string" ? params.profile : undefined;
   const range = parseDateRange(params);
 
-  const [agents, kpi, allAgents, allProfiles] = await Promise.all([
+  const [agents, kpi, avgResponseTime, allAgents, allProfiles] = await Promise.all([
     getEnhancedAgentStats(range, agentId, profileId),
     getKPIMetricsWithDeltas(range, agentId, profileId),
+    // Same source as the dashboard "Response time to apply" card, so the two
+    // pages agree: median, both halves of the funnel, n/a excluded.
+    getAvgResponseTime(range, agentId, profileId),
     getAllAgents(),
     getAllProfiles(),
   ]);
@@ -35,15 +39,8 @@ export default async function AgentsPage({
     agents.map((a) => getAgentWeeklyActivity(a.id))
   );
 
-  // Compute weighted avg response time from agents with data
-  const agentsWithTime = agents.filter((a) => a.avg_response_hours !== null);
-  const totalProposalsWithTime = agentsWithTime.reduce((s, a) => s + a.proposals_sent, 0);
-  const weightedHours = totalProposalsWithTime > 0
-    ? agentsWithTime.reduce((s, a) => s + (a.avg_response_hours ?? 0) * a.proposals_sent, 0) / totalProposalsWithTime
-    : 0;
-
-  function formatAvgTime(hours: number) {
-    if (hours === 0) return "—";
+  function formatAvgTime(hours: number | null) {
+    if (hours === null || hours === 0) return "—";
     if (hours < 1) return `${Math.round(hours * 60)}m`;
     const h = Math.floor(hours);
     const m = Math.round((hours - h) * 60);
@@ -82,7 +79,7 @@ export default async function AgentsPage({
         <StatRow className="mb-5">
           <StatCard
             label="Avg Time to Apply"
-            value={formatAvgTime(weightedHours)}
+            value={formatAvgTime(avgResponseTime)}
             variant="accent"
           />
           <StatCard

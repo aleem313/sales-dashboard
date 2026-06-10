@@ -643,19 +643,27 @@ export async function getAgentStats(
     ORDER BY total_jobs DESC
   `;
 
-  return result.rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    total_jobs: parseInt(row.total_jobs) || 0,
-    proposals_sent: parseInt(row.proposals_sent) || 0,
-    won: parseInt(row.won) || 0,
-    lost: parseInt(row.lost) || 0,
-    win_rate_pct: row.win_rate_pct ? parseFloat(row.win_rate_pct) : null,
-    total_revenue: parseFloat(row.total_revenue) || 0,
-    avg_response_hours: row.avg_response_hours
-      ? parseFloat(parseFloat(row.avg_response_hours).toFixed(1))
-      : null,
-  }));
+  // Same "time to apply" definition as the dashboard / Agents list (median,
+  // both halves, n/a excluded) overlaid per agent, replacing the sent-only AVG
+  // the query computes, so the agent detail page agrees with everywhere else.
+  const medianByAgent = await getResponseTimeMedianHoursByAgent(range);
+
+  return result.rows.map((row) => {
+    const responseHours = medianByAgent[row.id as string] ?? null;
+    return {
+      id: row.id,
+      name: row.name,
+      total_jobs: parseInt(row.total_jobs) || 0,
+      proposals_sent: parseInt(row.proposals_sent) || 0,
+      won: parseInt(row.won) || 0,
+      lost: parseInt(row.lost) || 0,
+      win_rate_pct: row.win_rate_pct ? parseFloat(row.win_rate_pct) : null,
+      total_revenue: parseFloat(row.total_revenue) || 0,
+      avg_response_hours: responseHours !== null
+        ? parseFloat(responseHours.toFixed(1))
+        : null,
+    };
+  });
 }
 
 export async function getTopAgentsByWinRate(
@@ -2428,6 +2436,12 @@ export async function getEnhancedAgentStats(
     ORDER BY won DESC, proposals_sent DESC
   `;
 
+  // "Time to apply" = the dashboard's definition (median, both halves, n/a
+  // excluded), per agent — NOT the sent-only AVG the big query computes. We
+  // overlay it below so the per-agent card and the agent score match the
+  // dashboard "Response time to apply".
+  const medianByAgent = await getResponseTimeMedianHoursByAgent(range, profileId);
+
   return result.rows.map((row) => {
     const proposalsSent = parseInt(row.proposals_sent) || 0;
     const won = parseInt(row.won) || 0;
@@ -2438,9 +2452,11 @@ export async function getEnhancedAgentStats(
     // with current-state column counts it produced impossible >100% values.)
     const convRate = totalJobs > 0 ? Math.round((won / totalJobs) * 1000) / 10 : 0;
 
+    const responseHours = medianByAgent[row.id as string] ?? null;
+
     // Score: weighted from win_rate (40%), conversion (30%), speed (30%)
     const winRate = parseFloat(row.win_rate_pct) || 0;
-    const avgHours = parseFloat(row.avg_response_hours) || 2;
+    const avgHours = responseHours ?? 2;
     const speedScore = Math.max(0, 100 - avgHours * 10); // faster = better
     const score = Math.round(winRate * 0.4 + convRate * 0.3 + speedScore * 0.3);
 
@@ -2453,8 +2469,8 @@ export async function getEnhancedAgentStats(
       lost: parseInt(row.lost) || 0,
       win_rate_pct: row.win_rate_pct ? parseFloat(row.win_rate_pct) : null,
       total_revenue: parseFloat(row.total_revenue) || 0,
-      avg_response_hours: row.avg_response_hours
-        ? parseFloat(parseFloat(row.avg_response_hours).toFixed(1))
+      avg_response_hours: responseHours !== null
+        ? parseFloat(responseHours.toFixed(1))
         : null,
       meetings_done: meetings,
       conversion_rate: convRate,
@@ -3266,6 +3282,45 @@ export async function getResponseTimeJobs(
   const medianMinutes = medianHours === null ? null : Math.round(medianHours * 60);
 
   return { jobs, medianMinutes };
+}
+
+// Per-agent median time-to-apply, SAME definition as getAvgResponseTime (both
+// halves of the funnel, 'n/a' excluded, date-windowed on received_at) but
+// GROUP BY agent_id. Used by getEnhancedAgentStats so the Agents page reports
+// the same "time to apply" as the dashboard card. Returns agent_id → median
+// HOURS. ⚠ Keep the predicate in lockstep with getAvgResponseTime.
+export async function getResponseTimeMedianHoursByAgent(
+  range?: DateRange,
+  profileId?: string,
+): Promise<Record<string, number>> {
+  const { startDate, endDate } = range ?? {};
+  const result = await sql`
+    SELECT agent_id,
+      PERCENTILE_CONT(0.5) WITHIN GROUP (
+        ORDER BY COALESCE(
+          EXTRACT(EPOCH FROM (proposal_sent_at - received_at)),
+          EXTRACT(EPOCH FROM (NOW() - received_at))
+        ) / 3600
+      ) AS median_hours
+    FROM jobs
+    WHERE received_at IS NOT NULL
+      AND agent_id IS NOT NULL
+      AND (
+        proposal_sent_at IS NOT NULL
+        OR LOWER(status) IN ('to do', 'todo', 'new', 'proposal ready')
+      )
+      AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
+      AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
+      AND (${profileId ?? null}::text IS NULL OR profile_id = ${profileId ?? null}::text)
+    GROUP BY agent_id
+  `;
+  const map: Record<string, number> = {};
+  for (const row of result.rows) {
+    if (row.median_hours !== null && row.median_hours !== undefined) {
+      map[row.agent_id as string] = parseFloat(parseFloat(row.median_hours).toFixed(2));
+    }
+  }
+  return map;
 }
 
 // Jobs still in pre-sent status where wait time > threshold (15 min default)
