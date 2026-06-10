@@ -659,9 +659,9 @@ export async function getAgentStats(
       lost: parseInt(row.lost) || 0,
       win_rate_pct: row.win_rate_pct ? parseFloat(row.win_rate_pct) : null,
       total_revenue: parseFloat(row.total_revenue) || 0,
-      avg_response_hours: responseHours !== null
-        ? parseFloat(responseHours.toFixed(1))
-        : null,
+      // Unrounded 2-decimal median (same as getAvgResponseTime) — see note in
+      // getEnhancedAgentStats; toFixed(1) here caused 27m↔30m drift.
+      avg_response_hours: responseHours,
     };
   });
 }
@@ -2469,9 +2469,10 @@ export async function getEnhancedAgentStats(
       lost: parseInt(row.lost) || 0,
       win_rate_pct: row.win_rate_pct ? parseFloat(row.win_rate_pct) : null,
       total_revenue: parseFloat(row.total_revenue) || 0,
-      avg_response_hours: responseHours !== null
-        ? parseFloat(responseHours.toFixed(1))
-        : null,
+      // Pass the 2-decimal median through unrounded — rounding to 1 decimal here
+      // (0.45h → 0.5h) made the card show 30m where the dashboard, keeping 0.45h,
+      // shows 27m for the same agent. responseHours already === getAvgResponseTime.
+      avg_response_hours: responseHours,
       meetings_done: meetings,
       conversion_rate: convRate,
       bonus_earned: 0,
