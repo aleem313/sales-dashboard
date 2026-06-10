@@ -69,6 +69,15 @@ As of 2026-04-29, commit `ebe8122`. Every task counts only toward stages it has 
 - Examples: a Won card moved Proposal Submitted (6 days ago) → Won (today) counts under Proposals Sent for any window covering 6 days ago AND under Won + every cumulative tile for today. A card moved Proposal Submitted (10 days ago) → Meeting Done (yesterday) counts under Meetings Booked + Meetings Done for yesterday's filter, NOT for today's.
 - **Caveat:** relies on `activity_log` integrity — `task_moved` entries are written by `moveTaskAction` (`task-data.ts:1027`); any move that bypasses that path (e.g. raw `PATCH /api/tasks/[id]/move`) is invisible to the funnel.
 
+## Response Time to Apply (median, BOTH-halves, drill-down)
+
+As of 2026-06-10. The "Response time to apply" KPI card (`getAvgResponseTime`) is a **median (P50)**, not a mean — backfilled/bounce-back rows left >100h outliers that swung the arithmetic mean. Date window is on `received_at`.
+
+- **Counts BOTH halves of the funnel** so the card can't contradict the Slow Response panel. Sent jobs contribute `proposal_sent_at - received_at`; still-waiting jobs contribute live `NOW() - received_at` via `COALESCE(sent_elapsed, now_elapsed)`. Predicate: `proposal_sent_at IS NOT NULL OR LOWER(status) IN ('to do','todo','new','proposal ready')`.
+- **Why:** the old query was `WHERE proposal_sent_at IS NOT NULL` only — survivorship-biased. It saw only the fast jobs that got applied, so it could read "13m typical" while 31 jobs sat unanswered 8–18h in the Slow Response list (those rows have no `proposal_sent_at`, so they were invisible to the median). The two panels measured disjoint populations and could never agree.
+- **`n/a` is EXCLUDED** (decision 2026-06-10): bad leads are deliberately never applied to, so they aren't "time to apply." This is the one population difference from `getSlowResponseJobs`, which *does* list `n/a`.
+- **Drill-down:** `getResponseTimeJobs` → `/api/dashboard/response-time-jobs` → `ResponseTimeDrillDown` (a SEPARATE path from the count cards' `getKPIMetricTasks`/`KPIMetricDrillDown`, because the median reads `jobs` not the task CTE). It returns the EXACT same job set (same WHERE + same elapsed expr) sorted by elapsed ASC, each row showing per-job wait time, plus a median marker line — so the headline is verifiable by eye. The modal's median is sourced from `getAvgResponseTime` itself (not recomputed from the ≤500-row list) so it can never drift from the card. ⚠ Keep the two functions' predicates in lockstep.
+
 ## Connects Efficiency (Most/Least Efficient cards)
 
 As of 2026-06-09. The `/connects` "Most Efficient" / "Least Efficient" cards rank **profiles** by their own `cost_per_win`, not by niche.

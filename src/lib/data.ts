@@ -3140,12 +3140,31 @@ export async function getAvgResponseTime(
   // Median (P50), not mean — stale backfilled rows and bounce-back tasks left
   // outliers >100h that swung the arithmetic mean by hours. Median ignores them.
   // Date window stays on received_at to match "received in this period, time to first apply".
+  //
+  // Counts BOTH halves of the funnel so the headline can't disagree with the
+  // Slow Response panel: sent jobs contribute (proposal_sent_at - received_at);
+  // still-waiting jobs contribute their live (NOW() - received_at) elapsed time.
+  // Without the pending side this was survivorship-biased — it only saw the fast
+  // jobs that got applied, so it could read "13m typical" while dozens of jobs sat
+  // unanswered for 18h. 'n/a' (bad leads) are EXCLUDED: they're deliberately never
+  // applied to, so they aren't "time to apply".
+  //
+  // ⚠ The predicate below MUST stay in lockstep with getResponseTimeJobs (the
+  // drill-down list) — same WHERE, same elapsed expression — or the modal header
+  // median will disagree with this card.
   const result = await sql`
     SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (
-      ORDER BY EXTRACT(EPOCH FROM (proposal_sent_at - received_at)) / 3600
+      ORDER BY COALESCE(
+        EXTRACT(EPOCH FROM (proposal_sent_at - received_at)),
+        EXTRACT(EPOCH FROM (NOW() - received_at))
+      ) / 3600
     ) AS median_hours
     FROM jobs
-    WHERE proposal_sent_at IS NOT NULL
+    WHERE received_at IS NOT NULL
+      AND (
+        proposal_sent_at IS NOT NULL
+        OR LOWER(status) IN ('to do', 'todo', 'new', 'proposal ready')
+      )
       AND (${startDate}::timestamptz IS NULL OR received_at >= ${startDate}::timestamptz)
       AND (${endDate}::timestamptz IS NULL OR received_at <= ${endDate}::timestamptz)
       AND (${agentId ?? null}::uuid IS NULL OR agent_id = ${agentId ?? null}::uuid)
@@ -3155,6 +3174,98 @@ export async function getAvgResponseTime(
   const val = result.rows[0]?.median_hours;
   if (val === null || val === undefined) return null;
   return parseFloat(parseFloat(val).toFixed(2));
+}
+
+// Row-level backing data for the "Response time to apply" card drill-down.
+// Returns the EXACT set of jobs that feed getAvgResponseTime's median (same
+// predicate + same elapsed expression), each with its per-job elapsed time, so
+// the median is visually verifiable: rows come back sorted by elapsed ASC, and
+// medianMinutes (computed over the identical set) is the value the card shows.
+export interface ResponseTimeJobRow {
+  id: string;
+  taskId: string | null;
+  title: string;
+  status: string | null;
+  agentName: string | null;
+  profileName: string | null;
+  receivedAt: string | null;
+  proposalSentAt: string | null;
+  pending: boolean; // true = still waiting (no proposal sent yet)
+  elapsedMinutes: number;
+}
+
+export async function getResponseTimeJobs(
+  range?: DateRange,
+  agentId?: string,
+  profileId?: string,
+): Promise<{ jobs: ResponseTimeJobRow[]; medianMinutes: number | null }> {
+  const { startDate, endDate } = range ?? {};
+
+  // DISTINCT ON (j.id): the LEFT JOIN to tasks (via the custom_fields->>'_job_id'
+  // linkage — jobs.task_id is dead) could fan out a job into multiple rows; we
+  // keep one so the list length stays in lockstep with the median's population.
+  const result = await sql`
+    WITH base AS (
+      SELECT DISTINCT ON (j.id)
+        j.id,
+        j.title,
+        j.status,
+        j.received_at,
+        j.proposal_sent_at,
+        a.name AS agent_name,
+        p.profile_name,
+        t.id AS task_id,
+        (j.proposal_sent_at IS NULL) AS pending,
+        COALESCE(
+          EXTRACT(EPOCH FROM (j.proposal_sent_at - j.received_at)),
+          EXTRACT(EPOCH FROM (NOW() - j.received_at))
+        ) / 60 AS elapsed_minutes
+      FROM jobs j
+      LEFT JOIN agents a ON a.id = j.agent_id
+      LEFT JOIN profiles p ON p.profile_id = j.profile_id
+      LEFT JOIN tasks t ON t.custom_fields->>'_job_id' = j.job_id
+      WHERE j.received_at IS NOT NULL
+        AND (
+          j.proposal_sent_at IS NOT NULL
+          OR LOWER(j.status) IN ('to do', 'todo', 'new', 'proposal ready')
+        )
+        AND (${startDate}::timestamptz IS NULL OR j.received_at >= ${startDate}::timestamptz)
+        AND (${endDate}::timestamptz IS NULL OR j.received_at <= ${endDate}::timestamptz)
+        AND (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
+        AND (${profileId ?? null}::text IS NULL OR j.profile_id = ${profileId ?? null}::text)
+      ORDER BY j.id
+    )
+    SELECT * FROM base
+    ORDER BY elapsed_minutes ASC
+    LIMIT 500
+  `;
+
+  const jobs: ResponseTimeJobRow[] = result.rows.map((row) => ({
+    id: row.id as string,
+    taskId: (row.task_id as string | null) ?? null,
+    title: (row.title as string | null) ?? "(untitled)",
+    status: (row.status as string | null) ?? null,
+    agentName: (row.agent_name as string | null) ?? null,
+    profileName: (row.profile_name as string | null) ?? null,
+    receivedAt: row.received_at
+      ? new Date(row.received_at as string | Date).toISOString()
+      : null,
+    proposalSentAt: row.proposal_sent_at
+      ? new Date(row.proposal_sent_at as string | Date).toISOString()
+      : null,
+    pending: Boolean(row.pending),
+    elapsedMinutes: Math.round(parseFloat(row.elapsed_minutes) || 0),
+  }));
+
+  // Authoritative median = the card's own value (getAvgResponseTime), so the
+  // modal header can NEVER disagree with the card it drilled into. We don't
+  // recompute it from `jobs` because that list is capped at 500 — for the common
+  // case (≤500 jobs) the list IS the full set and its middle row matches this
+  // median exactly, which is the whole point of the drill-down.
+  const medianHours = await getAvgResponseTime(range, agentId, profileId);
+  const medianMinutes = medianHours === null ? null : Math.round(medianHours * 60);
+
+  return { jobs, medianMinutes };
 }
 
 // Jobs still in pre-sent status where wait time > threshold (15 min default)

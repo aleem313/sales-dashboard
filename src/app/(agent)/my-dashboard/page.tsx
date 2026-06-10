@@ -20,6 +20,7 @@ import {
 import { parseDateRange } from "@/lib/date-utils";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { KPIMetricDrillDown } from "@/components/dashboard/kpi-metric-drilldown";
+import { ResponseTimeDrillDown } from "@/components/dashboard/response-time-drilldown";
 import {
   Table,
   TableBody,
@@ -148,11 +149,13 @@ export default async function MyDashboardPage({
           delta={`${fmt(kpi.deltaWinRate)}% ${vsLabel}`}
           deltaDown={kpi.deltaWinRate < 0}
         />
-        <StatCard
+        <ResponseTimeDrillDown
           label="Response time to apply"
           value={formatAvgTime(avgResponseTime)}
           variant={avgResponseTime !== null && avgResponseTime <= 0.25 ? "green" : avgResponseTime !== null && avgResponseTime <= 1 ? "warn" : "danger"}
           delta="Typical proposal response time"
+          searchParams={params}
+          taskRoute="/my-tasks"
         />
         <KPIMetricDrillDown
           metric="bad_leads"
