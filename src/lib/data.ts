@@ -3208,7 +3208,7 @@ export async function getResponseTimeJobs(
     WITH base AS (
       SELECT DISTINCT ON (j.id)
         j.id,
-        j.title,
+        j.job_title AS title,
         j.status,
         j.received_at,
         j.proposal_sent_at,
