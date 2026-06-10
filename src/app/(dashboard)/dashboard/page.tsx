@@ -167,8 +167,8 @@ export default async function DashboardPage({
         </div>
 
         <div className="mb-5 grid gap-4 lg:grid-cols-2">
-          <TopProfilesTable profiles={topProfiles} />
-          <AgentLeaderboard agents={agents} />
+          <TopProfilesTable profiles={topProfiles} searchParams={params} />
+          <AgentLeaderboard agents={agents} searchParams={params} />
         </div>
 
         <SlowResponseAlert jobs={slowResponse.jobs} total={slowResponse.total} />

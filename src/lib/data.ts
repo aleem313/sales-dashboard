@@ -339,6 +339,10 @@ export interface KPIMetricTaskRow {
   jobUrl: string | null;
   assignees: string | null;
   tags: { name: string; color: string | null }[];
+  // true = no automated job row backs this card (created manually on the board);
+  // false = backed by a jobs row via custom_fields._job_id. Drives the
+  // System/Manual tab split in the tabbed drill-down.
+  isManual: boolean;
 }
 
 // Reuses the SAME CTE chain as getKPIMetrics (lines ~64-212) so the modal list
@@ -533,7 +537,8 @@ export async function getKPIMetricTasks(
           WHEN 'bad_leads' THEN tv.col_lower = 'n/a'
           WHEN 'untouched' THEN tv.col_lower IN ('todo', 'to do', 'new', 'proposal ready')
           ELSE FALSE
-        END AS in_metric
+        END AS in_metric,
+        (j.job_id IS NULL) AS is_manual
       FROM task_visited tv
       LEFT JOIN jobs j ON j.job_id = (tv.custom_fields->>'_job_id')
       WHERE (${agentId ?? null}::uuid IS NULL OR EXISTS (
@@ -561,7 +566,8 @@ export async function getKPIMetricTasks(
       (SELECT COALESCE(json_agg(json_build_object('name', tt.name, 'color', tt.color) ORDER BY tt.name), '[]'::json)
          FROM task_tag_map ttm
          JOIN task_tags tt ON tt.id = ttm.tag_id
-        WHERE ttm.task_id = target.task_id) AS tags
+        WHERE ttm.task_id = target.task_id) AS tags,
+      is_manual
     FROM target
     WHERE in_metric
       AND (${startDate}::timestamptz IS NULL OR metric_at >= ${startDate}::timestamptz)
@@ -578,6 +584,7 @@ export async function getKPIMetricTasks(
     jobUrl: row.job_url ?? null,
     assignees: row.assignees ?? null,
     tags: Array.isArray(row.tags) ? row.tags : [],
+    isManual: Boolean(row.is_manual),
   }));
 }
 
@@ -2557,7 +2564,7 @@ export async function getEnhancedProfileStats(
     ),
     profile_scoped_tasks AS (
       SELECT
-        j.profile_id,
+        pa.profile_id,
         t.id AS task_id,
         t.created_at,
         t.updated_at,
@@ -2616,12 +2623,36 @@ export async function getEnhancedProfileStats(
         ) AS first_reached_meeting_at
       FROM tasks t
       JOIN columns c ON c.id = t.column_id
-      JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
+      -- Attribute each card to a profile by the SAME dual-resolution as
+      -- getKPIMetricTasks / getConnectsUsageByProfile: its linked job's profile
+      -- OR a task tag whose name matches the profile. This is what pulls in
+      -- manually-created cards (no jobs row) so the Top Profiles counts match
+      -- the drill-down popup. A card matching two profiles counts under both
+      -- (mirrors the popup); cards matching none are excluded.
+      JOIN profiles pa ON (
+        EXISTS (
+          SELECT 1 FROM jobs j2
+          WHERE j2.job_id = (t.custom_fields->>'_job_id')
+            AND j2.profile_id = pa.profile_id
+        )
+        OR EXISTS (
+          SELECT 1 FROM task_tag_map ttm
+          JOIN task_tags tt ON tt.id = ttm.tag_id
+          WHERE ttm.task_id = t.id
+            AND LOWER(tt.name) = LOWER(pa.profile_name)
+        )
+      )
+      LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
       LEFT JOIN earliest_move em ON em.task_id = t.id
       LEFT JOIN move_in_proposals_sent mips ON mips.task_id = t.id
       LEFT JOIN move_in_responded mir ON mir.task_id = t.id
       LEFT JOIN move_in_reached_meeting mirm ON mirm.task_id = t.id
-      WHERE (${agentId ?? null}::uuid IS NULL OR j.agent_id = ${agentId ?? null}::uuid)
+      WHERE (${agentId ?? null}::uuid IS NULL
+        OR j.agent_id = ${agentId ?? null}::uuid
+        OR EXISTS (
+          SELECT 1 FROM task_assignees ta
+          WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
+        ))
     )
     SELECT
       p.id,

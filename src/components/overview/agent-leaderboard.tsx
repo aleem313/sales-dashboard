@@ -1,8 +1,20 @@
 import type { EnhancedAgentStats } from "@/lib/types";
+import { MetricTabbedDrillDown } from "@/components/dashboard/metric-tabbed-drilldown";
+
+interface DashboardSearchParams {
+  range?: string;
+  from?: string;
+  to?: string;
+  tz?: string;
+}
 
 interface AgentLeaderboardProps {
   agents: EnhancedAgentStats[];
+  searchParams: DashboardSearchParams;
 }
+
+const numberBase =
+  "font-mono-data text-base font-bold rounded transition enabled:cursor-pointer enabled:hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-default";
 
 const avatarGradients = [
   "linear-gradient(135deg, #1a56db, #4d8af0)",
@@ -21,7 +33,7 @@ function getInitials(name: string) {
     .slice(0, 2);
 }
 
-export function AgentLeaderboard({ agents }: AgentLeaderboardProps) {
+export function AgentLeaderboard({ agents, searchParams }: AgentLeaderboardProps) {
   return (
     <div className="rounded-[10px] border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-[18px] py-3.5">
@@ -54,25 +66,40 @@ export function AgentLeaderboard({ agents }: AgentLeaderboardProps) {
             </div>
             <div className="flex gap-4">
               <div className="text-center">
-                <div className="font-mono-data text-base font-bold text-[var(--primary)]">
-                  {agent.proposals_sent}
-                </div>
+                <MetricTabbedDrillDown
+                  metric="proposals_sent"
+                  label="Applied"
+                  count={agent.proposals_sent}
+                  agentId={agent.id}
+                  searchParams={searchParams}
+                  triggerClassName={`${numberBase} text-[var(--primary)]`}
+                />
                 <div className="text-[8px] uppercase tracking-[0.1em] text-muted-foreground">
                   Applied
                 </div>
               </div>
               <div className="text-center">
-                <div className="font-mono-data text-base font-bold text-accent-warn">
-                  {agent.meetings_done}
-                </div>
+                <MetricTabbedDrillDown
+                  metric="meetings_done"
+                  label="Meetings"
+                  count={agent.meetings_done}
+                  agentId={agent.id}
+                  searchParams={searchParams}
+                  triggerClassName={`${numberBase} text-accent-warn`}
+                />
                 <div className="text-[8px] uppercase tracking-[0.1em] text-muted-foreground">
                   Meetings
                 </div>
               </div>
               <div className="text-center">
-                <div className="font-mono-data text-base font-bold text-accent-green">
-                  {agent.won}
-                </div>
+                <MetricTabbedDrillDown
+                  metric="won"
+                  label="Won"
+                  count={agent.won}
+                  agentId={agent.id}
+                  searchParams={searchParams}
+                  triggerClassName={`${numberBase} text-accent-green`}
+                />
                 <div className="text-[8px] uppercase tracking-[0.1em] text-muted-foreground">
                   Won
                 </div>

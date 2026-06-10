@@ -1,8 +1,17 @@
 import type { EnhancedProfileStats } from "@/lib/types";
 import { CyberBadge } from "@/components/ui/cyber-badge";
+import { MetricTabbedDrillDown } from "@/components/dashboard/metric-tabbed-drilldown";
+
+interface DashboardSearchParams {
+  range?: string;
+  from?: string;
+  to?: string;
+  tz?: string;
+}
 
 interface TopProfilesTableProps {
   profiles: EnhancedProfileStats[];
+  searchParams: DashboardSearchParams;
 }
 
 const nicheBadgeVariant = (niche: string | null) => {
@@ -15,7 +24,7 @@ const nicheBadgeVariant = (niche: string | null) => {
   return "muted" as const;
 };
 
-export function TopProfilesTable({ profiles }: TopProfilesTableProps) {
+export function TopProfilesTable({ profiles, searchParams }: TopProfilesTableProps) {
   return (
     <div className="rounded-[10px] border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-[18px] py-3.5">
@@ -59,13 +68,27 @@ export function TopProfilesTable({ profiles }: TopProfilesTableProps) {
                   </CyberBadge>
                 </td>
                 <td className="border-b border-border px-3 py-2.5 text-[13.5px]">
-                  {p.proposals_sent}
+                  <MetricTabbedDrillDown
+                    metric="proposals_sent"
+                    label="Proposals"
+                    count={p.proposals_sent}
+                    profileId={p.profile_id}
+                    searchParams={searchParams}
+                    triggerClassName="text-[13.5px] rounded transition enabled:cursor-pointer enabled:hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-default"
+                  />
                 </td>
                 <td className="border-b border-border px-3 py-2.5 text-[13.5px]" style={{ color: p.interview_rate >= 30 ? "var(--accent-green)" : p.interview_rate >= 15 ? "var(--accent-warn)" : "var(--foreground)" }}>
                   {p.interview_rate}%
                 </td>
                 <td className="border-b border-border px-3 py-2.5 font-mono-data text-[13.5px] font-bold text-accent-green">
-                  {p.won}
+                  <MetricTabbedDrillDown
+                    metric="won"
+                    label="Won"
+                    count={p.won}
+                    profileId={p.profile_id}
+                    searchParams={searchParams}
+                    triggerClassName="font-mono-data text-[13.5px] font-bold text-accent-green rounded transition enabled:cursor-pointer enabled:hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-default"
+                  />
                 </td>
               </tr>
             ))}
