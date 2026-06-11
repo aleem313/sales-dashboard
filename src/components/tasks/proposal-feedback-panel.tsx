@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { Sparkles, RefreshCw, Copy, RotateCcw, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { copyText } from "@/lib/utils";
+import { cn, copyText } from "@/lib/utils";
 import { PROPOSAL_FEEDBACK_OPTIONS } from "@/lib/proposal-feedback-reasons";
 
 const NOTE_MAX_LEN = 2000;
@@ -32,6 +32,9 @@ interface Props {
   // Applies a proposal version to the card (persists + reflects in the open view).
   // Parent wires this to updateCustomField("_proposal", text).
   onProposalApplied: (text: string) => void;
+  // When rendered inside the proposal tab, the tab label replaces the panel's own
+  // header and the top margin is dropped (the tab provides the framing).
+  embedded?: boolean;
 }
 
 const STATUS_BADGE: Record<ProposalFeedbackRow["status"], { label: string; cls: string }> = {
@@ -49,6 +52,7 @@ export function ProposalFeedbackPanel({
   viewerRole,
   viewerAgentId,
   onProposalApplied,
+  embedded = false,
 }: Props) {
   const router = useRouter();
   const enabled = !!currentProposal && (viewerRole === "admin" || !!viewerAgentId);
@@ -195,18 +199,20 @@ export function ProposalFeedbackPanel({
 
   if (!enabled) {
     return (
-      <div className="mt-4 rounded-md border border-dashed border-border p-3 text-[11px] text-muted-foreground">
+      <div className={cn("rounded-md border border-dashed border-border p-3 text-[11px] text-muted-foreground", !embedded && "mt-4")}>
         Proposal feedback becomes available once a proposal has been generated.
       </div>
     );
   }
 
   return (
-    <div className="mt-4 rounded-md border border-border bg-muted/20 p-3 space-y-3">
-      <div className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-foreground">
-        <Sparkles className="h-3.5 w-3.5 text-primary" />
-        Improve this proposal
-      </div>
+    <div className={cn("rounded-md border border-border bg-muted/20 p-3 space-y-3", !embedded && "mt-4")}>
+      {!embedded && (
+        <div className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-foreground">
+          <Sparkles className="h-3.5 w-3.5 text-primary" />
+          Improve this proposal
+        </div>
+      )}
 
       {/* Category chips */}
       <div className="space-y-1.5">

@@ -129,6 +129,10 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
   const [task, setTask] = useState<Task | null>(null);
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [activity, setActivity] = useState<ActivityLogEntry[]>([]);
+  // Proposal column tabs — keeps the column short (the three panels stacked were
+  // too tall to scroll). Inactive tabs are hidden with CSS (not unmounted) so
+  // in-progress edits + loaded history survive a tab switch.
+  const [proposalTab, setProposalTab] = useState<"proposal" | "manual" | "improve">("proposal");
   const [deletingActivityIds, setDeletingActivityIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [activityTab, setActivityTab] = useState<"all" | "comments">("all");
@@ -1319,31 +1323,64 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
           {/* ═══ COLUMN 3: Proposal ═══ */}
           <div className="xl:col-span-4 md:col-span-2 xl:border-r-0 overflow-y-auto p-5">
             <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider sticky top-0 bg-background pb-2 z-10">Proposal</h2>
-            <ProposalBox
-              proposal={job?.proposal_text ?? (cf._proposal as string) ?? null}
-              onChange={(text) => updateCustomField("_proposal", text)}
-              readOnly={false}
-            />
-            <ManualProposalPanel
-              taskId={taskId}
-              viewerRole={isAdmin ? "admin" : "agent"}
-              viewerAgentId={currentAgentId ?? null}
-            />
+
+            {/* Tab switcher — Proposal (default) / Your own proposal / Improve this proposal */}
+            <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-1 mb-3">
+              {([
+                { key: "proposal", label: "Proposal" },
+                { key: "manual", label: "Your own proposal" },
+                { key: "improve", label: "Improve this proposal" },
+              ] as const).map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setProposalTab(t.key)}
+                  className={cn(
+                    "flex-1 rounded-md px-2 py-1.5 text-[12px] font-medium transition-colors",
+                    proposalTab === t.key
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div className={proposalTab === "proposal" ? "" : "hidden"}>
+              <ProposalBox
+                proposal={job?.proposal_text ?? (cf._proposal as string) ?? null}
+                onChange={(text) => updateCustomField("_proposal", text)}
+                readOnly={false}
+              />
+            </div>
+            <div className={proposalTab === "manual" ? "" : "hidden"}>
+              <ManualProposalPanel
+                taskId={taskId}
+                viewerRole={isAdmin ? "admin" : "agent"}
+                viewerAgentId={currentAgentId ?? null}
+                embedded
+              />
+            </div>
+            <div className={proposalTab === "improve" ? "" : "hidden"}>
+              <ProposalFeedbackPanel
+                taskId={taskId}
+                currentProposal={job?.proposal_text ?? (cf._proposal as string) ?? null}
+                viewerRole={isAdmin ? "admin" : "agent"}
+                viewerAgentId={currentAgentId ?? null}
+                embedded
+                onProposalApplied={(text) => {
+                  updateCustomField("_proposal", text);
+                  setJob((prev) => (prev ? { ...prev, proposal_text: text } : prev));
+                }}
+              />
+            </div>
+
+            {/* AI Relevancy verdict — always visible below the tabs (self-hides if no score) */}
             <RelevancyPanel
               cf={cf}
               taskId={taskId}
               viewerRole={isAdmin ? "admin" : "agent"}
               viewerAgentId={currentAgentId ?? null}
-            />
-            <ProposalFeedbackPanel
-              taskId={taskId}
-              currentProposal={job?.proposal_text ?? (cf._proposal as string) ?? null}
-              viewerRole={isAdmin ? "admin" : "agent"}
-              viewerAgentId={currentAgentId ?? null}
-              onProposalApplied={(text) => {
-                updateCustomField("_proposal", text);
-                setJob((prev) => (prev ? { ...prev, proposal_text: text } : prev));
-              }}
             />
           </div>
         </div>

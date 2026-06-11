@@ -36,7 +36,13 @@ Task detail (task-full-view.tsx, COLUMN 3)
        └─ History (newest first): View / Copy / Restore / Delete per row
 ```
 
-Order in the column is **Proposal → AI Relevancy → Improve this proposal** (the feedback panel is intentionally last so it doesn't push the relevancy section below the fold — that was commit `2cf7558`).
+Column-3 layout (updated 2026-06-11): the three proposal panels are now a **tab group** —
+**Proposal** (default) · **Your own proposal** · **Improve this proposal** — because stacked they were
+too tall to scroll. Tab state lives in `task-full-view.tsx` (`proposalTab`); inactive tabs are hidden
+with CSS (`hidden`), NOT unmounted, so in-progress edits + loaded history survive a switch. The
+`ManualProposalPanel` and `ProposalFeedbackPanel` take an `embedded` prop in this context (drops their
+own header/toggle + top margin since the tab provides the frame; the manual composer opens straight
+away). `RelevancyPanel` renders **below** the tab group, always visible (self-hides if no score).
 
 ---
 

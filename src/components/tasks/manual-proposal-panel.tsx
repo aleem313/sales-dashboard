@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { PenLine, Copy, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { copyText } from "@/lib/utils";
+import { cn, copyText } from "@/lib/utils";
 
 const NOTE_MAX_LEN = 2000;
 const PROPOSAL_MAX_LEN = 20000;
@@ -24,9 +24,12 @@ interface Props {
   taskId: string;
   viewerRole: "admin" | "agent";
   viewerAgentId: string | null;
+  // When rendered inside the proposal tab, the tab frame replaces the panel's own
+  // header/toggle and the composer is shown straight away (no extra click).
+  embedded?: boolean;
 }
 
-export function ManualProposalPanel({ taskId, viewerRole, viewerAgentId }: Props) {
+export function ManualProposalPanel({ taskId, viewerRole, viewerAgentId, embedded = false }: Props) {
   // Writing a proposal by hand is open to admins and any assigned agent — it does
   // not depend on a system proposal existing (an agent may write their own where
   // the AI produced none).
@@ -40,6 +43,10 @@ export function ManualProposalPanel({ taskId, viewerRole, viewerAgentId }: Props
 
   const [history, setHistory] = useState<ProposalFeedbackRow[]>([]);
   const [expanded, setExpanded] = useState<number | null>(null);
+
+  // Embedded (tab) mode shows the composer immediately; standalone mode hides it
+  // behind the "I wrote my own proposal" button.
+  const showComposer = embedded || open;
 
   const loadHistory = useCallback(async () => {
     try {
@@ -115,30 +122,32 @@ export function ManualProposalPanel({ taskId, viewerRole, viewerAgentId }: Props
   if (!enabled) return null;
 
   return (
-    <div className="mt-4 rounded-md border border-border bg-muted/20 p-3 space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-foreground">
-          <PenLine className="h-3.5 w-3.5 text-primary" />
-          Your own proposal
+    <div className={cn("rounded-md border border-border bg-muted/20 p-3 space-y-3", !embedded && "mt-4")}>
+      {!embedded && (
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-foreground">
+            <PenLine className="h-3.5 w-3.5 text-primary" />
+            Your own proposal
+          </div>
+          {!open && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOpen(true)}
+              className="h-7 text-[12px]"
+            >
+              I wrote my own proposal
+            </Button>
+          )}
         </div>
-        {!open && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setOpen(true)}
-            className="h-7 text-[12px]"
-          >
-            I wrote my own proposal
-          </Button>
-        )}
-      </div>
+      )}
 
       <p className="text-[11px] text-muted-foreground">
         Wrote the proposal yourself? Paste it here to record it. This is kept for review and
         training — it does not change the proposal shown on the card.
       </p>
 
-      {open && (
+      {showComposer && (
         <div className="space-y-2">
           <div className="space-y-1">
             <label htmlFor={`mp-text-${taskId}`} className="text-[11px] font-medium text-muted-foreground">
