@@ -189,7 +189,10 @@ Body `{ task_id, categories: string[], note? }`. Steps: auth gate → `getTaskPr
 | `docs/proposal-regenerate (09-06-2026 working).json` | n8n workflow snapshot |
 | docs/claude/{migrations,data-flow,n8n-integration}.md | topic-doc write-backs |
 | `src/app/api/tasks/[id]/manual-proposal/route.ts` | manual-proposal POST (§13) |
-| `src/components/tasks/manual-proposal-panel.tsx` | "Your own proposal" panel (§13) |
+| `src/components/tasks/manual-proposal-panel.tsx` | "Your own proposal" card panel (§13) |
+| `src/app/(dashboard)/manual-proposals/page.tsx` | admin review list page (§13) |
+| `src/components/manual-proposals/manual-proposals-table.tsx` | admin list table (§13) |
+| `src/lib/data.ts` → `listManualProposals` | admin list query (§13) |
 
 ---
 
@@ -235,6 +238,19 @@ type) gained `'manual'`. `insertProposalFeedback` / `listProposalFeedbackForTask
   intentionally not offered).
 - **Disjoint timelines:** `ProposalFeedbackPanel.loadHistory` filters `status !== 'manual'` so manual
   rows never appear in the AI feedback/regenerate timeline (and vice-versa).
+
+**Admin review page — `/manual-proposals`** (added 2026-06-11, same day): a cross-task admin list of
+all `status='manual'` rows, so admins don't have to open each card. Admin-only (route group
+`(dashboard)/manual-proposals`, plus `/manual-proposals` added to `ADMIN_ROUTES` + the matcher in
+`src/middleware.ts`; sidebar link in the "Relevancy" section). Mirrors `/relevancy-audit`: server
+component, `AutoRefresh` 15s, reuses `AuditFilters` (`basePath="/manual-proposals"`,
+`showHideOverridden={false}` → date-range + profile filter only), default window **30 days** (manual
+proposals are low-volume). Data: `listManualProposals({ from, to, profileIds, limit=200 })` in
+`data.ts` (returns `{ rows: ManualProposalListRow[], total }`, joins tasks for title/`_job_url` and
+agents for author name). Table: `src/components/manual-proposals/manual-proposals-table.tsx` —
+expandable rows (Time · Agent · Profile · Job/Task · Note) revealing the full proposal text with
+Copy, "Open task card" (`/tasks?task=<id>`), "Open on Upwork", and Delete (admin deletes any via the
+shared `DELETE /api/tasks/[id]/proposal-feedback`). Read-only otherwise — no new GET endpoint.
 
 **Training-export note:** manual rows are human-written targets but the §3 export query filters
 `status='regenerated'`. To include them, broaden to `status IN ('regenerated','manual')`. Deferred —

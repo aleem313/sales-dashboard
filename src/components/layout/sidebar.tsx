@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   Microscope,
   MessageSquareWarning,
+  FileSignature,
 } from "lucide-react";
 import { useState, Suspense } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -82,6 +83,7 @@ const adminNavSections: NavSection[] = [
       { href: "/relevancy-evaluator", label: "Relevancy Evaluator", icon: Microscope },
       { href: "/relevancy-audit", label: "Relevancy Audit", icon: ShieldCheck },
       { href: "/agent-feedback", label: "Agent Feedback", icon: MessageSquareWarning },
+      { href: "/manual-proposals", label: "Manual Proposals", icon: FileSignature },
     ],
   },
   {

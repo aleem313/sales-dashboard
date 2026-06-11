@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 // they are shared admin+agent routes (see spec
 // docs/superpowers/specs/2026-05-21-agent-relevancy-pages-design.md). Auth is
 // still enforced via the matcher; only the admin-only redirect is dropped.
-const ADMIN_ROUTES = ["/dashboard", "/pipeline", "/connects", "/analytics", "/alerts", "/agents", "/profiles", "/jobs", "/settings", "/tasks"];
+const ADMIN_ROUTES = ["/dashboard", "/pipeline", "/connects", "/analytics", "/alerts", "/agents", "/profiles", "/jobs", "/settings", "/tasks", "/manual-proposals"];
 
 // Paths under matcher-covered prefixes that n8n calls back into and that the
 // route itself handles auth for (or intentionally exposes without auth, per the
@@ -82,6 +82,7 @@ export const config = {
     "/my-analytics/:path*",
     "/tasks/:path*",
     "/my-tasks/:path*",
+    "/manual-proposals/:path*",
     "/my-profiles/:path*",
     "/api/projects/:path*",
     "/api/tasks/:path*",

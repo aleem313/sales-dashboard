@@ -5605,6 +5605,101 @@ export async function listProposalFeedbackForTask(
   }));
 }
 
+// Cross-task admin list of agent-written ("manual") proposals — powers the
+// /manual-proposals review page. status='manual' rows hold the hand-written
+// proposal in regenerated_proposal; we join tasks for a title + job link and
+// agents for the author name. Date-filtered on created_at, optional profile
+// filter, newest first. Returns rows + an unlimited total for the "showing top N"
+// badge (mirrors listRelevancyAuditRejects).
+export interface ManualProposalListRow {
+  feedback_id: number;
+  task_id: string;
+  task_title: string | null;
+  profile_id: string | null;
+  profile_name: string | null;
+  author_role: "agent" | "admin";
+  author_name: string | null;
+  note: string | null;
+  proposal_text: string | null;
+  job_external_id: string | null;
+  job_url: string | null;
+  created_at: string;
+}
+
+export async function listManualProposals(opts: {
+  from: Date;
+  to: Date;
+  profileIds: string[] | null;
+  limit?: number;
+}): Promise<{ rows: ManualProposalListRow[]; total: number }> {
+  const limit = opts.limit ?? 200;
+  const profileFilter = opts.profileIds && opts.profileIds.length > 0 ? opts.profileIds : null;
+
+  const result = await sql<{
+    id: number | string;
+    task_id: string;
+    task_title: string | null;
+    profile_id: string | null;
+    profile_name: string | null;
+    author_role: "agent" | "admin";
+    author_name: string | null;
+    note: string | null;
+    proposal_text: string | null;
+    job_external_id: string | null;
+    job_url: string | null;
+    created_at: string | Date;
+  }>`
+    SELECT
+      pf.id,
+      pf.task_id,
+      t.title AS task_title,
+      pf.profile_id,
+      COALESCE(p.profile_name, NULLIF(t.custom_fields->>'_profile_name', '')) AS profile_name,
+      pf.author_role,
+      a.name AS author_name,
+      pf.note,
+      pf.regenerated_proposal AS proposal_text,
+      pf.job_external_id,
+      COALESCE(NULLIF(t.custom_fields->>'_job_url', ''), NULLIF(t.custom_fields->>'_job_link', '')) AS job_url,
+      pf.created_at
+    FROM proposal_feedback pf
+    LEFT JOIN agents a   ON a.id = pf.agent_id
+    LEFT JOIN profiles p ON p.profile_id = pf.profile_id
+    LEFT JOIN tasks t    ON t.id = pf.task_id
+    WHERE pf.status = 'manual'
+      AND pf.created_at BETWEEN ${opts.from} AND ${opts.to}
+      AND (${profileFilter}::text[] IS NULL OR pf.profile_id = ANY(${profileFilter}::text[]))
+    ORDER BY pf.created_at DESC
+    LIMIT ${limit}
+  `;
+
+  const countResult = await sql<{ total: number }>`
+    SELECT COUNT(*)::int AS total
+    FROM proposal_feedback pf
+    WHERE pf.status = 'manual'
+      AND pf.created_at BETWEEN ${opts.from} AND ${opts.to}
+      AND (${profileFilter}::text[] IS NULL OR pf.profile_id = ANY(${profileFilter}::text[]))
+  `;
+
+  return {
+    rows: result.rows.map((r) => ({
+      feedback_id: Number(r.id),
+      task_id: r.task_id,
+      task_title: r.task_title,
+      profile_id: r.profile_id,
+      profile_name: r.profile_name,
+      author_role: r.author_role,
+      author_name: r.author_name,
+      note: r.note,
+      proposal_text: r.proposal_text,
+      job_external_id: r.job_external_id,
+      job_url: r.job_url,
+      created_at: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+    })),
+    total: countResult.rows[0]?.total ?? 0,
+  };
+}
+
 // Deletes a proposal_feedback row iff it lives under the URL-supplied task AND
 // (the caller is an admin OR owns the row). Mirrors deleteAgentFeedback: a
 // path/row mismatch reads as not_found, not forbidden.
