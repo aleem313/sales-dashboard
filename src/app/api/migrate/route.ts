@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const migration = request.nextUrl.searchParams.get("v") || "006";
 
-  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "019" && migration !== "020" && migration !== "021" && migration !== "022" && migration !== "023" && migration !== "024" && migration !== "migrate-tasks") {
+  if (migration !== "006" && migration !== "007" && migration !== "008" && migration !== "009" && migration !== "010" && migration !== "011" && migration !== "012" && migration !== "013" && migration !== "014" && migration !== "015" && migration !== "016" && migration !== "017" && migration !== "018" && migration !== "019" && migration !== "020" && migration !== "021" && migration !== "022" && migration !== "023" && migration !== "024" && migration !== "025" && migration !== "migrate-tasks") {
     return NextResponse.json({ error: "Unknown migration version" }, { status: 400 });
   }
 
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const sourceBoard = request.nextUrl.searchParams.get("from") || "e8442ebd-afd3-4217-99c4-e55ee20d4bfa";
     const destBoard = request.nextUrl.searchParams.get("to") || "351494d8-918e-475e-b16c-2eee3232aefe";
     return runMigrateTasks(sourceBoard, destBoard);
+  }
+
+  if (migration === "025") {
+    return run025();
   }
 
   if (migration === "024") {
@@ -464,6 +468,48 @@ async function run011() {
     return NextResponse.json({
       success: false,
       migration: "011_fix_profile_assignments",
+      steps: results,
+      error: (error as Error).message,
+    }, { status: 500 });
+  }
+}
+
+async function run025() {
+  const results: string[] = [];
+
+  try {
+    results.push("Migration 025: Allow status='manual' on proposal_feedback (agent-pasted hand-written proposals)...");
+
+    // Postgres has no ALTER CONSTRAINT — drop + recreate the inline status CHECK
+    // (auto-named proposal_feedback_status_check) to add the 'manual' value.
+    await sql`ALTER TABLE proposal_feedback DROP CONSTRAINT IF EXISTS proposal_feedback_status_check`;
+    await sql`
+      ALTER TABLE proposal_feedback
+        ADD CONSTRAINT proposal_feedback_status_check
+        CHECK (status IN ('feedback','regenerated','regen_failed','manual'))
+    `;
+    results.push("✓ Extended status CHECK to include 'manual'");
+
+    const verifyResult = await sql`
+      SELECT pg_get_constraintdef(oid) AS def
+      FROM pg_constraint
+      WHERE conrelid = 'proposal_feedback'::regclass
+        AND conname = 'proposal_feedback_status_check'
+    `;
+    results.push(`✓ Constraint definition: ${verifyResult.rows[0]?.def ?? "(not found)"}`);
+
+    const cacheWipe = await sql`DELETE FROM stats_cache`;
+    results.push(`✓ Cleared stats_cache: ${cacheWipe.rowCount} rows removed`);
+
+    return NextResponse.json({
+      success: true,
+      migration: "025_proposal_feedback_manual",
+      steps: results,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      migration: "025_proposal_feedback_manual",
       steps: results,
       error: (error as Error).message,
     }, { status: 500 });

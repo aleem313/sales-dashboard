@@ -19,7 +19,7 @@ interface ProposalFeedbackRow {
   note: string | null;
   regenerated_proposal: string | null;
   model: string | null;
-  status: "feedback" | "regenerated" | "regen_failed";
+  status: "feedback" | "regenerated" | "regen_failed" | "manual";
   applied: boolean;
   created_at: string;
 }
@@ -38,6 +38,9 @@ const STATUS_BADGE: Record<ProposalFeedbackRow["status"], { label: string; cls: 
   feedback: { label: "Feedback", cls: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },
   regenerated: { label: "Regenerated", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" },
   regen_failed: { label: "Regen failed", cls: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" },
+  // Manual proposals are rendered by ManualProposalPanel and filtered out of this
+  // timeline — this entry just keeps the Record exhaustive for the type checker.
+  manual: { label: "Manual", cls: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300" },
 };
 
 export function ProposalFeedbackPanel({
@@ -64,7 +67,9 @@ export function ProposalFeedbackPanel({
       const res = await fetch(`/api/tasks/${taskId}/proposal-feedback`);
       if (res.ok) {
         const json = (await res.json()) as { feedback: ProposalFeedbackRow[] };
-        setHistory(json.feedback ?? []);
+        // Manual proposals (agent-pasted) have their own panel — keep this
+        // timeline to AI feedback/regeneration only.
+        setHistory((json.feedback ?? []).filter((r) => r.status !== "manual"));
       }
     } catch {
       /* non-fatal — history just stays empty */

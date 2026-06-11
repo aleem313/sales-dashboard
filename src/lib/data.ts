@@ -5490,7 +5490,9 @@ export interface ProposalFeedbackRow {
   original_proposal: string | null;
   regenerated_proposal: string | null;
   model: string | null;
-  status: "feedback" | "regenerated" | "regen_failed";
+  // 'manual' = agent pasted their own hand-written proposal (record-only; text in
+  // regenerated_proposal, applied=false — does not touch the card's _proposal). See migration 025.
+  status: "feedback" | "regenerated" | "regen_failed" | "manual";
   applied: boolean;
   created_at: string;
 }
@@ -5507,7 +5509,7 @@ export interface ProposalFeedbackInsert {
   originalProposal: string | null;
   regeneratedProposal: string | null;
   model: string | null;
-  status: "feedback" | "regenerated" | "regen_failed";
+  status: "feedback" | "regenerated" | "regen_failed" | "manual";
   applied: boolean;
   requestId: string | null;
 }
@@ -5568,7 +5570,7 @@ export async function listProposalFeedbackForTask(
     original_proposal: string | null;
     regenerated_proposal: string | null;
     model: string | null;
-    status: "feedback" | "regenerated" | "regen_failed";
+    status: "feedback" | "regenerated" | "regen_failed" | "manual";
     applied: boolean;
     created_at: string | Date;
   }>`

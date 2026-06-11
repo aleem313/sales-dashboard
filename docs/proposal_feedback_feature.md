@@ -188,3 +188,54 @@ Body `{ task_id, categories: string[], note? }`. Steps: auth gate → `getTaskPr
 | `.env.relevancy.example` | `PROPOSAL_REGEN_TOKEN` |
 | `docs/proposal-regenerate (09-06-2026 working).json` | n8n workflow snapshot |
 | docs/claude/{migrations,data-flow,n8n-integration}.md | topic-doc write-backs |
+| `src/app/api/tasks/[id]/manual-proposal/route.ts` | manual-proposal POST (§13) |
+| `src/components/tasks/manual-proposal-panel.tsx` | "Your own proposal" panel (§13) |
+
+---
+
+## 13. Manual proposal capture ("I wrote my own proposal") — migration 025
+
+**Added 2026-06-11.** Agents sometimes write a proposal by hand instead of using the AI draft. The
+`ProposalBox` is editable, but a hand-edit there is *silent* — nothing records that the agent wrote
+their own, and an admin can't see it as a distinct event or use it for training. This adds a
+separate **"Your own proposal"** panel that records the hand-written proposal.
+
+**Product shape (confirmed with stakeholder):**
+- **Record only** — saving does **NOT** change the card's `_proposal` / `ProposalBox`. It is purely
+  an additional recorded artifact (`applied=false`). This is the key difference from Regenerate,
+  which overwrites the card.
+- **Reuses `proposal_feedback`** via a new `status='manual'` (migration 025 extends the status CHECK).
+  The pasted text goes in `regenerated_proposal` (the training-target slot), `original_proposal` =
+  the card `_proposal` at paste time (may be NULL — an agent may write their own where the AI made
+  none), `categories='{}'`, `model=NULL`.
+- **Optional note** alongside the paste box.
+
+**Storage:** no new table/columns. Migration 025 = drop+recreate `proposal_feedback_status_check` to
+add `'manual'` (`run025()` in the migrate route + `025_proposal_feedback_manual.sql`). The three
+`status` unions in `data.ts` (`ProposalFeedbackRow`, `ProposalFeedbackInsert`, the inline list-query
+type) gained `'manual'`. `insertProposalFeedback` / `listProposalFeedbackForTask` /
+`deleteProposalFeedback` are reused unchanged.
+
+**Routes:**
+- **POST `/api/tasks/[id]/manual-proposal`** `{ proposal_text, note? }` — same `assertCanFlagTaskRelevancy`
+  gate and admin/agent author split as the feedback route; `proposal_text` required, ≤20000 chars;
+  `note` ≤2000; resolves `getTaskProposalContext` (404 only if the task is missing, NOT if there's no
+  proposal); inserts `status='manual'`, `applied=false`; → 201 `{ feedback_id, created_at }`.
+- **GET / DELETE reuse `/api/tasks/[id]/proposal-feedback`** — manual rows live in the same table, so
+  the shared GET returns them and the shared DELETE (admin-any / agent-own) removes them. No new
+  GET/DELETE was added.
+
+**UI — `manual-proposal-panel.tsx`** (in `task-full-view.tsx` COLUMN 3, directly under `ProposalBox`):
+- Available whenever `admin || agentId` — **independent of whether a system proposal exists** (unlike
+  `ProposalFeedbackPanel`, which is gated on `currentProposal`).
+- Collapsed by default: an "I wrote my own proposal" button expands to a paste textarea + optional
+  note + "Save my proposal". History below shows only `status==='manual'` rows with a violet
+  **Manual** badge, author/time, note, and the text behind View/Copy. Delete (admin-any / agent-own)
+  hits the shared DELETE. No "Restore" (record-only — promoting a manual proposal to the card is
+  intentionally not offered).
+- **Disjoint timelines:** `ProposalFeedbackPanel.loadHistory` filters `status !== 'manual'` so manual
+  rows never appear in the AI feedback/regenerate timeline (and vice-versa).
+
+**Training-export note:** manual rows are human-written targets but the §3 export query filters
+`status='regenerated'`. To include them, broaden to `status IN ('regenerated','manual')`. Deferred —
+not wired yet.

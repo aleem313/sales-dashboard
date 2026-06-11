@@ -65,6 +65,7 @@ import { CustomFieldRenderer } from "./custom-field-renderer";
 import { JobDetails } from "./job-details";
 import { ProposalBox } from "./proposal-box";
 import { ProposalFeedbackPanel } from "./proposal-feedback-panel";
+import { ManualProposalPanel } from "./manual-proposal-panel";
 import { RelevancyPanel } from "./relevancy-panel";
 import type { Task, BoardColumn, ProjectMember, ChecklistItem, Comment, ActivityLogEntry, CustomFieldDefinition } from "@/lib/task-data";
 import type { Job } from "@/lib/types";
@@ -1322,6 +1323,11 @@ export function TaskFullView({ taskId, columns, isAdmin, agentId: currentAgentId
               proposal={job?.proposal_text ?? (cf._proposal as string) ?? null}
               onChange={(text) => updateCustomField("_proposal", text)}
               readOnly={false}
+            />
+            <ManualProposalPanel
+              taskId={taskId}
+              viewerRole={isAdmin ? "admin" : "agent"}
+              viewerAgentId={currentAgentId ?? null}
             />
             <RelevancyPanel
               cf={cf}
