@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Instrument_Sans, DM_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { AuthSessionProvider } from "@/components/session-provider";
+import { MeetingReminderWidget } from "@/components/reminders/meeting-reminder-widget";
 import "./globals.css";
 
 const instrumentSans = Instrument_Sans({
@@ -38,6 +39,7 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             {children}
+            <MeetingReminderWidget />
           </ThemeProvider>
         </AuthSessionProvider>
       </body>

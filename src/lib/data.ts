@@ -588,6 +588,65 @@ export async function getKPIMetricTasks(
   }));
 }
 
+// Tasks whose CURRENT column is "Meeting Scheduled" — a live to-do set, distinct
+// from the date-windowed `meetings_booked` funnel metric in getKPIMetricTasks
+// (which counts every task that ever entered Meeting Scheduled *or beyond*).
+// Used by the floating reminder widget. Reuses the KPIMetricTaskRow shape and the
+// assignees/tags/job_url/is_manual SELECT tail so rows render via MetricTaskList.
+// `firstAt` = when the card entered Meeting Scheduled (earliest matching task_moved,
+// falling back to created_at). When `agentId` is set, scope to that agent's assigned
+// cards (admins pass null → all).
+export async function getMeetingScheduledTasks(
+  agentId?: string | null,
+): Promise<KPIMetricTaskRow[]> {
+  const result = await sql`
+    SELECT
+      t.id,
+      t.title,
+      c.name AS column_name,
+      COALESCE(
+        (SELECT MIN(al.created_at)
+           FROM activity_log al
+          WHERE al.task_id = t.id
+            AND al.action_type = 'task_moved'
+            AND al.field = 'column'
+            AND LOWER(al.new_value) = 'meeting scheduled'),
+        t.created_at
+      ) AS first_at,
+      t.custom_fields->>'_job_url' AS job_url,
+      (SELECT string_agg(a.name, ', ' ORDER BY a.name)
+         FROM task_assignees ta
+         JOIN agents a ON a.id = ta.agent_id
+        WHERE ta.task_id = t.id) AS assignees,
+      (SELECT COALESCE(json_agg(json_build_object('name', tt.name, 'color', tt.color) ORDER BY tt.name), '[]'::json)
+         FROM task_tag_map ttm
+         JOIN task_tags tt ON tt.id = ttm.tag_id
+        WHERE ttm.task_id = t.id) AS tags,
+      (j.job_id IS NULL) AS is_manual
+    FROM tasks t
+    JOIN columns c ON c.id = t.column_id
+    LEFT JOIN jobs j ON j.job_id = (t.custom_fields->>'_job_id')
+    WHERE LOWER(c.name) = 'meeting scheduled'
+      AND (${agentId ?? null}::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM task_assignees ta
+         WHERE ta.task_id = t.id AND ta.agent_id = ${agentId ?? null}::uuid
+      ))
+    ORDER BY first_at DESC NULLS LAST
+    LIMIT 200
+  `;
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    columnName: row.column_name,
+    firstAt: row.first_at ? new Date(row.first_at).toISOString() : null,
+    jobUrl: row.job_url ?? null,
+    assignees: row.assignees ?? null,
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    isManual: Boolean(row.is_manual),
+  }));
+}
+
 // ============================================================
 // CHARTS DATA
 // ============================================================

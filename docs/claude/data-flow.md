@@ -87,6 +87,14 @@ As of 2026-06-10. The dashboard "Top Performing Profiles" section was undercount
 - The Agent Leaderboard counts already matched `getKPIMetricTasks` (assignee + funnel-entry semantics), so no count fix was needed there.
 - **Tabbed drill-down:** every count on both sections is clickable (Leaderboard: Applied=`proposals_sent`, Meetings=`meetings_done`, Won; Top Profiles: Proposals=`proposals_sent`, Won — Interview % is a ratio, not a set, so it stays static). They reuse the EXISTING `/api/dashboard/metric-tasks` route scoped by `agent=` or `profile=`, and a `MetricTabbedDrillDown` component that splits rows into **System** / **Manual** tabs. `getKPIMetricTasks` now returns `isManual` (`j.job_id IS NULL` = no backing jobs row). Row rendering is shared via `MetricTaskList` (also used by `KPIMetricDrillDown`). Because the popup and the displayed count run the same attribution + funnel predicate, the tab totals sum to the card count.
 
+## Meeting Scheduled reminder widget (current-state, NOT funnel)
+
+As of 2026-06-15. A floating bottom-right widget (`MeetingReminderWidget`, mounted once in the root `src/app/layout.tsx`, visible on every authenticated page for agents AND admins) reminds users of cards sitting in the **Meeting Scheduled** column. Minimize/expand state persists in `localStorage` (`meeting_reminder_minimized`); it polls `/api/reminders/meeting-scheduled` every 30s (skipping when the tab is hidden) and renders nothing when logged out or when the set is empty.
+
+- **`getMeetingScheduledTasks(agentId?)`** (`src/lib/data.ts`) is a **current-state** query: `WHERE LOWER(columns.name) = 'meeting scheduled'` (the card's column *right now*). This is deliberately **NOT** the `meetings_booked` metric in `getKPIMetricTasks`, which is funnel + date-windowed (counts every task that *ever entered* Meeting Scheduled **or beyond** — Meeting Done / Negotiation / Won — within a range). A card drops off the widget the moment it moves out of Meeting Scheduled. Don't "unify" the two — they answer different questions.
+- It **reuses** the `KPIMetricTaskRow` shape and the exact assignees/tags/`job_url`/`is_manual` SELECT tail from `getKPIMetricTasks`, so rows render through the shared `MetricTaskList`. `firstAt` = earliest `task_moved`→'meeting scheduled' (fallback `created_at`).
+- **Role scope** matches `/api/dashboard/metric-tasks`: admin (role≠agent) → `agentId=null` → all cards; agent → assigned-only (`task_assignees` EXISTS). To also surface *unassigned* Meeting Scheduled cards to agents (as the `/my-tasks` board does), add `OR NOT EXISTS (... task_assignees ...)` to the scope predicate — one line.
+
 ## Connects Efficiency (Most/Least Efficient cards)
 
 As of 2026-06-09. The `/connects` "Most Efficient" / "Least Efficient" cards rank **profiles** by their own `cost_per_win`, not by niche.
