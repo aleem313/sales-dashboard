@@ -102,11 +102,15 @@ export function MeetingReminderWidget() {
         type="button"
         onClick={toggleMinimized}
         aria-label={`Show ${count} scheduled meetings`}
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium shadow-lg transition hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full border border-destructive/40 bg-background px-4 py-2 text-sm font-medium shadow-lg transition hover:bg-destructive/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/50"
       >
-        <CalendarClock className="size-4 text-primary" />
+        <span className="relative flex size-2" aria-hidden="true">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-75" />
+          <span className="relative inline-flex size-2 rounded-full bg-destructive" />
+        </span>
+        <CalendarClock className="size-4 text-destructive" />
         Meetings
-        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground">
+        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-semibold text-white">
           {count}
         </span>
       </button>
@@ -114,12 +118,12 @@ export function MeetingReminderWidget() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex max-h-[60vh] w-80 flex-col rounded-xl border border-border bg-background shadow-xl">
-      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+    <div className="fixed bottom-4 right-4 z-50 flex max-h-[60vh] w-80 flex-col rounded-xl border border-destructive/30 bg-background shadow-xl">
+      <div className="flex items-center justify-between gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
-          <CalendarClock className="size-4 text-primary" />
+          <CalendarClock className="size-4 text-destructive" />
           Meeting Scheduled
-          <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground">
+          <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-semibold text-white">
             {count}
           </span>
         </div>
@@ -127,7 +131,7 @@ export function MeetingReminderWidget() {
           type="button"
           onClick={toggleMinimized}
           aria-label="Minimize meetings reminder"
-          className="rounded-md p-1 text-muted-foreground transition hover:bg-secondary/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          className="rounded-md p-1 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/50"
         >
           <ChevronDown className="size-4" />
         </button>
