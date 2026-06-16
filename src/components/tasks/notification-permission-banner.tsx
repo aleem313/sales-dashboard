@@ -15,12 +15,19 @@ export function NotificationPermissionBanner() {
     if (typeof window === "undefined") return;
     setSecureContext(window.isSecureContext);
 
-    if (typeof Notification === "undefined") return;
-    const perm = Notification.permission;
-    if (perm === "granted" || perm === "denied") return;
-
     if (localStorage.getItem(DISMISS_KEY) === "1") return;
 
+    // On a secure context the Notification API is available — if the user has
+    // already granted or denied, there's nothing left to prompt for.
+    if (typeof Notification !== "undefined") {
+      const perm = Notification.permission;
+      if (perm === "granted" || perm === "denied") return;
+    }
+
+    // Otherwise show the banner. Either to request notification permission
+    // (secure/HTTPS context) OR, on an insecure/HTTP origin where the
+    // Notification API is unavailable, to let the agent unlock in-page audio
+    // with a click so the beep works. (Desktop notifications still need HTTPS.)
     setShow(true);
   }, []);
 
@@ -30,6 +37,13 @@ export function NotificationPermissionBanner() {
       if (typeof Notification !== "undefined" && window.isSecureContext) {
         await Notification.requestPermission();
       }
+    } catch {
+      // no-op
+    }
+    // Persist so we don't re-nag every reload; audio also re-unlocks on any
+    // later page interaction, and on HTTPS the granted/denied check suppresses it.
+    try {
+      localStorage.setItem(DISMISS_KEY, "1");
     } catch {
       // no-op
     }
