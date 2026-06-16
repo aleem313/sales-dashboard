@@ -26,7 +26,7 @@ No test framework. No local dev workflow — all changes must be production-read
 - **Server components by default**, `"use client"` only for interactivity
 - **Mutations** go through `src/lib/actions.ts` (which calls `revalidatePath`)
 - **URL state for filters** (not React state)
-- **Smart polling**: `<AutoRefresh interval={N} />` — 5s for boards, 15s for dashboards, pauses when tab hidden
+- **Smart polling**: `<AutoRefresh interval={N} />` — 5s for boards, 15s for dashboards, pauses when tab hidden. The **agent board also pushes new-task notifications in real time via SSE** (`/api/events/tasks` + in-process event bus `src/lib/task-events.ts`); polling stays as the fallback. See `docs/claude/task-board.md`.
 
 ## Roles & Routes
 
