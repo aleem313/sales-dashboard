@@ -145,7 +145,11 @@ function AgentBoardSelector({ projects, currentProjectId }: { projects: { id: st
 export default function MyTasksPage({ searchParams }: Props) {
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
-      <BoardAutoRefresh interval={5000} />
+      {/* realtime: SSE stream fires the new-task bell instantly on card creation,
+          focus-independent (works while the agent is in Upwork in another tab).
+          runInBackground keeps the polling fallback alive when the tab is hidden,
+          in case the SSE stream drops. */}
+      <BoardAutoRefresh interval={5000} runInBackground realtime />
       <Suspense
         fallback={
           <>

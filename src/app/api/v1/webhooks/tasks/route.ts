@@ -8,6 +8,7 @@ import {
   getDefaultProject,
   findConflictingTag,
 } from "@/lib/task-data";
+import { emitTaskCreated } from "@/lib/task-events";
 
 export async function POST(request: NextRequest) {
   // Bearer token auth — verify against webhook_configs.inbound_api_key_hash
@@ -228,6 +229,15 @@ export async function POST(request: NextRequest) {
 
     revalidatePath("/tasks");
     revalidatePath("/my-tasks");
+
+    // Real-time push (SSE): notify the assigned agent's open board immediately
+    // so the new-task bell fires at creation time instead of on the next poll.
+    emitTaskCreated({
+      taskId: task.id,
+      title: body.title.trim(),
+      projectId,
+      assigneeIds,
+    });
 
     return NextResponse.json(responsePayload, { status: 201 });
   } catch (error) {

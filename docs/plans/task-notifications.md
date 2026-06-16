@@ -1,5 +1,8 @@
 # Plan: Task Board Notifications (In-Page Toast + Sound + OS Notifications)
 
+> **⚠️ 2026-06-16 UPDATE — superseded by real-time SSE.** The original design below was poll-driven (`useNewTaskNotifier` watching the board's task list, refreshed by `BoardAutoRefresh`). Problem in production: polling pauses when the tab is hidden, so agents working in Upwork (dashboard tab backgrounded) heard the bell very late — only on refocus. Also, the notifier's `flatTasks` is bound to the server `buckets` **prop**, not the zustand store, so `refreshBoard` never reached it. **Fix shipped:** (1) `runInBackground` on the agent board poll; (2) a real-time **Server-Sent Events** stream — `src/lib/task-events.ts` (in-process EventEmitter bus), `src/app/api/events/tasks/route.ts` (SSE endpoint), the `/api/v1/webhooks/tasks` handler emits on card creation, and `BoardAutoRefresh realtime` opens an `EventSource` that fires the bell instantly via the shared-dedup `src/lib/notified-tasks.ts#notifyNewTask`. Self-hosted, no third-party service. Bell now fires ~1s after creation, focus-independent. See the `task_notifications_sse` memory for the full architecture.
+
+
 > **Purpose:** Make new tasks feel instant on the Task Board by alerting agents the moment a task lands in the DB, matching ClickUp's perceived responsiveness. The actual Vollna → n8n → Contabo pipeline is already fast (~95s end-to-end); this plan targets the agent's *perception* of latency.
 >
 > **How to execute:** Tell the assistant "Execute `docs/plans/task-notifications.md`". The plan is self-contained and ordered.
