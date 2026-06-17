@@ -50,7 +50,7 @@ jobs:
                --max-time 60 \
                -o "$tmp_body" \
                -w "%{http_code}" \
-               http://157.173.110.62/api/cron/relevancy-dlq-drain)
+               https://risinglions.ikonicsolution.com/api/cron/relevancy-dlq-drain)
           body=$(cat "$tmp_body")
           rm -f "$tmp_body"
           echo "HTTP $status"

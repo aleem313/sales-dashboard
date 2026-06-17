@@ -41,7 +41,7 @@ function parseArgs(argv: string[]): CliArgs {
     mode: "check",
     expect: null,
     profileId: "shayan",
-    dashboardBase: process.env.DASHBOARD_BASE || "http://157.173.110.62",
+    dashboardBase: process.env.DASHBOARD_BASE || "https://risinglions.ikonicsolution.com",
     webhookBase:
       process.env.N8N_WEBHOOK_BASE || "https://ikonicdev.app.n8n.cloud/webhook",
     token:
