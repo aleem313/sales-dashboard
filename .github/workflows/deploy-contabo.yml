@@ -55,6 +55,12 @@ jobs:
             echo "=== 2. Rebuilding and restarting stack ==="
             $COMPOSE up -d --build
 
+            # nginx.conf is a single-file bind mount; `up -d` won't recreate the
+            # nginx container when only the file content changed (same mount
+            # path), so it would keep serving the old inode. Force-recreate nginx
+            # so nginx.conf edits always take effect on deploy.
+            $COMPOSE up -d --force-recreate nginx
+
             echo "=== 3. Waiting for app to become healthy ==="
             HEALTHY=0
             for i in $(seq 1 36); do

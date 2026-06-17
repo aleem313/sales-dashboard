@@ -17,6 +17,7 @@ No local dev workflow — all changes must be production-ready.
 - `docker-compose.prod.yml` — **dead / do not use.** Was the original "post-domain" stack but uses `pgdata_prod` (≠ live `pgdata_server`) and no uploads mount, so switching to it would wipe the DB + attachments. HTTPS was instead folded into `server.yml`. `docker/nginx/nginx.conf` has a dedicated `/api/events/` location with `proxy_buffering off` so the SSE stream isn't stalled by nginx buffering — keep it when editing the proxy.
 
 **Contabo gotchas:**
+- `nginx.conf` is a **single-file bind mount** — editing it + `git reset --hard` gives the host file a new inode, but `docker compose up -d` won't recreate the nginx container (mount path unchanged), so it serves the **stale inode**. The deploy workflow runs `$COMPOSE up -d --force-recreate nginx` after the build to force a re-bind. If you ever edit nginx.conf out-of-band, `docker compose ... up -d --force-recreate nginx` (a plain reload is NOT enough — reload re-reads the same stale inode).
 - Compose variable substitution for postgres needs `--env-file .env.production` on every command
 - `Dockerfile.prod` healthcheck uses `127.0.0.1` not `localhost` (BusyBox wget resolves localhost to IPv6 ::1 which Next.js standalone doesn't bind)
 - `next.config.ts` has `typescript.ignoreBuildErrors: true` to work around pre-existing strict-mode errors in `src/lib/data.ts`
