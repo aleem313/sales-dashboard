@@ -631,6 +631,20 @@ The pipeline is **proven** end-to-end. Production readiness blocked only on Phas
 
 ## 12. Recent changes
 
+### 2026-06-17 — HTTPS migration: dashboard host moved from http://157.173.110.62 to https://risinglions.ikonicsolution.com (SHIPPED, n8n-only)
+
+- **Context / incident:** On 2026-06-17 the dashboard moved off the bare IP onto a domain behind nginx + Let's Encrypt (`https://risinglions.ikonicsolution.com`). The old `http://157.173.110.62` now **301-redirects** all HTTP traffic to HTTPS and does NOT preserve the request body on cross-host POST redirects. The n8n cloud instance (UA "n8n", source 51.116.119.71) was POSTing the verdict to `http://157.173.110.62/api/relevancy-scores` (and `?dlq=1`) and getting 301s it doesn't follow → relevancy-score ingestion FAILING + DLQ drain retrying in a loop. C1's profile-context GET over the same old host was on the same redirect path.
+- **What (3 nodes, scheme+host ONLY — path/query/headers/auth/body byte-for-byte unchanged):**
+  | Node | id | Before | After |
+  |---|---|---|---|
+  | Load Profile Context (C1) | `c1-load-profile` | `=http://157.173.110.62/api/profiles/{{ $json.profile_id }}/context` | `=https://risinglions.ikonicsolution.com/api/profiles/{{ $json.profile_id }}/context` |
+  | Persist Relevancy Score (C10) | `c10-persist` | `http://157.173.110.62/api/relevancy-scores` | `https://risinglions.ikonicsolution.com/api/relevancy-scores` |
+  | Persist to DLQ (C11) | `c11-dlq` | `http://157.173.110.62/api/relevancy-scores?dlq=1` | `https://risinglions.ikonicsolution.com/api/relevancy-scores?dlq=1` |
+  Bearer-auth credential (`yXpENDK1cKgFdxp0`), `X-Idempotency-Key`, `Content-Type`, the `?dlq=1` query, and both JSON bodies are untouched. No prompt / topology / LLM / threshold / classifier_mode change. Node count stays 20.
+- **How:** Single atomic `n8n_update_partial_workflow` (intent logged), 3 `updateNode` ops each setting only `parameters.url`. Instance was writable (health responseTime ~3.5s, management tools enabled).
+- **Verification:** post-write `mode=full` read confirms all 3 URLs flipped to HTTPS and nothing else changed; `n8n_validate_workflow profile=runtime` → `valid: true`, 0 errors, 37 warnings (matches the 2026-06-16 baseline exactly — no new ERROR or warning entries). versionCounter 99 → 100 (versionId `5be571be-026f-4ae5-b62b-2d3a44f08f6f`). Live verification on next Vollna fire: C10 returns 200 `{ok:true,id:N}` (not a 301), `relevancy_scores` rows resume, the DLQ-drain retry loop stops.
+- **Rollback baseline:** `backups/workflows bk 17-06-2026/hi71jhPU8tmq7hEp-relevancy-classifier-pre-https.json` (structural anchor; full prompt/jsCode bodies live in n8n cloud version history versionId `82976007-0af8-4dc2-89a3-658d61834843` / versionCounter 99). Inverse: 3 `updateNode` ops reverting each `parameters.url` to the `157.173.110.62` form above — ONLY if the dashboard reverts to the bare IP (it should not). Note §5.2 / §5.13 / §5.14 of this PRD still print the old IP in the 1.0-baseline node specs; treat this §12 entry as the live URL of record.
+
 ### 2026-06-16 (b) — Mode A prompt v2→v3: conservative agent-feedback-driven tightening of 4 description-readable signals (SHIPPED, n8n-only — no commit)
 
 - **Context / driver:** DB analysis of 98 `agent_feedback` rows (`override_type='agent_feedback'`, mostly on `proceed`/`review` verdicts). 92/98 showed the classifier running too LENIENT — agents catching MISSED rejections. Top reasons: Too many invites (29), Out of stack (27), Low rate (16), Red flag (11, notes overwhelmingly "payment unverified"), Location loc (9), Short term (5), Client interviewing (4). The dominant pains (payment-verified, proposals_count, client metadata nulls) are SOURCE-DATA gaps — `jobs` has no payment_verified/proposals_count columns and client_total_spent/rating/hires are null on 150–235 evals — so those are explicitly OUT OF SCOPE for this prompt change (handled separately as ingestion work). This change tightens only what the LLM can read from `job.description` / skills / profile bucket. NO new strictness invented, NO new hard gates, NO new reason labels.

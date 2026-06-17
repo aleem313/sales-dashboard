@@ -555,6 +555,18 @@ mcp__n8n-mcp__n8n_update_partial_workflow with operations:
 
 ## 12. Recent changes
 
+### 2026-06-17 — HTTPS migration: repoint all dashboard URLs from `http://157.173.110.62` → `https://risinglions.ikonicsolution.com` (SHIPPED)
+
+- **What:** Changed the scheme+host on the 3 nodes that reference the self-hosted dashboard. Paths, query strings, headers, auth (`Bearer n8n-board-sync`), and request bodies left byte-for-byte identical.
+  - `Create Board Task - Self-Hosted` (HTTP Request) — `parameters.url`: `http://157.173.110.62/api/v1/webhooks/tasks` → `https://risinglions.ikonicsolution.com/api/v1/webhooks/tasks`
+  - `Send to Self-Hosted Dashboard` (HTTP Request) — `parameters.url`: `http://157.173.110.62/api/webhook/n8n` → `https://risinglions.ikonicsolution.com/api/webhook/n8n`
+  - `Process Job` (Code) — `DASHBOARD_URLS[0]` (profile-mapping fetch, Contabo primary): `http://157.173.110.62/api/profiles/mapping` → `https://risinglions.ikonicsolution.com/api/profiles/mapping`. (The Vercel dead-fallback at index 1 was left untouched.)
+- **Why:** On 2026-06-17 the dashboard moved behind nginx + Let's Encrypt at `https://risinglions.ikonicsolution.com`. The old IP `http://157.173.110.62` now issues a `301` redirect to HTTPS, which n8n's HTTP client does NOT follow for cross-host POSTs (the request body is dropped on redirect). Result: board task creation (`/api/v1/webhooks/tasks`) and dashboard events (`/api/webhook/n8n`) were silently failing with 301s in nginx access logs (User-Agent "n8n", source 51.116.119.71). `Process Job`'s profile-mapping GET would also have followed the redirect but is repointed for cleanliness + latency.
+- **How:** Single atomic `n8n_update_partial_workflow` with 3 `patchNodeField` ops (two `parameters.url`, one `parameters.jsCode` find/replace on the `DASHBOARD_URLS[0]` literal). Not a webhook/Merge/`numberInputs` change, so no quiet-window deactivation-blip risk.
+- **Verification:** `n8n_validate_workflow profile=runtime` → `valid: true`, `errorCount: 0`, 35 nodes, 8 triggers, 44 valid connections (49 pre-existing warnings, no new ones). Post-edit `mode=full` re-pull confirmed both HTTP URLs flipped and zero residual `157.173.110.62` references anywhere in the workflow JSON.
+- **Rollback baseline:** `backups/workflows bk 17-06-2026/EWnZg3svZWwcIRs4-multiple-webhooks-pre-https.json` (35-node pre-HTTPS export). Snapshot `docs/multiple webhooks (working flow).json` refreshed to post-edit state.
+- **External action:** none required for n8n — Vollna webhook URLs are unchanged (they hit `ikonicdev.app.n8n.cloud`, not the dashboard). The dashboard's `webhook_configs` Bearer token is unchanged. DNS/cert is owned by infra.
+
 ### 2026-05-12 — Reason dropdown sync: extend REASON_OPTIONS arrays to 16 entries (SHIPPED, commit `34d3ae9`)
 
 - **What:** Dashboard-side hand edit (NOT an n8n change). Extended `REASON_OPTIONS` arrays in two TypeScript files to match the classifier's 16-element reason_enum:
