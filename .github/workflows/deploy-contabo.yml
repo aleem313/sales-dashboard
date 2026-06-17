@@ -74,9 +74,11 @@ jobs:
               exit 1
             fi
 
-            echo "=== 4. External /api/health check ==="
-            if ! curl -sf http://localhost/api/health >/dev/null; then
-              echo "✗ /api/health did not return 2xx via host port 80"
+            echo "=== 4. External /api/health check (through nginx TLS) ==="
+            # nginx redirects :80 → :443, so verify the full nginx→app path over
+            # HTTPS. -k skips cert validation for the localhost SNI mismatch.
+            if ! curl -skf https://localhost/api/health >/dev/null; then
+              echo "✗ /api/health did not return 2xx via nginx HTTPS"
               exit 1
             fi
 

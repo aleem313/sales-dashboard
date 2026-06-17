@@ -1,26 +1,27 @@
 # ============================================
-# Contabo HTTP-only deployment (no nginx, no SSL)
+# Contabo deployment — nginx + Let's Encrypt HTTPS
 # ============================================
-# Lean variant of docker-compose.prod.yml for bringing the app up quickly
-# on a plain IP (e.g. 157.173.110.62) before a domain + Let's Encrypt are
-# configured. Publishes the Next.js app directly on host port 80.
+# The app is fronted by nginx (ports 80/443) terminating TLS for
+# risinglions.ikonicsolution.com. Certbot renews the cert via webroot.
+#
+# Data volumes (pgdata_server, uploads_data) are preserved from the original
+# HTTP-only stack — do NOT rename them or the live DB / attachments are lost.
+# The cert lives on the host at /etc/letsencrypt (issued via certbot standalone)
+# and is bind-mounted read-only into nginx.
 #
 # Usage (on the server):
-#   cp .env.server.example .env.production
-#   # edit .env.production with real secrets
-#   docker compose -f docker-compose.server.yml up -d --build
+#   docker compose --env-file .env.production -f docker-compose.server.yml up -d --build
 #
-# Upgrade path: once you have a domain + certs, switch to
-#   docker compose -f docker-compose.prod.yml up -d
-# which wraps the app in nginx + certbot.
+# .env.production must set AUTH_URL=https://risinglions.ikonicsolution.com
+# and AUTH_TRUST_HOST=true so NextAuth works behind the proxy.
 
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile.prod
-    ports:
-      - "80:3000"
+    expose:
+      - "3000"
     environment:
       - NODE_ENV=production
       - POSTGRES_HOST=postgres
@@ -45,6 +46,37 @@ services:
         limits:
           memory: 512M
           cpus: "1.0"
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - certbot-webroot:/var/www/certbot:ro
+    depends_on:
+      - app
+    restart: always
+    networks:
+      - server-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - /var/lib/letsencrypt:/var/lib/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;'"
+    restart: unless-stopped
+    networks:
+      - server-net
 
   postgres:
     image: postgres:17-alpine
@@ -73,6 +105,7 @@ services:
 volumes:
   pgdata_server:
   uploads_data:
+  certbot-webroot:
 
 networks:
   server-net:
