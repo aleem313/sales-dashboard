@@ -140,10 +140,23 @@
     font-family: var(--font-sans), sans-serif;
   }
 
-  /* Custom scrollbar */
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  /* Custom scrollbar — kept clearly visible (both axes) across the whole app.
+     Firefox uses scrollbar-width/color; WebKit/Blink use the pseudo-elements.
+     Thumb is --text-secondary (not --border) so it contrasts against the track,
+     and the bars are wide enough to see and grab on every scroll container. */
+  * {
+    scrollbar-width: auto;
+    scrollbar-color: var(--text-secondary) var(--card);
+  }
+  ::-webkit-scrollbar { width: 12px; height: 12px; }
   ::-webkit-scrollbar-track { background: var(--card); }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--text-secondary);
+    border: 3px solid var(--card); /* inset padding so the thumb reads as a pill */
+    border-radius: 6px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--foreground); }
+  ::-webkit-scrollbar-corner { background: var(--card); }
 }
 
 /* Animations */
