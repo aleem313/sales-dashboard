@@ -130,8 +130,9 @@ export default async function AgentsPage({
             searchParams={params}
           />
           <StatCard
-            label="Win Rate"
+            label="Win Rate (Won/Lost)"
             value={`${kpi.winRate}%`}
+            subtitle={`${kpi.won} / ${kpi.won + kpi.lost}`}
             variant="accent"
             delta={`${fmt(kpi.deltaWinRate)}% ${vsLabel}`}
             deltaDown={kpi.deltaWinRate < 0}
