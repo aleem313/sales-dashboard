@@ -1,5 +1,7 @@
 import { Header } from "@/components/layout/header";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
+import { KPIMetricDrillDown } from "@/components/dashboard/kpi-metric-drilldown";
+import { ResponseTimeDrillDown } from "@/components/dashboard/response-time-drilldown";
 import { AgentDetailCard } from "@/components/agents/agent-detail-card";
 import { CreateAgentButton } from "@/components/agents/create-agent-button";
 import {
@@ -49,6 +51,15 @@ export default async function AgentsPage({
 
   const fmt = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 
+  // Stage-based win rates: of every proposal sent / meeting booked, what % became
+  // a win. Distinct from the headline "Win Rate" (won / (won + lost), decided deals
+  // only). Guard zero denominators -> "—" (avoid 0% reading and divide-by-zero).
+  const pct = (num: number, denom: number) =>
+    denom > 0 ? `${Math.round((num / denom) * 1000) / 10}%` : "—";
+
+  const winRateProposals = pct(kpi.won, kpi.proposalsSent); // won / proposals sent
+  const winRateMeetings = pct(kpi.won, kpi.meetingsBooked); // won / meetings booked
+
   const comparisonLabels: Record<string, string> = {
     today: "vs yesterday",
     yesterday: "vs day before",
@@ -76,31 +87,47 @@ export default async function AgentsPage({
           <h2 className="text-lg font-semibold">All Agents</h2>
           <CreateAgentButton />
         </div>
-        <StatRow className="mb-5">
-          <StatCard
+        <StatRow className="mb-5 lg:!grid-cols-7">
+          <ResponseTimeDrillDown
             label="Avg Time to Apply"
             value={formatAvgTime(avgResponseTime)}
-            variant="accent"
+            variant={
+              avgResponseTime !== null && avgResponseTime <= 0.25
+                ? "green"
+                : avgResponseTime !== null && avgResponseTime <= 1
+                  ? "warn"
+                  : avgResponseTime === null
+                    ? "default"
+                    : "danger"
+            }
+            delta="Typical proposal response time"
+            searchParams={params}
           />
-          <StatCard
+          <KPIMetricDrillDown
+            metric="proposals_sent"
             label="Proposals Sent"
             value={kpi.proposalsSent}
             delta={`${fmt(kpi.deltaProposals)} ${vsLabel}`}
             deltaDown={kpi.deltaProposals < 0}
+            searchParams={params}
           />
-          <StatCard
+          <KPIMetricDrillDown
+            metric="meetings_booked"
             label="Meetings Booked"
             value={kpi.meetingsBooked}
             variant="warn"
             delta={`${fmt(kpi.deltaMeetings)} ${vsLabel}`}
             deltaDown={kpi.deltaMeetings < 0}
+            searchParams={params}
           />
-          <StatCard
+          <KPIMetricDrillDown
+            metric="won"
             label="Jobs Won"
             value={kpi.won}
             variant="green"
             delta={`${fmt(kpi.deltaWon)} ${vsLabel}`}
             deltaDown={kpi.deltaWon < 0}
+            searchParams={params}
           />
           <StatCard
             label="Win Rate"
@@ -108,6 +135,18 @@ export default async function AgentsPage({
             variant="accent"
             delta={`${fmt(kpi.deltaWinRate)}% ${vsLabel}`}
             deltaDown={kpi.deltaWinRate < 0}
+          />
+          <StatCard
+            label="Win Rate (Proposals)"
+            value={winRateProposals}
+            subtitle={`${kpi.won} / ${kpi.proposalsSent}`}
+            variant="accent"
+          />
+          <StatCard
+            label="Win Rate (Meetings)"
+            value={winRateMeetings}
+            subtitle={`${kpi.won} / ${kpi.meetingsBooked}`}
+            variant="accent"
           />
         </StatRow>
 
